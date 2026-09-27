@@ -1,16 +1,39 @@
 // Verificação manual do módulo de documentos (não faz parte do app): emite LICENÇA de teste, valida e cancela.
-// Uso: npx tsx --conditions=react-server scripts/verificar-documentos.ts [--limpar]
+// Uso: npx tsx --conditions=react-server scripts/verificar-documentos.ts [--cancelar] [--salvar]
+//      npx tsx --conditions=react-server scripts/verificar-documentos.ts --limpar   (remove os dados [TESTE-DOCUMENTOS])
 import "dotenv/config";
+import { writeFileSync } from "node:fs";
 import { prisma } from "@/lib/db";
 import { cifrar, hashBusca } from "@/lib/crypto";
 import { emitirDocumento, cancelarDocumento } from "@/lib/documentos";
-import { lerArquivo } from "@/lib/storage";
+import { lerArquivo, removerArquivo } from "@/lib/storage";
 import { sha256 } from "@/lib/crypto";
 
 const DOC = "39053344705"; // CPF de teste válido
 const TAG = "[TESTE-DOCUMENTOS]";
 
+async function limpar() {
+  const pessoas = await prisma.pessoa.findMany({ where: { nome: { contains: TAG } }, select: { id: true } });
+  const ids = pessoas.map((p) => p.id);
+  const procs = (await prisma.processo.findMany({ where: { requerente_id: { in: ids } }, select: { id: true } })).map((p) => p.id);
+  const docs = await prisma.documentoOficial.findMany({ where: { OR: [{ titular_id: { in: ids } }, { processo_id: { in: procs } }] }, select: { id: true, storage_key: true } });
+  for (const d of docs) await removerArquivo(d.storage_key);
+  await prisma.$transaction(async (tx) => {
+    await tx.documentoOficial.deleteMany({ where: { id: { in: docs.map((d) => d.id) } } });
+    await tx.condicionante.deleteMany({ where: { processo_id: { in: procs } } });
+    // tramitacao é imutável (trigger) – desabilita só nesta transação para remover dados de TESTE
+    await tx.$executeRawUnsafe("ALTER TABLE tramitacao DISABLE TRIGGER tramitacao_imutavel");
+    await tx.tramitacao.deleteMany({ where: { processo_id: { in: procs } } });
+    await tx.$executeRawUnsafe("ALTER TABLE tramitacao ENABLE TRIGGER tramitacao_imutavel");
+    await tx.processo.deleteMany({ where: { id: { in: procs } } });
+    await tx.empreendimento.deleteMany({ where: { requerente_id: { in: ids } } });
+    await tx.pessoa.deleteMany({ where: { id: { in: ids } } });
+  });
+  console.log(`removidos: ${docs.length} documentos, ${procs.length} processos, ${ids.length} pessoas`);
+}
+
 async function main() {
+  if (process.argv.includes("--limpar")) return limpar();
   const itb = await prisma.municipio.findUniqueOrThrow({ where: { sigla: "ITB" } });
   const gestorU = await prisma.usuario.findUniqueOrThrow({ where: { email: "gestor.itb@licenciagov.demo" }, include: { papeis: true } });
   const gestor = { id: gestorU.id, nome: gestorU.nome, email: gestorU.email, cargo: gestorU.cargo, pessoa_id: null, trocar_senha: false, papeis: gestorU.papeis.map((p) => ({ papel: p.papel, municipio_id: p.municipio_id })) };
@@ -48,9 +71,9 @@ async function main() {
   for (const t of ["CERTIDAO", "PARECER", "NOTIFICACAO", "OFICIO", "AUTORIZACAO"] as const) {
     const d = await emitirDocumento({ tipo: t, municipio_id: itb.id, processo_id: proc.id, sigla_ato: t === "AUTORIZACAO" ? "AA" : t === "CERTIDAO" ? "CERT_DISP" : null, dados: { texto: "Texto livre", exigencia: "Apresentar outorga", prazo_dias: 30, motivo: "Documentação insuficiente" }, usuario: gestor });
     console.log(t, d.numero, d.codigo_verificador);
-    if (process.argv.includes("--salvar")) require("node:fs").writeFileSync(`${process.env.SCRATCH ?? "/tmp"}/${t}.pdf`, await lerArquivo(d.storage_key));
+    if (process.argv.includes("--salvar")) writeFileSync(`${process.env.SCRATCH ?? "/tmp"}/${t}.pdf`, await lerArquivo(d.storage_key));
   }
-  if (process.argv.includes("--salvar")) require("node:fs").writeFileSync(`${process.env.SCRATCH ?? "/tmp"}/LICENCA.pdf`, pdf);
+  if (process.argv.includes("--salvar")) writeFileSync(`${process.env.SCRATCH ?? "/tmp"}/LICENCA.pdf`, pdf);
   if (process.argv.includes("--cancelar")) {
     const c = await cancelarDocumento(doc.id, "Teste de cancelamento", gestor);
     console.log("cancelado:", c.status);

@@ -103,7 +103,7 @@ export default async function ConsultaPage({ searchParams }: { searchParams: Pro
                         <td>{fmtData(d.emitido_em)}</td>
                         <td>{fmtData(d.validade_ate)}</td>
                         <td><Badge cor={COR_STATUS[d.status]}>{ROTULO_STATUS_PUBLICO[d.status]}</Badge></td>
-                        <td><Link className="text-primaria-700 underline" href={`/validar/${d.codigo_verificador}`}>Validar</Link></td>
+                        <td><Link className="text-primaria-700 underline" href={`/validar/${d.codigo_verificador}`} aria-label={`Validar ${d.numero}`}>Validar</Link></td>
                       </tr>
                     ))}
                   </tbody>

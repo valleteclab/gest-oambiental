@@ -59,11 +59,15 @@ export const SCHEMAS = {
   arquivar: z.object({ justificativa: texto(10, "A justificativa do arquivamento é obrigatória (mín. 10 caracteres).") }),
 } satisfies Record<AcaoProcesso, z.ZodTypeAny>;
 
+export type DocumentoResumo = Pick<DocumentoOficial, "id" | "tipo" | "numero" | "codigo_verificador" | "validade_ate" | "emitido_em" | "status">;
+
 export type ResultadoTransicao = {
   processo: { id: string; numero: string | null; status: StatusProcesso };
   avisos: string[];
-  documentos: DocumentoOficial[];
+  documentos: DocumentoResumo[];
 };
+
+const resumir = (d: DocumentoOficial): DocumentoResumo => ({ id: d.id, tipo: d.tipo, numero: d.numero, codigo_verificador: d.codigo_verificador, validade_ate: d.validade_ate, emitido_em: d.emitido_em, status: d.status });
 
 const conflito = (msg: string) => new ErroApi(409, "ESTADO_INVALIDO", msg);
 
@@ -448,7 +452,7 @@ export async function transicionar(processoId: string, acaoBruta: string, payloa
     documentos.push(r.valor);
     const p = await concluirComDocumento(processoId, r.valor, usuario);
     await notificarRequerente(p.requerente_id, `Processo ${p.numero} concluído`, `<p>O processo <strong>${esc(p.numero)}</strong> foi concluído. O documento ${esc(r.valor.numero)} está disponível em "Meus processos".</p>`);
-    return { processo: { id: p.id, numero: p.numero, status: p.status }, avisos, documentos };
+    return { processo: { id: p.id, numero: p.numero, status: p.status }, avisos, documentos: documentos.map(resumir) };
   }
 
   const pos: PosCommit = {};
@@ -493,5 +497,5 @@ export async function transicionar(processoId: string, acaoBruta: string, payloa
   }
   if (pos.emailRequerente) await notificarRequerente(final.requerente_id, pos.emailRequerente.assunto, pos.emailRequerente.corpo);
 
-  return { processo: resultado, avisos, documentos };
+  return { processo: resultado, avisos, documentos: documentos.map(resumir) };
 }

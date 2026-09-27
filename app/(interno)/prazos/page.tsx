@@ -133,7 +133,7 @@ export default async function PaginaPrazos({ searchParams }: { searchParams: Pro
                   <th scope="col" className="hidden md:table-cell">Empreendimento</th>
                   <th scope="col">Status</th>
                   <th scope="col" className="hidden sm:table-cell">Técnico</th>
-                  <th scope="col">Prazo</th>
+                  <th scope="col" className="hidden sm:table-cell">Prazo</th>
                   <th scope="col">Saldo</th>
                 </tr>
               </thead>
@@ -151,9 +151,10 @@ export default async function PaginaPrazos({ searchParams }: { searchParams: Pro
                       <td className="hidden md:table-cell">{p.empreendimento.nome}</td>
                       <td><BadgeStatus status={p.status} /></td>
                       <td className="hidden sm:table-cell">{p.tecnico?.nome ?? <span className="text-slate-400">—</span>}</td>
-                      <td className="whitespace-nowrap">{pausado ? <span className="text-slate-500">pausado</span> : fmtData(p.prazo_etapa_ate)}</td>
+                      <td className="hidden whitespace-nowrap sm:table-cell">{pausado ? <span className="text-slate-500">pausado</span> : fmtData(p.prazo_etapa_ate)}</td>
                       <td className={`whitespace-nowrap ${s === "vermelho" ? "font-semibold text-red-700" : s === "amarelo" ? "font-medium text-amber-700" : ""}`}>
                         {pausado ? (p.dias !== null ? `saldo ${p.dias} dia(s)` : "—") : rotuloDiasRestantes(p.dias)}
+                        {!pausado && <div className="text-xs font-normal text-slate-500 sm:hidden">{fmtData(p.prazo_etapa_ate)}</div>}
                       </td>
                     </tr>
                   );

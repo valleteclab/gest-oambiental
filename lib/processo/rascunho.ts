@@ -22,7 +22,7 @@ const num = (min: number, max: number, msg: string) =>
     }
     return n;
   });
-const numOpc = (min: number, max: number, msg: string) => z.union([num(min, max, msg), z.literal(""), z.null(), z.undefined()]).transform((v) => (v === "" || v === undefined ? null : v));
+const numOpc = (min: number, max: number, msg: string) => z.union([num(min, max, msg), z.literal(""), z.null()]).optional().transform((v) => (v === "" || v === undefined ? null : v));
 
 export const RascunhoSchema = z
   .object({

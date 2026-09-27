@@ -82,10 +82,14 @@ async function emitirUmaVez(input: EmitirInput): Promise<DocumentoOficial> {
             while (existentes.some((x) => x.numero === `${numero}-R${n}`)) n++;
             numero = `${numero}-R${n}`;
           }
-        } else if (PREFIXO[input.tipo]) {
-          numero = await numeroDocumento(tx, municipio, PREFIXO[input.tipo]!, ano);
         } else {
-          numero = await numeroAto(tx, municipio, (base.sigla_ato ?? SIGLA_PADRAO[input.tipo] ?? "DOC").toUpperCase(), ano);
+          // Sequencial; pula números já ocupados (ex.: documentos importados/semeados sem passar pela sequência)
+          const gerar = () =>
+            PREFIXO[input.tipo]
+              ? numeroDocumento(tx, municipio, PREFIXO[input.tipo]!, ano)
+              : numeroAto(tx, municipio, (base.sigla_ato ?? SIGLA_PADRAO[input.tipo] ?? "DOC").toUpperCase(), ano);
+          numero = await gerar();
+          for (let i = 0; i < 50 && (await tx.documentoOficial.findFirst({ where: { municipio_id: input.municipio_id, tipo: input.tipo, numero }, select: { id: true } })); i++) numero = await gerar();
         }
 
         // 2) Código verificador único

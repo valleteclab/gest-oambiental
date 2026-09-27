@@ -82,7 +82,7 @@ export default async function LicencasPage({ searchParams }: { searchParams: Pro
                     <td className="whitespace-nowrap">{fmtData(d.emitido_em)}</td>
                     <td className="whitespace-nowrap">{fmtData(d.validade_ate)}</td>
                     <td><Badge cor={COR[d.status]}>{ROTULO_STATUS_PUBLICO[d.status]}</Badge></td>
-                    <td><Link className="text-primaria-700 underline" href={`/validar/${d.codigo_verificador}`}>Validar</Link></td>
+                    <td><Link className="text-primaria-700 underline" href={`/validar/${d.codigo_verificador}`} aria-label={`Validar ${d.numero}`}>Validar</Link></td>
                   </tr>
                 ))}
               </tbody>
