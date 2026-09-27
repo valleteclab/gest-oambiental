@@ -1,0 +1,20 @@
+# Não enviar ao contexto de build
+.git
+.github
+node_modules
+.next
+.next-*
+.env
+.env.*
+!.env.example
+storage
+exports
+coverage
+test-results
+playwright-report
+tests/e2e/.auth
+*.tsbuildinfo
+*.log
+Dockerfile
+docker-compose*.yml
+deploy

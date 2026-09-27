@@ -1,0 +1,112 @@
+# LicenciaGov – ambiente local / homologação com containers.
+#   docker compose up -d --build                 # postgres + minio + migrate + app + worker
+#   docker compose run --rm worker npm run seed:demo   # dados demo (NUNCA em produção de cliente)
+#   http://localhost:3000   · MinIO console: http://localhost:9001 (minioadmin / minioadmin)
+# Segredos abaixo são APENAS para uso local. Em homolog/prod use o secret manager (deploy/README.md).
+
+x-app-env: &app-env
+  NODE_ENV: production
+  DATABASE_URL: postgresql://postgres:postgres@postgres:5432/licenciagov?schema=public
+  APP_URL: ${APP_URL:-http://localhost:3000}
+  AUTH_SECRET: ${AUTH_SECRET:-dev-local-troque-este-segredo-com-32-chars-ou-mais}
+  DATA_KEY: ${DATA_KEY:-00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff}
+  HASH_PEPPER: ${HASH_PEPPER:-dev-local-pepper}
+  STORAGE_DRIVER: s3
+  S3_ENDPOINT: http://minio:9000
+  S3_REGION: sa-east-1
+  S3_BUCKET: licenciagov
+  AWS_ACCESS_KEY_ID: minioadmin
+  AWS_SECRET_ACCESS_KEY: minioadmin
+  CHROMIUM_PATH: /usr/bin/chromium
+  SMTP_URL: ${SMTP_URL:-smtp://mailpit:1025}
+  EMAIL_FROM: "LicenciaGov <nao-responda@licenciagov.local>"
+  TZ: America/Bahia
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: licenciagov
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d licenciagov"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [miniodata:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Cria o bucket (com versionamento, como em prod – SPEC 9.2)
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio: { condition: service_healthy }
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb --ignore-existing local/licenciagov &&
+      mc version enable local/licenciagov && echo bucket ok"
+    restart: "no"
+
+  # Caixa de e-mail de teste (alertas T3): http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports: ["8025:8025", "1025:1025"]
+
+  # Aplica migrações antes do app/worker subirem
+  migrate:
+    build: { context: ., target: worker }
+    image: licenciagov-worker:local
+    environment: *app-env
+    command: ["npx", "prisma", "migrate", "deploy"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  app:
+    build: { context: ., target: app }
+    image: licenciagov:local
+    restart: unless-stopped
+    environment: *app-env
+    ports: ["3000:3000"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      minio-init: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  worker:
+    build: { context: ., target: worker }
+    image: licenciagov-worker:local
+    restart: unless-stopped
+    environment: *app-env
+    command: ["npm", "run", "jobs"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      minio-init: { condition: service_completed_successfully }
+
+volumes:
+  pgdata:
+  miniodata:

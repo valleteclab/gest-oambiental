@@ -29,9 +29,10 @@
     }
   },
   "include": [
-    "next-env.d.ts",
     "**/*.ts",
-    "**/*.tsx"
+    "**/*.tsx",
+    ".next-cad/types/**/*.ts",
+    "next-env.d.ts"
   ],
   "exclude": [
     "node_modules",

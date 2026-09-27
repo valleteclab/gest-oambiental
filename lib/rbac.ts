@@ -130,7 +130,7 @@ export function isInterno(u: UsuarioSessao): boolean {
 }
 
 export function isSomenteLeitura(u: UsuarioSessao): boolean {
-  return u.papeis.every((p) => p.papel === "SEMA_INEMA");
+  return u.papeis.length > 0 && u.papeis.every((p) => p.papel === "SEMA_INEMA");
 }
 
 /**
@@ -158,18 +158,21 @@ export function escopoMunicipios(u: UsuarioSessao): "TODOS" | string[] {
   return [...new Set(u.papeis.filter((p) => p.papel !== "REQUERENTE" && p.municipio_id).map((p) => p.municipio_id!))];
 }
 
+/** UUID que nunca existe – usado para filtros "sem acesso" (colunas @db.Uuid não aceitam texto arbitrário). */
+export const UUID_NENHUM = "00000000-0000-0000-0000-000000000000";
+
 /** Filtro Prisma `{ municipio_id: ... }` para tabelas com municipio_id. Opcionalmente restringe a um município pedido. */
 export function whereMunicipio(u: UsuarioSessao, municipioPedido?: string | null): { municipio_id?: string | { in: string[] } } {
   const escopo = escopoMunicipios(u);
   if (escopo === "TODOS") return municipioPedido ? { municipio_id: municipioPedido } : {};
-  if (municipioPedido) return { municipio_id: escopo.includes(municipioPedido) ? municipioPedido : "__sem_acesso__" };
+  if (municipioPedido) return { municipio_id: escopo.includes(municipioPedido) ? municipioPedido : UUID_NENHUM };
   return { municipio_id: { in: escopo } };
 }
 
 /** Filtro para processos: interno → por município; requerente → processos em que é requerente ou RT. */
 export function whereProcessoEscopo(u: UsuarioSessao, municipioPedido?: string | null) {
   if (isInterno(u)) return whereMunicipio(u, municipioPedido);
-  if (!u.pessoa_id) return { id: "00000000-0000-0000-0000-000000000000" };
+  if (!u.pessoa_id) return { id: UUID_NENHUM };
   return { OR: [{ requerente_id: u.pessoa_id }, { rt: { pessoa_id: u.pessoa_id } }] };
 }
 

@@ -13,7 +13,12 @@
     "db:migrate": "prisma migrate deploy",
     "seed:base": "tsx prisma/seed/base.ts",
     "seed:demo": "tsx prisma/seed/base.ts && tsx prisma/seed/demo.ts",
-    "jobs": "tsx jobs/worker.ts"
+    "jobs": "tsx jobs/worker.ts",
+    "test:e2e:smoke": "playwright test tests/e2e/smoke.spec.ts",
+    "start:standalone": "node .next/standalone/server.js",
+    "docker:build": "docker build -t licenciagov:local --target app . && docker build -t licenciagov-worker:local --target worker .",
+    "docker:up": "docker compose up -d --build",
+    "openapi:export": "tsx -e \"import {documentoOpenApi} from './lib/openapi'; console.log(JSON.stringify(documentoOpenApi(), null, 2))\""
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1141.0",

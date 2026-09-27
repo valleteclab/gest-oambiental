@@ -1,0 +1,93 @@
+# Deploy em AWS sa-east-1 (ECR + ECS Fargate). Ver deploy/README.md.
+#  - push em main          → homolog (automático)
+#  - tag v*  / manual      → prod (environment "prod" com aprovação obrigatória)
+# Pré-requisitos (GitHub → Settings → Environments "homolog" e "prod"):
+#   vars:    AWS_ROLE_ARN, ECR_REPOSITORY, ECS_CLUSTER, ECS_SERVICE_APP, ECS_SERVICE_WORKER,
+#            ECS_TASKDEF_MIGRATE, ECS_SUBNETS, ECS_SECURITY_GROUPS, APP_URL
+#   (sem segredos no GitHub: a role OIDC só publica imagem e atualiza ECS; os segredos
+#    da aplicação ficam no AWS Secrets Manager e são injetados pela task definition)
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      ambiente:
+        description: "Ambiente"
+        type: choice
+        options: [homolog, prod]
+        default: homolog
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.event.inputs.ambiente || (startsWith(github.ref, 'refs/tags/') && 'prod' || 'homolog') }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.ambiente || (startsWith(github.ref, 'refs/tags/') && 'prod' || 'homolog') }}
+    timeout-minutes: 40
+    env:
+      AWS_REGION: sa-east-1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build & push (app + worker)
+        env:
+          REG: ${{ steps.ecr.outputs.registry }}
+          REPO: ${{ vars.ECR_REPOSITORY }}
+        run: |
+          TAG="${GITHUB_SHA::12}"
+          docker buildx build --target app    -t "$REG/$REPO:app-$TAG"    --push .
+          docker buildx build --target worker -t "$REG/$REPO:worker-$TAG" --push .
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+
+      - name: Registrar task definitions com a nova imagem
+        env:
+          IMG_BASE: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}
+        run: |
+          # nova revisão = revisão atual com a imagem trocada (demais campos, segredos e logs mantidos)
+          nova_rev() { # $1 = família/ARN da task definition, $2 = imagem
+            aws ecs describe-task-definition --task-definition "$1" --query taskDefinition \
+            | jq --arg img "$2" '.containerDefinitions[0].image=$img | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)' > td.json
+            aws ecs register-task-definition --cli-input-json file://td.json --query 'taskDefinition.taskDefinitionArn' --output text
+          }
+          td_de() { aws ecs describe-services --cluster "${{ vars.ECS_CLUSTER }}" --services "$1" --query 'services[0].taskDefinition' --output text; }
+          echo "TD_MIGRATE=$(nova_rev "${{ vars.ECS_TASKDEF_MIGRATE }}" "$IMG_BASE:worker-$TAG")" >> "$GITHUB_ENV"
+          echo "TD_APP=$(nova_rev "$(td_de "${{ vars.ECS_SERVICE_APP }}")" "$IMG_BASE:app-$TAG")" >> "$GITHUB_ENV"
+          echo "TD_WORKER=$(nova_rev "$(td_de "${{ vars.ECS_SERVICE_WORKER }}")" "$IMG_BASE:worker-$TAG")" >> "$GITHUB_ENV"
+
+      - name: Migrações (task one-shot, imagem worker)
+        run: |
+          ARN=$(aws ecs run-task --cluster "${{ vars.ECS_CLUSTER }}" --task-definition "$TD_MIGRATE" --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ vars.ECS_SUBNETS }}],securityGroups=[${{ vars.ECS_SECURITY_GROUPS }}],assignPublicIp=DISABLED}" \
+            --overrides '{"containerOverrides":[{"name":"migrate","command":["npx","prisma","migrate","deploy"]}]}' \
+            --query 'tasks[0].taskArn' --output text)
+          aws ecs wait tasks-stopped --cluster "${{ vars.ECS_CLUSTER }}" --tasks "$ARN"
+          CODE=$(aws ecs describe-tasks --cluster "${{ vars.ECS_CLUSTER }}" --tasks "$ARN" --query 'tasks[0].containers[0].exitCode' --output text)
+          echo "exit code: $CODE"; test "$CODE" = "0"
+
+      - name: Atualizar serviços ECS (rolling, sem downtime)
+        run: |
+          aws ecs update-service --cluster "${{ vars.ECS_CLUSTER }}" --service "${{ vars.ECS_SERVICE_APP }}" --task-definition "$TD_APP" > /dev/null
+          aws ecs update-service --cluster "${{ vars.ECS_CLUSTER }}" --service "${{ vars.ECS_SERVICE_WORKER }}" --task-definition "$TD_WORKER" > /dev/null
+          aws ecs wait services-stable --cluster "${{ vars.ECS_CLUSTER }}" --services "${{ vars.ECS_SERVICE_APP }}" "${{ vars.ECS_SERVICE_WORKER }}"
+
+      - name: Smoke pós-deploy
+        run: curl -fsS --retry 10 --retry-delay 6 "${{ vars.APP_URL }}/api/health"
