@@ -35,7 +35,7 @@ const TAGS_PERMITIDAS = new Set([
   "p", "br", "b", "strong", "i", "em", "u", "s", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6",
   "table", "thead", "tbody", "tfoot", "tr", "td", "th", "blockquote", "span", "div", "hr", "sup", "sub", "small", "caption", "colgroup", "col", "pre", "code",
 ]);
-const ATRIBUTOS_PERMITIDOS = new Set(["colspan", "rowspan", "align"]);
+const ATRIBUTOS_PERMITIDOS = new Set(["colspan", "rowspan", "align", "class"]);
 
 /**
  * Sanitizador conservador por whitelist para HTML vindo de usuários (ex.: texto do parecer) antes de ir ao Chromium.
@@ -59,7 +59,7 @@ export function sanitizarHtml(html: string): string {
       return `<${n}${seguros.length ? " " + seguros.join(" ") : ""}${autoFecha && n !== "br" && n !== "hr" && n !== "col" ? " /" : ""}>`;
     })
     // qualquer "<" solto que sobrou (ex.: "<script" sem fechamento) é neutralizado
-    .replace(/<(?![a-z/])/gi, "&lt;");
+    .replace(new RegExp(`<(?!/?(?:${[...TAGS_PERMITIDAS].join("|")})(?:\\s[^<>]*)?>)`, "g"), "&lt;");
 }
 
 /** Converte texto simples em parágrafos HTML escapados (quebra de linha dupla = novo parágrafo). */

@@ -68,7 +68,7 @@ export function resumoAdesao(linhas: { usuarios_ativos: number; processos_total:
 /** Soma campo a campo (numéricos) de uma lista de linhas; usado para a linha "Total". */
 export function somarLinhas<T extends Record<string, unknown>>(linhas: T[], campos: (keyof T)[]): Record<keyof T, number> {
   const out = {} as Record<keyof T, number>;
-  for (const c of campos) out[c] = linhas.reduce((s, l) => s + (Number(l[c]) || 0), 0);
+  for (const c of campos) out[c] = linhas.reduce<number>((s, l) => s + (Number(l[c]) || 0), 0);
   return out;
 }
 
@@ -88,11 +88,4 @@ export function isoDia(d: Date): string {
 export function periodoPadrao(hoje = new Date()): { de: string; ate: string } {
   const ate = isoDia(hoje);
   return { de: `${ate.slice(0, 4)}-01-01`, ate };
-}
-
-/** Agrupa pares (chave, valor) somando valores – útil para montar séries de gráficos. */
-export function agrupar<T>(itens: T[], chave: (i: T) => string, valor: (i: T) => number): Map<string, number> {
-  const m = new Map<string, number>();
-  for (const i of itens) m.set(chave(i), (m.get(chave(i)) ?? 0) + valor(i));
-  return m;
 }

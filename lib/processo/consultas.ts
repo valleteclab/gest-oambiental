@@ -129,3 +129,9 @@ export async function documentosExigidos(tipoAtoId: string, tipologiaId: string 
     orderBy: [{ obrigatorio: "desc" }, { created_at: "asc" }],
   });
 }
+
+/** Processos em que o usuário é requerente ou RT (área do requerente – independe de papéis internos). */
+export function whereTitular(u: UsuarioSessao): Prisma.ProcessoWhereInput {
+  if (!u.pessoa_id) return { id: "00000000-0000-0000-0000-000000000000" };
+  return { OR: [{ requerente_id: u.pessoa_id }, { rt: { pessoa_id: u.pessoa_id } }] };
+}

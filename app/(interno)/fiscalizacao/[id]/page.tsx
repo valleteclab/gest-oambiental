@@ -47,6 +47,8 @@ export default async function FichaFiscalizacao({ params, searchParams }: { para
         )}
       />
       {sp1(s.criada) && <div className="mb-4"><Aviso tipo="sucesso">Vistoria registrada com sucesso{f.denuncia ? ` – denúncia ${f.denuncia.protocolo} em apuração` : ""}.</Aviso></div>}
+      {sp1(s.auto) && <div className="mb-4"><Aviso tipo="sucesso">Auto de infração {sp1(s.auto)} lavrado e PDF emitido.</Aviso></div>}
+      {sp1(s.notificacao) && <div className="mb-4"><Aviso tipo="sucesso">Notificação {sp1(s.notificacao)} emitida com PDF.</Aviso></div>}
       {sp1(s.erro_pdf) && <div className="mb-4"><Aviso tipo="alerta">O registro foi salvo, mas o PDF não pôde ser gerado agora ({sp1(s.erro_pdf)}). Use “Gerar PDF novamente”.</Aviso></div>}
 
       <div className="grid gap-4 lg:grid-cols-2">

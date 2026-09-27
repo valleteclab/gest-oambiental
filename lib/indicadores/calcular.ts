@@ -90,7 +90,7 @@ export async function resolverEscopo(usuario: UsuarioSessao, filtros: FiltrosInd
     municipio: municipioSel,
     /** Descrição legível dos filtros (cabeçalho de relatórios). */
     descricao: {
-      municipio: municipioSel ? municipioSel.nome : filtros.municipio_id ? "(sem acesso)" : "Todos os municípios",
+      municipio: municipioSel ? municipioSel.nome : filtros.municipio_id ? "(sem acesso)" : wm.municipio_id === undefined ? "Todos os municípios" : municipios.length === 1 ? municipios[0].nome : municipios.map((m) => m.nome).join(", "),
       periodo: [deStr, ateStr] as const,
       tipo_ato: tipoAto ? `${tipoAto.sigla} – ${tipoAto.nome}` : "Todos",
       tecnico: tecnico ? tecnico.nome : "Todos",

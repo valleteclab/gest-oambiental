@@ -70,7 +70,7 @@ export async function relatorioPdf(r: Relatorio, cab: Cabecalho, logoUrl?: strin
         ? `<tfoot><tr>${s.colunas.map((c) => `<td class="${numerica(c) ? "n" : ""}">${s.total![c.chave] === undefined ? "" : esc(fmtCelula(s.total![c.chave], c))}</td>`).join("")}</tr></tfoot>`
         : "";
       return `<section><h2>${esc(s.titulo)} <small>(${s.linhas.length} registro${s.linhas.length === 1 ? "" : "s"})</small></h2>
-        <table><thead><tr>${th}</tr></thead><tbody>${linhas}</tbody>${total}</table>${s.nota ? `<p class="nota">${esc(s.nota)}</p>` : ""}</section>`;
+        <table class="${s.colunas.length > 10 ? "larga" : ""}"><thead><tr>${th}</tr></thead><tbody>${linhas}</tbody>${total}</table>${s.nota ? `<p class="nota">${esc(s.nota)}</p>` : ""}</section>`;
     })
     .join("");
 
@@ -95,6 +95,9 @@ export async function relatorioPdf(r: Relatorio, cab: Cabecalho, logoUrl?: strin
     tbody tr:nth-child(even) td { background: #f8fafc; }
     tfoot td { font-weight: 700; border-top: 1.5px solid #0f172a; background: #f1f5f9; }
     .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    th.n { white-space: normal; }
+    td:first-child { white-space: nowrap; }
+    table.larga { font-size: 7pt; } table.larga th, table.larga td { padding: 3px 3px; }
     .vazio { text-align: center; color: #64748b; padding: 10px; }
     .nota { font-size: 7.5pt; color: #475569; margin: 4px 0 0; }
   </style></head><body>
@@ -132,7 +135,7 @@ export async function relatorioXlsx(r: Relatorio, cab: Cabecalho, logoUrl?: stri
   const nomesUsados = new Set<string>();
 
   for (const s of r.secoes) {
-    let nome = s.titulo.replace(/[\\/*?:[\]]/g, "").slice(0, 31);
+    let nome = s.titulo.replace(/[\\/*?:[\]]/g, "").slice(0, 31).trim();
     while (nomesUsados.has(nome)) nome = `${nome.slice(0, 28)}_${nomesUsados.size}`;
     nomesUsados.add(nome);
     const ws = wb.addWorksheet(nome, { pageSetup: { orientation: r.paisagem ? "landscape" : "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });

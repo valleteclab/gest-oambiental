@@ -28,7 +28,7 @@ export function LicencasEmpilhadas({ dados }: { dados: Entrada[] }) {
           <XAxis type="number" allowDecimals={false} tick={{ fill: TINTA.suave, fontSize: 11 }} axisLine={{ stroke: TINTA.eixo }} tickLine={false} />
           <YAxis type="category" dataKey="municipio" width={120} tick={{ fill: TINTA.secundaria, fontSize: 12 }} axisLine={{ stroke: TINTA.eixo }} tickLine={false} interval={0} />
           <Tooltip cursor={{ fill: "rgba(11,11,11,0.04)" }} content={<Dica />} />
-          <Legend verticalAlign="top" align="left" iconType="square" iconSize={10} wrapperStyle={{ fontSize: 12, color: TINTA.secundaria, paddingBottom: 8 }} />
+          <Legend verticalAlign="top" align="left" iconType="square" iconSize={10} wrapperStyle={{ fontSize: 12, paddingBottom: 8 }} formatter={(v: string) => <span style={{ color: TINTA.secundaria }}>{v}</span>} />
           {serie.map((s) => (
             <Bar key={s} dataKey={s} name={s === "CERT_DISP" ? "Certidão" : s} stackId="lic" fill={corSigla(s)} stroke={TINTA.superficie} strokeWidth={1} maxBarSize={24} isAnimationActive={false} />
           ))}

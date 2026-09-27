@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { naoEncontrado, proibido, rota } from "@/lib/http";
 import { isInterno } from "@/lib/rbac";
+import { statusAmigavel } from "@/components/ui";
 import { corpoJson, usuarioApi } from "@/lib/cadastros/api";
 import { atualizarEmpreendimento, fichaEmpreendimento, obterEmpreendimentoBasico } from "@/lib/cadastros/empreendimentos";
 
@@ -19,7 +20,7 @@ export const GET = rota(async (_req: Request, { params }: Ctx) => {
   return NextResponse.json({
     ...resto,
     requerente: { id: requerente.id, tipo: requerente.tipo, nome: requerente.nome, cpf_cnpj_mascara: requerente.cpf_cnpj_mascara },
-    processos: processos.map((p) => ({ id: p.id, numero: p.numero, status: isInterno(u) ? p.status : p.status, tipo_ato: p.tipo_ato, data_protocolo: p.data_protocolo })),
+    processos: processos.map((p) => ({ id: p.id, numero: p.numero, ...(isInterno(u) ? { status: p.status } : {}), status_amigavel: statusAmigavel(p.status), tipo_ato: p.tipo_ato, data_protocolo: p.data_protocolo })),
     fiscalizacoes: isInterno(u) ? fiscalizacoes : [],
   });
 });

@@ -72,3 +72,11 @@ export function tipoImagem(bytes: Uint8Array): "image/jpeg" | "image/png" | null
   if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "image/png";
   return null;
 }
+
+/** Valor monetário digitado ("1.234,56", "1234.56", "R$ 500") → número; null se vazio, NaN se inválido. */
+export function lerMoeda(v: string): number | null {
+  const t = (v ?? "").replace(/[^\d,.-]/g, "");
+  if (!t) return null;
+  const n = Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : /^\d{1,3}(\.\d{3})+$/.test(t) ? t.replace(/\./g, "") : t);
+  return Number.isFinite(n) ? n : NaN;
+}

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { exigirUsuario } from "@/lib/auth";
+import { AcessoNegado } from "@/components/acesso-negado";
 import { can, temPapel } from "@/lib/rbac";
 import { fmtDataHora } from "@/lib/format";
 import { fmtBytes, situacaoBackup } from "@/lib/backup/registrar";
@@ -18,7 +19,7 @@ function horas(h: number | null) {
 
 export default async function PaginaBackup() {
   const u = await exigirUsuario({ interno: true });
-  if (!can(u, "ver", "admin") && !can(u, "ver", "exportacao")) return <Aviso tipo="erro">Acesso negado (403).</Aviso>;
+  if (!can(u, "ver", "admin") && !can(u, "ver", "exportacao")) return <AcessoNegado mensagem="A página de backup é restrita ao administrador e à SEMA/INEMA." />;
   const s = await situacaoBackup();
   const admin = temPapel(u, "ADMIN");
 

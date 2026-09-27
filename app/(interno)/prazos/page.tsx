@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { exigirUsuario } from "@/lib/auth";
+import { AcessoNegado } from "@/components/acesso-negado";
 import { prisma } from "@/lib/db";
 import { can, escopoMunicipios, whereMunicipio } from "@/lib/rbac";
 import { configPrazo } from "@/lib/prazos";
 import { diasRestantes, rotuloDiasRestantes, semaforo } from "@/lib/dias";
 import { fmtData } from "@/lib/format";
 import { STATUS_COM_PRAZO, abaDoPrazo, etapaDoStatus, type AbaPrazo } from "@/lib/alertas/regras";
-import { Aviso, BadgeStatus, CabecalhoPagina, Card, PontoSemaforo, Vazio } from "@/components/ui";
+import { BadgeStatus, CabecalhoPagina, Card, PontoSemaforo, Vazio } from "@/components/ui";
 
 export const metadata = { title: "Prazos – LicenciaGov" };
 
@@ -21,7 +22,7 @@ type SP = { aba?: string; municipio?: string; tecnico?: string };
 
 export default async function PaginaPrazos({ searchParams }: { searchParams: Promise<SP> }) {
   const u = await exigirUsuario({ interno: true });
-  if (!can(u, "ver", "processo")) return <Aviso tipo="erro">Acesso negado (403).</Aviso>;
+  if (!can(u, "ver", "processo")) return <AcessoNegado mensagem="Seu perfil não pode consultar prazos de processos." />;
   const sp = await searchParams;
   const aba: AbaPrazo = (ABAS.find((a) => a.id === sp.aba)?.id ?? "vencidos") as AbaPrazo;
   const municipio = sp.municipio || null;

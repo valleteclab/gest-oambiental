@@ -332,11 +332,8 @@ export async function arquivarPendenciasVencidas(agora = new Date(), ex = new Ex
     const carencia = cfg?.dias ?? Number(process.env.ARQUIVAMENTO_AUTO_CARENCIA_DIAS ?? 0);
     if (!deveArquivarAutomatico(p, agora, carencia)) continue;
     try {
-      await transicionar(p.id, "arquivar", {
-        justificativa: `Arquivamento automático: prazo de resposta à pendência vencido há mais de ${carencia} dia(s) (SPEC 6).`,
-        automatico: true,
-        usuario: USUARIO_SISTEMA,
-      });
+      // Assinatura (lib/processo/transicionar.ts): transicionar(processoId, acao, payload, usuario)
+      await transicionar(p.id, "arquivar", { justificativa: `Arquivamento automático: prazo de resposta à pendência vencido há mais de ${carencia} dia(s) (SPEC 6).` }, USUARIO_SISTEMA);
       arquivados++;
     } catch (e) {
       ex.resumo.erros.push(`arquivar ${p.numero ?? p.id}: ${e instanceof Error ? e.message : String(e)}`);
@@ -346,7 +343,8 @@ export async function arquivarPendenciasVencidas(agora = new Date(), ex = new Ex
 }
 
 /** Usuário sintético usado em transições automáticas (sem id real – log com usuario_id null). */
-export const USUARIO_SISTEMA = { id: null, nome: "Sistema (job de prazos)", email: "sistema@licenciagov", cargo: null, pessoa_id: null, trocar_senha: false, papeis: [{ papel: "ADMIN", municipio_id: null }], sistema: true } as const;
+// id nulo: tramitacao.de_usuario_id e log_auditoria.usuario_id ficam NULL (= ação do sistema).
+export const USUARIO_SISTEMA = { id: null as unknown as string, nome: "Sistema (job de prazos)", email: "sistema@licenciagov", cargo: null, pessoa_id: null, trocar_senha: false, papeis: [{ papel: "ADMIN" as const, municipio_id: null }] };
 
 // ───────────────────────── Entrada ─────────────────────────
 

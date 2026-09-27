@@ -1,4 +1,5 @@
 import { exigirUsuario } from "@/lib/auth";
+import { AcessoNegado } from "@/components/acesso-negado";
 import { prisma } from "@/lib/db";
 import { can } from "@/lib/rbac";
 import { fmtDataHora } from "@/lib/format";
@@ -14,7 +15,7 @@ const ROTULO = { PENDENTE: "Na fila", PROCESSANDO: "Processando", CONCLUIDA: "Co
 
 export default async function PaginaExportar({ searchParams }: { searchParams: Promise<{ ok?: string; erro?: string }> }) {
   const u = await exigirUsuario({ interno: true });
-  if (!can(u, "exportar", "exportacao")) return <Aviso tipo="erro">Acesso negado (403). A exportação completa é restrita a ADMIN e SEMA/INEMA.</Aviso>;
+  if (!can(u, "exportar", "exportacao")) return <AcessoNegado mensagem="A exportação completa é restrita a ADMIN e SEMA/INEMA." />;
   const sp = await searchParams;
   const exps = await prisma.exportacao.findMany({ orderBy: { created_at: "desc" }, take: 50 });
   const nomes = new Map((await prisma.usuario.findMany({ where: { id: { in: [...new Set(exps.map((e) => e.solicitada_por))] } }, select: { id: true, nome: true } })).map((x) => [x.id, x.nome]));

@@ -30,7 +30,7 @@ export const GET = rota(async (req: Request, ctx: { params: Promise<{ tipo: stri
   const cab = {
     organizacao: org?.nome ?? "LicenciaGov",
     organizacao_sigla: org?.sigla ?? "LicenciaGov",
-    municipio: municipio === "Todos os municípios" ? "Todos os municípios" : `Município de ${municipio}`,
+    municipio: municipio === "Todos os municípios" ? municipio : municipio.includes(", ") ? `Municípios: ${municipio}` : `Município de ${municipio}`,
     emitido_em: new Date(),
     usuario: u.nome,
   };
