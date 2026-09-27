@@ -6,7 +6,7 @@ import { can, escopoMunicipios } from "@/lib/rbac";
 import { fmtData, fmtMoeda, fmtNumero } from "@/lib/format";
 import { calcularIndicadores, opcoesFiltros } from "@/lib/indicadores/calcular";
 import { lerFiltros, municipioPermitido, queryFiltros } from "@/lib/indicadores/filtros";
-import { Aviso, CabecalhoPagina, Card, ROTULO_STATUS } from "@/components/ui";
+import { CabecalhoPagina, Card, ROTULO_STATUS } from "@/components/ui";
 import { BarrasHorizontais, LicencasEmpilhadas, TabelaDados } from "@/components/graficos";
 import { FiltrosGlobais } from "./filtros";
 

@@ -29,12 +29,9 @@
     }
   },
   "include": [
-    "**/*.ts",
-    "**/*.tsx",
-    ".next-fisc/types/**/*.ts",
-    ".next-processo/types/**/*.ts",
     "next-env.d.ts",
-    ".next-build/types/**/*.ts"
+    "**/*.ts",
+    "**/*.tsx"
   ],
   "exclude": [
     "node_modules",

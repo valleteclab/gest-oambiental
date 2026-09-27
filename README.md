@@ -14,3 +14,10 @@ npm run seed:demo               # dados de demonstração (NUNCA em produção d
 npm run dev                     # http://localhost:3000
 ```
 Usuários demo: `admin@licenciagov.demo`, `tecnico.itb@licenciagov.demo`, `laticinio@licenciagov.demo` … senha `Demo@2026licencia`.
+
+## Testes
+```bash
+npm run typecheck && npm run lint && npm test      # unitários (vitest)
+npm run test:e2e:poc                               # aceite da PoC T1–T10 (Playwright) – re-seed antes: npm run seed:demo em banco limpo
+```
+Documentação: `docs/arquitetura.md`, `docs/operacao.md`, `docs/backup.md`, `docs/restore.md`, `deploy/README.md`; API em `/api/docs` (OpenAPI em `/api/docs/openapi.json`).

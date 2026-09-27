@@ -15,6 +15,7 @@
     "seed:demo": "tsx prisma/seed/base.ts && tsx --conditions=react-server prisma/seed/demo.ts",
     "jobs": "tsx jobs/worker.ts",
     "test:e2e:smoke": "playwright test tests/e2e/smoke.spec.ts",
+    "test:e2e:poc": "playwright test \"tests/e2e/t(0[1-9]|10)-\"",
     "start:standalone": "node .next/standalone/server.js",
     "docker:build": "docker build -t licenciagov:local --target app . && docker build -t licenciagov-worker:local --target worker .",
     "docker:up": "docker compose up -d --build",

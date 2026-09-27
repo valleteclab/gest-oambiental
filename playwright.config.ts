@@ -12,7 +12,8 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  // Um worker: os testes de aceite compartilham o banco (T1 grava o nº/LO usados por T5 e T8).
+  workers: 1,
   timeout: 60_000,
   expect: { timeout: 10_000 },
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : [["list"], ["html", { open: "never" }]],

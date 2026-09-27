@@ -39,7 +39,7 @@ export default function MapaLeaflet({ centro = [-12.45, -40.2], zoom = 8, pontos
     <MapContainer center={selecionado ?? centro} zoom={zoom} style={{ height: altura, width: "100%" }} className="z-0 rounded-md border border-slate-200">
       <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
       {pontos.map((p) => (
-        <Marker key={p.id} position={[p.lat, p.lng]} icon={icone(p.cor)}>
+        <Marker key={p.id} position={[p.lat, p.lng]} icon={icone(p.cor)} title={p.titulo}>
           <Popup>
             <strong>{p.titulo}</strong>
             {p.descricao && <div>{p.descricao}</div>}

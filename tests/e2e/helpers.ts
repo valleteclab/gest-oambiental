@@ -1,4 +1,6 @@
-import { expect, type Page, type APIRequestContext } from "@playwright/test";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import path from "node:path";
+import { test, expect, type Page, type APIRequestContext, type TestInfo } from "@playwright/test";
 
 // Usuários de demonstração – ver prisma/seed/base.ts (SENHA_DEMO). NUNCA existem em produção de cliente
 // após a implantação; para rodar em prod na PoC, sobrescreva com E2E_SENHA se necessário.
@@ -53,4 +55,62 @@ export async function tokenApi(request: APIRequestContext, usuario: UsuarioDemo,
   expect(r.ok(), `login API de ${usuario}: ${r.status()}`).toBeTruthy();
   const corpo = await r.json();
   return corpo.access_token as string;
+}
+
+// ───────────── Testes de aceite da PoC (SPEC 13, t01…t10) ─────────────
+
+/** Projetos do playwright.config.ts. Testes que alteram dados rodam em UM projeto só (desktop; T4 só no mobile). */
+export const PROJETO_DESKTOP = "desktop-chromium";
+export const PROJETO_MOBILE = "mobile-pixel7";
+
+/** Chamar no início do teste: pula nos demais projetos (evita executar mutações duas vezes). */
+export function apenasNoProjeto(nome: string, motivo = "Altera dados – executado apenas em um projeto.") {
+  test.skip(test.info().project.name !== nome, motivo);
+}
+
+export const FIXTURES = path.resolve(__dirname, "../fixtures");
+export const PDF_EXEMPLO = path.join(FIXTURES, "documento-exemplo.pdf");
+export const FOTOS_VISTORIA = [path.join(FIXTURES, "vistoria-1.jpg"), path.join(FIXTURES, "vistoria-2.jpg")];
+
+/** Troca de usuário na mesma página (encerra a sessão atual e entra com outro). */
+export async function entrarComo(page: Page, usuario: UsuarioDemo) {
+  await logout(page);
+  await login(page, usuario);
+}
+
+/**
+ * Estado compartilhado T1 → T5/T8 (nº do processo e código da LO emitida).
+ * Gravado em test-results/poc-estado.json – por isso a suíte roda com workers=1 e T1 antes de T5/T8
+ * (ordem alfabética dos arquivos). Rodar T5/T8 isoladamente exige ter rodado T1 na mesma execução.
+ */
+const ARQ_ESTADO = path.resolve(__dirname, "../../test-results/poc-estado.json");
+export type EstadoPoc = { processo_id?: string; processo_numero?: string; lo_codigo?: string; lo_numero?: string; lo_documento_id?: string };
+
+export function salvarEstado(parcial: EstadoPoc) {
+  const atual = lerEstado();
+  mkdirSync(path.dirname(ARQ_ESTADO), { recursive: true });
+  writeFileSync(ARQ_ESTADO, JSON.stringify({ ...atual, ...parcial }, null, 2));
+}
+
+export function lerEstado(): EstadoPoc {
+  if (!existsSync(ARQ_ESTADO)) return {};
+  try {
+    return JSON.parse(readFileSync(ARQ_ESTADO, "utf8")) as EstadoPoc;
+  } catch {
+    return {};
+  }
+}
+
+/** Estado exigido (falha com mensagem clara se T1 não rodou antes). */
+export function estadoDeT1(testInfo: TestInfo, campo: keyof EstadoPoc): string {
+  const v = lerEstado()[campo];
+  expect(v, `${testInfo.title}: depende de T1 (t01-processo-completo) ter rodado antes nesta execução (${campo} ausente em ${ARQ_ESTADO})`).toBeTruthy();
+  return v!;
+}
+
+/** Converte "1.234,5" / "R$ 1.234,50" / "—" em número (— = null). */
+export function numeroBr(texto: string | null | undefined): number | null {
+  const t = (texto ?? "").replace(/R\$|\s| /g, "").trim();
+  if (!t || t === "—") return null;
+  return Number(t.replace(/\./g, "").replace(",", "."));
 }

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { forbidden } from "next/navigation";
 import clsx from "clsx";
 import { exigirUsuario } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -53,7 +54,9 @@ export default async function PaginaProcesso({ params, searchParams }: { params:
   const { aba: abaParam } = await searchParams;
   const aba: Aba = (ABAS.find(([k]) => k === abaParam)?.[0] ?? "dados") as Aba;
   const r = await carregarProcessoPagina(id, u);
-  if (r.proibido || !isInterno(u)) return <Proibido />;
+  // 403 real (T7): fora do escopo → status HTTP 403 + app/forbidden.tsx
+  if (r.proibido) forbidden();
+  if (!isInterno(u)) return <Proibido />;
   const p = r.p;
 
   const [tramitacoes, anexos, pendencias, pareceres, condicionantes, fiscalizacoes, documentos, exigidos, checklist] = await Promise.all([
