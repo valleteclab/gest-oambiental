@@ -13,6 +13,7 @@ x-app-env: &app-env
   HASH_PEPPER: ${HASH_PEPPER:-dev-local-pepper}
   STORAGE_DRIVER: s3
   S3_ENDPOINT: http://minio:9000
+  S3_PUBLIC_ENDPOINT: http://localhost:9000
   S3_REGION: sa-east-1
   S3_BUCKET: licenciagov
   AWS_ACCESS_KEY_ID: minioadmin

@@ -1,3 +1,4 @@
+import { forbidden } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { exigirUsuario } from "@/lib/auth";
@@ -35,7 +36,7 @@ export default async function PaginaDashboard({ searchParams }: { searchParams: 
   const u = await exigirUsuario({ interno: true });
   const filtros = lerFiltros(await searchParams);
   if (!can(u, "ver", "dashboard") || !municipioPermitido(u, filtros)) {
-    return <Aviso tipo="erro"><span data-testid="acesso-negado">Acesso negado (403): você não tem permissão para ver estes indicadores.</span></Aviso>;
+    forbidden();
   }
 
   const [ind, opcoes] = await Promise.all([calcularIndicadores(u, filtros), opcoesFiltros(u)]);

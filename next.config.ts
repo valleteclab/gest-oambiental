@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   // Permite rodar vários `next dev` em paralelo no mesmo checkout (NEXT_DIST_DIR=.next-xyz)
   distDir: process.env.NEXT_DIST_DIR || ".next",
   serverExternalPackages: ["@node-rs/argon2", "puppeteer-core", "exceljs", "pg-boss", "archiver", "nodemailer"],
-  experimental: { serverActions: { bodySizeLimit: "30mb" } },
+  experimental: { serverActions: { bodySizeLimit: "30mb" }, authInterrupts: true },
   async headers() {
     return [
       {

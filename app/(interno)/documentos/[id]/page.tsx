@@ -1,3 +1,4 @@
+import { forbidden } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -20,7 +21,7 @@ export default async function DocumentoPage({ params }: { params: Promise<{ id: 
   const d = await prisma.documentoOficial.findUnique({ where: { id }, include: { municipio: true, processo: { select: { id: true, numero: true } } } });
   if (!d) notFound();
   if (!podeVerMunicipio(u, d.municipio_id) || !can(u, "ver", "documento", d.municipio_id))
-    return <Aviso tipo="erro"><span data-testid="acesso-negado">Acesso negado (403): este documento pertence a um município fora do seu escopo.</span></Aviso>;
+    forbidden();
 
   const [titular, substituto, substituidos, logs] = await Promise.all([
     d.titular_id ? prisma.pessoa.findUnique({ where: { id: d.titular_id }, select: { id: true, nome: true, cpf_cnpj_mascara: true } }) : null,

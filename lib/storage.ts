@@ -9,13 +9,18 @@ const driver = () => process.env.STORAGE_DRIVER ?? "local";
 const dirLocal = () => path.resolve(process.env.STORAGE_LOCAL_DIR ?? "./storage");
 
 let s3: S3Client | null = null;
+let s3Publico: S3Client | null = null;
+const novoCliente = (endpoint?: string) =>
+  new S3Client({ region: process.env.S3_REGION ?? "sa-east-1", endpoint: endpoint || undefined, forcePathStyle: !!endpoint });
 function cliente() {
-  s3 ??= new S3Client({
-    region: process.env.S3_REGION ?? "sa-east-1",
-    endpoint: process.env.S3_ENDPOINT || undefined,
-    forcePathStyle: !!process.env.S3_ENDPOINT,
-  });
+  s3 ??= novoCliente(process.env.S3_ENDPOINT);
   return s3;
+}
+/** Cliente para URLs pré-assinadas acessadas pelo navegador (ex.: MinIO atrás de outro host no docker-compose). */
+function clientePublico() {
+  if (!process.env.S3_PUBLIC_ENDPOINT) return cliente();
+  s3Publico ??= novoCliente(process.env.S3_PUBLIC_ENDPOINT);
+  return s3Publico;
 }
 const bucket = () => process.env.S3_BUCKET ?? "licenciagov";
 
@@ -51,7 +56,7 @@ export async function removerArquivo(key: string) {
 /** URL pré-assinada de upload (S3). Em modo local retorna null e o upload vai pela rota multipart. */
 export async function urlUploadPreAssinada(key: string, mime: string): Promise<string | null> {
   if (driver() !== "s3") return null;
-  return getSignedUrl(cliente(), new PutObjectCommand({ Bucket: bucket(), Key: key, ContentType: mime }), { expiresIn: 600 });
+  return getSignedUrl(clientePublico(), new PutObjectCommand({ Bucket: bucket(), Key: key, ContentType: mime }), { expiresIn: 600 });
 }
 
 export async function storageSaudavel(): Promise<boolean> {

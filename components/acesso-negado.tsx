@@ -1,11 +1,9 @@
 import Link from "next/link";
+import { forbidden } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
 
-/**
- * Tela 403 reutilizável (SPEC 4.1 / T7): registro fora do escopo do usuário ou perfil sem permissão.
- * Uso em página: `if (!podeVerMunicipio(u, x.municipio_id)) return <AcessoNegado />;`
- */
-export function AcessoNegado({ mensagem, voltar = "/dashboard" }: { mensagem?: string; voltar?: string }) {
+/** Visual da tela 403 (usado por app/forbidden.tsx). */
+export function TelaAcessoNegado({ mensagem, voltar = "/dashboard" }: { mensagem?: string; voltar?: string }) {
   return (
     <section role="alert" aria-labelledby="titulo-403" data-testid="acesso-negado" className="mx-auto mt-10 max-w-lg rounded-lg border border-red-200 bg-white p-6 text-center shadow-sm">
       <ShieldAlert className="mx-auto h-10 w-10 text-red-700" aria-hidden />
@@ -15,4 +13,13 @@ export function AcessoNegado({ mensagem, voltar = "/dashboard" }: { mensagem?: s
       <Link href={voltar} className="btn-secundario mt-4">Voltar</Link>
     </section>
   );
+}
+
+/**
+ * 403 real (SPEC 4.1 / T7): interrompe a renderização com status HTTP 403 e exibe app/forbidden.tsx.
+ * Uso em página: `if (!podeVerMunicipio(u, x.municipio_id)) return <AcessoNegado />;`
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function AcessoNegado(_props: { mensagem?: string; voltar?: string }): never {
+  forbidden();
 }
