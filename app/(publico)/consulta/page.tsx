@@ -92,7 +92,7 @@ export default async function ConsultaPage({ searchParams }: { searchParams: Pro
             {p.documentos.length === 0 ? (
               <p className="mt-2 text-sm text-slate-500">Nenhuma licença, autorização ou certidão emitida neste processo.</p>
             ) : (
-              <div className="mt-3 overflow-x-auto">
+              <div className="relative mt-3 overflow-x-auto">
                 <table className="tabela">
                   <thead><tr><th scope="col">Documento</th><th scope="col">Número</th><th scope="col">Emissão</th><th scope="col">Validade</th><th scope="col">Situação</th><th scope="col"><span className="sr-only">Ações</span></th></tr></thead>
                   <tbody>

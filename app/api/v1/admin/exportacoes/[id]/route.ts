@@ -18,8 +18,7 @@ export const GET = rota(async (req: Request, ctx: { params: Promise<{ id: string
   if (!exp) throw naoEncontrado("Exportação não encontrada.");
   const somenteStatus = new URL(req.url).searchParams.has("status");
   if (somenteStatus || exp.status !== "CONCLUIDA" || !exp.storage_key) {
-    const { storage_key: _k, ...rest } = exp;
-    return NextResponse.json(rest, { status: exp.status === "CONCLUIDA" || somenteStatus ? 200 : 202 });
+    return NextResponse.json({ ...exp, storage_key: undefined }, { status: exp.status === "CONCLUIDA" || somenteStatus ? 200 : 202 });
   }
   const buf = await lerArquivo(exp.storage_key);
   await auditar({ usuario_id: u.id, acao: "EXPORTACAO_DOWNLOAD", entidade: "exportacao", entidade_id: exp.id, depois: { tamanho: buf.length } });

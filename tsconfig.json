@@ -33,10 +33,11 @@
     "**/*.tsx",
     ".next-cad/types/**/*.ts",
     ".next-dash/types/**/*.ts",
+    ".next-docs/types/**/*.ts",
     ".next-fisc/types/**/*.ts",
     ".next-prazos/types/**/*.ts",
     "next-env.d.ts",
-    ".next-docs/types/**/*.ts"
+    ".next-processo/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

@@ -85,7 +85,7 @@ export default async function DocumentosPage({ searchParams }: { searchParams: P
         {docs.length === 0 ? (
           <Vazio>Nenhum documento encontrado.</Vazio>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className="tabela">
               <thead><tr><th scope="col">Número</th><th scope="col">Tipo</th><th scope="col">Processo</th><th scope="col">Mun.</th><th scope="col">Emissão</th><th scope="col">Validade</th><th scope="col">Situação</th></tr></thead>
               <tbody>

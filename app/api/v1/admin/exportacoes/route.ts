@@ -16,7 +16,7 @@ export const GET = rota(async (req: Request) => {
     prisma.exportacao.findMany({ orderBy: { created_at: "desc" }, skip, take }),
     prisma.exportacao.count(),
   ]);
-  return NextResponse.json({ data: data.map(({ storage_key: _k, ...x }) => ({ ...x, download: x.status === "CONCLUIDA" ? `/api/v1/admin/exportacoes/${x.id}` : null })), page, size, total });
+  return NextResponse.json({ data: data.map((x) => ({ ...x, storage_key: undefined, download: x.status === "CONCLUIDA" ? `/api/v1/admin/exportacoes/${x.id}` : null })), page, size, total });
 });
 
 // POST /api/v1/admin/exportacoes – solicita exportação completa (ZIP CSV+JSON por tabela, anexos, manifest)

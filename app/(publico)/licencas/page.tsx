@@ -65,7 +65,7 @@ export default async function LicencasPage({ searchParams }: { searchParams: Pro
         {r.itens.length === 0 ? (
           <Vazio>Nenhum documento encontrado com os filtros informados.</Vazio>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className="tabela" data-testid="tabela-licencas">
               <caption className="sr-only">Licenças, autorizações e certidões emitidas</caption>
               <thead>
