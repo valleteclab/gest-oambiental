@@ -12,7 +12,7 @@
     "test:e2e": "playwright test",
     "db:migrate": "prisma migrate deploy",
     "seed:base": "tsx prisma/seed/base.ts",
-    "seed:demo": "tsx prisma/seed/base.ts && tsx prisma/seed/demo.ts",
+    "seed:demo": "tsx prisma/seed/base.ts && tsx --conditions=react-server prisma/seed/demo.ts",
     "jobs": "tsx jobs/worker.ts",
     "test:e2e:smoke": "playwright test tests/e2e/smoke.spec.ts",
     "start:standalone": "node .next/standalone/server.js",
