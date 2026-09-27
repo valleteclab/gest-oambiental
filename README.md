@@ -1,6 +1,8 @@
 # LicenciaGov
 
-Sistema web multi-município de **licenciamento e fiscalização ambiental** para órgãos ambientais municipais e consórcios públicos (primeiro cliente: CDS Piemonte do Paraguaçu – Programa GAC/SEMA-BA/INEMA).
+Sistema web multi-município de **licenciamento e fiscalização ambiental** oferecido como SaaS para prefeituras, secretarias municipais de meio ambiente e consórcios públicos.
+
+> Os dados de demonstração (`npm run seed:demo`) usam uma organização e municípios **fictícios** ("Consórcio Intermunicipal de Demonstração", sigla CID-DEMO: Lagoa do Orvalho/LOR, Serra Serena/SSR, Campo das Seriemas/CSE, Pedra do Candeeiro/PCA, Alto do Umbuzeiro/AUM, Várzea do Mandacaru/VMA; códigos IBGE fictícios iniciados em 99). Com `DEMO_MODE=true` o sistema exibe a faixa "Ambiente de demonstração – dados fictícios".
 
 - Especificação: [`docs/SPEC.md`](docs/SPEC.md)
 - Guia de desenvolvimento e convenções: [`CLAUDE.md`](CLAUDE.md)
@@ -13,7 +15,8 @@ npx prisma migrate deploy
 npm run seed:demo               # dados de demonstração (NUNCA em produção de cliente)
 npm run dev                     # http://localhost:3000
 ```
-Usuários demo: `admin@licenciagov.demo`, `tecnico.itb@licenciagov.demo`, `laticinio@licenciagov.demo` … senha `Demo@2026licencia`.
+Usuários demo: `admin@licenciagov.demo`, `tecnico.lor@licenciagov.demo`, `laticinio@licenciagov.demo` … senha `Demo@2026licencia`.
+No login escolhe-se o **órgão** (município); `/login?orgao=LOR` pré-seleciona. Usuários municipais só entram nos órgãos dos seus papéis; ADMIN, TEC_CONSORCIO e SEMA_INEMA em qualquer um; requerentes escolhem livremente.
 
 ## Testes
 ```bash

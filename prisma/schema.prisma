@@ -201,7 +201,7 @@ model Municipio {
   id                   String   @id @default(uuid()) @db.Uuid
   organizacao_id       String   @db.Uuid
   nome                 String
-  sigla                String   @unique // IAC, IBQ, ITB, ITT, MNV, RJB, RUY, TPM
+  sigla                String   @unique // 3 letras (ex.: LOR)
   codigo_ibge          String   @unique
   orgao_ambiental_nome String
   brasao_url           String?
@@ -515,7 +515,7 @@ model Processo {
   id                  String         @id @default(uuid()) @db.Uuid
   organizacao_id      String         @db.Uuid
   municipio_id        String         @db.Uuid
-  numero              String?        @unique // RUY-2026-000123 (gerado ao protocolar)
+  numero              String?        @unique // SSR-2026-000123 (gerado ao protocolar)
   empreendimento_id   String         @db.Uuid
   requerente_id       String         @db.Uuid
   rt_id               String?        @db.Uuid

@@ -23,6 +23,7 @@ Backups e restauração: [`backup.md`](backup.md) (e checklist mensal em `restor
 | `NODE_ENV` | sim | não | `production` em homolog/prod (ativa cookies `Secure`) |
 | `PORT` / `HOSTNAME` | container | não | Servidor standalone (`3000` / `0.0.0.0`) |
 | `TZ` | recomendado | não | `America/Bahia` (prazos e datas em documentos) |
+| `DEMO_MODE` | não | não | `true` exibe a faixa "Ambiente de demonstração – dados fictícios" e rotula os órgãos da landing como de demonstração (lido em tempo de execução). Padrão `false` |
 | `ARQUIVAMENTO_AUTO`, `ARQUIVAMENTO_AUTO_CARENCIA_DIAS`, `ALERTAS_MODULO_TRANSICIONAR` | não | não | Parâmetros dos jobs de prazo (ver módulo de prazos/alertas e `.env.example`) |
 | `E2E_BASE_URL`, `E2E_SENHA`, `E2E_IGNORE_HTTPS` | testes | – | Playwright contra homolog/prod |
 

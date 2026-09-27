@@ -257,3 +257,14 @@ export async function opcoesFiltroPublico() {
   ]);
   return { municipios, siglas };
 }
+
+/** Números de transparência do portal do órgão (contagens simples, indexadas por municipio_id). */
+export async function numerosTransparencia(municipioId: string) {
+  const [licencas, vigentes, andamento, denuncias] = await Promise.all([
+    prisma.documentoOficial.count({ where: { municipio_id: municipioId, tipo: { in: [...TIPOS_PUBLICOS] } } }),
+    prisma.documentoOficial.count({ where: { municipio_id: municipioId, tipo: { in: [...TIPOS_PUBLICOS] }, status: "VALIDO", OR: [{ validade_ate: null }, { validade_ate: { gte: new Date() } }] } }),
+    prisma.processo.count({ where: { municipio_id: municipioId, status: { in: ["PROTOCOLADO", "EM_TRIAGEM", "AGUARDANDO_REQUERENTE", "EM_ANALISE", "AGUARDANDO_VISTORIA", "AGUARDANDO_DECISAO", "DEFERIDO"] } } }),
+    prisma.denuncia.count({ where: { municipio_id: municipioId } }),
+  ]);
+  return { licencas, vigentes, andamento, denuncias };
+}

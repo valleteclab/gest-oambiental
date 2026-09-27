@@ -5,6 +5,7 @@ import { consultarProcessoPublico } from "@/lib/documentos/publico";
 import { ROTULO_STATUS_PUBLICO } from "@/lib/documentos/render";
 import { fmtData, fmtDataHora } from "@/lib/format";
 import { Aviso, Badge, statusAmigavel } from "@/components/ui";
+import { ContextoOrgao } from "@/components/contexto-orgao";
 import type { StatusProcesso } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -12,24 +13,26 @@ export const metadata: Metadata = { title: "Consultar processo" };
 
 const COR_STATUS = { VALIDO: "verde", VENCIDO: "amarelo", CANCELADO: "vermelho", SUBSTITUIDO: "amarelo" } as const;
 
-export default async function ConsultaPage({ searchParams }: { searchParams: Promise<{ numero?: string; doc?: string }> }) {
-  const { numero = "", doc = "" } = await searchParams;
+export default async function ConsultaPage({ searchParams }: { searchParams: Promise<{ numero?: string; doc?: string; orgao?: string }> }) {
+  const { numero = "", doc = "", orgao } = await searchParams;
   const buscou = !!numero.trim();
   const p = buscou ? await consultarProcessoPublico(numero, doc) : null;
 
   return (
     <div className="space-y-6">
+      <ContextoOrgao sigla={orgao} />
       <div>
         <h1 className="titulo-pagina">Consultar processo</h1>
         <p className="mt-1 max-w-2xl text-sm text-slate-600">
-          Informe o número completo do processo (ex.: ITB-2026-000042), que consta no recibo de protocolo. Opcionalmente, informe também o CPF/CNPJ do requerente para confirmar a titularidade.
+          Informe o número completo do processo (ex.: LOR-2026-000042), que consta no recibo de protocolo. Opcionalmente, informe também o CPF/CNPJ do requerente para confirmar a titularidade.
         </p>
       </div>
 
       <form method="get" action="/consulta" className="card grid gap-4 p-5 sm:grid-cols-[2fr_2fr_auto] sm:items-end">
+        {orgao && <input type="hidden" name="orgao" value={orgao} />}
         <label className="block" htmlFor="numero">
           <span className="label">Nº do processo</span>
-          <input id="numero" name="numero" required defaultValue={numero} className="input font-mono uppercase" placeholder="ITB-2026-000042" autoComplete="off" spellCheck={false} maxLength={30} />
+          <input id="numero" name="numero" required defaultValue={numero} className="input font-mono uppercase" placeholder="LOR-2026-000042" autoComplete="off" spellCheck={false} maxLength={30} />
         </label>
         <label className="block" htmlFor="doc">
           <span className="label">CPF/CNPJ do requerente (opcional)</span>

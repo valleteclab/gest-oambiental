@@ -35,7 +35,7 @@ test("T5 – validação pública da LO de T1: VÁLIDO, PDF íntegro e, após ca
   await expect(dados).toContainText(numeroLo);
   await expect(dados).toContainText("Licença de Operação");
   await expect(dados).toContainText("Laticínio Boa Vista Ltda");
-  await expect(dados).toContainText("Laticínio Boa Vista – Itaberaba");
+  await expect(dados).toContainText("Laticínio Boa Vista – Lagoa do Orvalho");
   await expect(dados.getByRole("link", { name: numeroProcesso })).toBeVisible();
   await expect(dados).toContainText(codigo);
   const hash = (await page.getByTestId("hash-documento").innerText()).trim();
@@ -52,7 +52,7 @@ test("T5 – validação pública da LO de T1: VÁLIDO, PDF íntegro e, após ca
   await expect(page.getByTestId("resultado-hash")).toContainText("Arquivo íntegro");
 
   // ── Gestor cancela o documento ──
-  await login(page, "gestorItb");
+  await login(page, "gestorLor");
   await page.goto(`/documentos/${docId}`);
   await page.getByLabel("Motivo do cancelamento (obrigatório)").fill(MOTIVO);
   page.once("dialog", (d) => d.accept());

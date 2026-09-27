@@ -9,8 +9,9 @@ Visão resumida. Detalhes funcionais em [`SPEC.md`](SPEC.md); implantação em [
         │ HTTPS (HSTS)
         ▼
  ┌────────────────────────── Next.js 15 (App Router, standalone) ──────────────────────────┐
- │ (publico)   portal: consulta, licenças, validar/[codigo], denúncia                      │
- │ (auth)      login, cadastro de requerente, troca de senha                               │
+ │ (publico)   landing do produto, portal do órgão (/orgao/[sigla]), consulta, licenças,   │
+ │             validar/[codigo], denúncia                                                  │
+ │ (auth)      login (com escolha do órgão), cadastro, troca de senha, trocar órgão        │
  │ (requerente) meus processos, novo requerimento                                          │
  │ (interno)   dashboard, processos, cadastros, fiscalização, documentos, relatórios, admin│
  │ /api/v1/*   REST (Route Handlers, rota() + zod) · /api/docs (OpenAPI 3.1) · /api/health │
@@ -43,7 +44,7 @@ Visão resumida. Detalhes funcionais em [`SPEC.md`](SPEC.md); implantação em [
 - **Região Brasil** (AWS sa-east-1), ambientes `homolog` e `prod` isolados.
 
 ## Fluxo de requisição autenticada
-1. Login (`/login` ou `POST /api/v1/auth/login`) → cookies `lg_access` (15 min) / `lg_refresh` (8 h) ou Bearer token.
+1. Login (`/login` ou `POST /api/v1/auth/login`) com escolha do **órgão** (município; validado por `podeAcessarOrgao`) → cookies `lg_access` (15 min) / `lg_refresh` (8 h) / `lg_orgao` (órgão ativo, 8 h) ou Bearer token.
 2. Página/rota chama `exigirUsuario()` / `getUsuario()` → `can()` + `whereMunicipio()` na consulta.
 3. Escritas em transação com `auditar()`; transições gravam `tramitacao`; numeração via `SELECT … FOR UPDATE`.
 

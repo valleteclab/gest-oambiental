@@ -6,9 +6,9 @@ import { capturarPosicao, erroDaResposta, mensagemErroGeo } from "@/lib/fiscaliz
 
 type Mun = { id: string; nome: string; lat: number | null; lng: number | null };
 
-export function FormDenuncia({ municipios }: { municipios: Mun[] }) {
+export function FormDenuncia({ municipios, municipioInicial = "" }: { municipios: Mun[]; municipioInicial?: string }) {
   const inicio = useRef(Date.now());
-  const [municipioId, setMunicipioId] = useState("");
+  const [municipioId, setMunicipioId] = useState(municipioInicial);
   const [descricao, setDescricao] = useState("");
   const [endereco, setEndereco] = useState("");
   const [anonima, setAnonima] = useState(true);

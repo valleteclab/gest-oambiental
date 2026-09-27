@@ -103,7 +103,7 @@ const schemas: Obj = {
   EmpreendimentoCriar: obj({ municipio_id: uuid, requerente_id: uuid, nome: str, endereco, latitude: num, longitude: num, poligono_geojson: { type: "object" }, tipologia_id: uuid, grandeza_porte: { type: "number", description: "Valor na unidade da tipologia – porte calculado" }, area_m2: num, numero_car: str, rt_ids: arr(uuid) }, ["municipio_id", "requerente_id", "nome", "tipologia_id", "latitude", "longitude"]),
   EmpreendimentoAtualizar: obj({ nome: str, endereco, latitude: num, longitude: num, poligono_geojson: { type: "object" }, porte: str, justificativa_porte: str, status: enumStr("ATIVO", "INATIVO") }),
   Processo: obj({
-    id: uuid, numero: { type: "string", examples: ["ITB-2026-000042"] }, municipio_id: uuid, empreendimento_id: uuid, requerente_id: uuid, rt_id: { ...uuid, type: ["string", "null"] }, tipo_ato_id: uuid,
+    id: uuid, numero: { type: "string", examples: ["LOR-2026-000042"] }, municipio_id: uuid, empreendimento_id: uuid, requerente_id: uuid, rt_id: { ...uuid, type: ["string", "null"] }, tipo_ato_id: uuid,
     status: enumStr("RASCUNHO", "PROTOCOLADO", "EM_TRIAGEM", "AGUARDANDO_REQUERENTE", "EM_ANALISE", "AGUARDANDO_VISTORIA", "AGUARDANDO_DECISAO", "DEFERIDO", "INDEFERIDO", "CONCLUIDO", "ARQUIVADO"),
     etapa_atual: str, tecnico_id: { type: ["string", "null"] }, gestor_id: { type: ["string", "null"] },
     data_protocolo: { type: ["string", "null"], format: "date-time" }, prazo_etapa_ate: { type: ["string", "null"], format: "date" }, prazo_pausado: bool,
@@ -135,7 +135,7 @@ const schemas: Obj = {
   Documento: obj({
     id: uuid, municipio_id: uuid, processo_id: { type: ["string", "null"] }, fiscalizacao_id: { type: ["string", "null"] },
     tipo: enumStr("LICENCA", "AUTORIZACAO", "CERTIDAO", "AUTO_INFRACAO", "NOTIFICACAO", "PARECER", "OFICIO", "RECIBO"),
-    numero: { type: "string", examples: ["LO-ITB-012/2026"] }, ano: { type: "integer" }, codigo_verificador: { type: "string", examples: ["7KQ2-M9XA-D3PL"] },
+    numero: { type: "string", examples: ["LO-LOR-012/2026"] }, ano: { type: "integer" }, codigo_verificador: { type: "string", examples: ["7KQ2-M9XA-D3PL"] },
     sha256_pdf: str, validade_ate: { type: ["string", "null"], format: "date" }, emitido_em: dataHora, status: enumStr("VALIDO", "CANCELADO", "SUBSTITUIDO"),
     motivo_cancelamento: strN, url_pdf: { type: "string", format: "uri" },
   }),
@@ -145,14 +145,14 @@ const schemas: Obj = {
   ProcessoPublico: obj({ numero: str, municipio: str, tipo_ato: str, situacao: str, requerente: { type: "string", description: "Mascarado (***.456.789-**) / abreviado" }, empreendimento: str, linha_do_tempo: arr(obj({ data: dataHora, etapa: str })) }),
   LicencaPublica: obj({ numero: str, tipo: str, municipio: str, titular: str, empreendimento: str, emitido_em: dataHora, validade_ate: { type: ["string", "null"] }, codigo_verificador: str, situacao: str }),
   DenunciaPublicaCriar: obj({ municipio_id: uuid, anonima: bool, denunciante_nome: str, contato: str, descricao: { type: "string", minLength: 20 }, latitude: num, longitude: num, endereco: str }, ["municipio_id", "descricao", "anonima"]),
-  DenunciaProtocolo: obj({ protocolo: { type: "string", examples: ["DEN-ITB-2026-000007"] }, criada_em: dataHora }),
+  DenunciaProtocolo: obj({ protocolo: { type: "string", examples: ["DEN-LOR-2026-000007"] }, criada_em: dataHora }),
   Denuncia: obj({ id: uuid, municipio_id: uuid, protocolo: str, canal: enumStr("PORTAL", "PRESENCIAL", "TELEFONE", "OUTRO"), anonima: bool, denunciante_nome: strN, descricao: str, latitude: { type: ["number", "null"] }, longitude: { type: ["number", "null"] }, endereco: strN, status: enumStr("NOVA", "EM_APURACAO", "CONCLUIDA", "ARQUIVADA"), created_at: dataHora }),
   DenunciaCriar: obj({ municipio_id: uuid, canal: enumStr("PORTAL", "PRESENCIAL", "TELEFONE", "OUTRO"), anonima: bool, denunciante_nome: str, contato: str, descricao: str, latitude: num, longitude: num, endereco: str }, ["municipio_id", "canal", "descricao"]),
   Fiscalizacao: obj({ id: uuid, municipio_id: uuid, origem: enumStr("DENUNCIA", "ROTINA", "PROCESSO"), denuncia_id: { type: ["string", "null"] }, processo_id: { type: ["string", "null"] }, empreendimento_id: { type: ["string", "null"] }, data_hora: dataHora, latitude: num, longitude: num, precisao_m: num, equipe: arr(obj({ usuario_id: uuid, nome: str })), relato: str, constatacao: enumStr("IRREGULAR", "REGULAR", "INCONCLUSIVA"), status: enumStr("AGENDADA", "REALIZADA", "CANCELADA"), fotos: arr(ref("Anexo")) }),
   FiscalizacaoCriar: obj({ municipio_id: uuid, origem: enumStr("DENUNCIA", "ROTINA", "PROCESSO"), denuncia_id: uuid, processo_id: uuid, empreendimento_id: uuid, data_hora: dataHora, latitude: num, longitude: num, precisao_m: num, equipe: arr(uuid), relato: str, constatacao: enumStr("IRREGULAR", "REGULAR", "INCONCLUSIVA") }, ["municipio_id", "origem", "data_hora", "latitude", "longitude"]),
-  AutoInfracao: obj({ id: uuid, fiscalizacao_id: uuid, numero: { type: "string", examples: ["AI-ITB-003/2026"] }, autuado_id: uuid, enquadramento_legal: str, descricao_infracao: str, penalidade: enumStr("ADVERTENCIA", "MULTA", "EMBARGO", "INTERDICAO", "OUTRA"), valor_multa: { type: ["number", "null"] }, prazo_defesa_dias: { type: "integer" }, status: enumStr("LAVRADO", "EM_DEFESA", "JULGADO", "PAGO", "CANCELADO"), documento: ref("Documento") }),
+  AutoInfracao: obj({ id: uuid, fiscalizacao_id: uuid, numero: { type: "string", examples: ["AI-LOR-003/2026"] }, autuado_id: uuid, enquadramento_legal: str, descricao_infracao: str, penalidade: enumStr("ADVERTENCIA", "MULTA", "EMBARGO", "INTERDICAO", "OUTRA"), valor_multa: { type: ["number", "null"] }, prazo_defesa_dias: { type: "integer" }, status: enumStr("LAVRADO", "EM_DEFESA", "JULGADO", "PAGO", "CANCELADO"), documento: ref("Documento") }),
   AutoInfracaoCriar: obj({ fiscalizacao_id: uuid, autuado_id: uuid, enquadramento_legal: str, descricao_infracao: str, penalidade: enumStr("ADVERTENCIA", "MULTA", "EMBARGO", "INTERDICAO", "OUTRA"), valor_multa: num, prazo_defesa_dias: { type: "integer", default: 20 } }, ["fiscalizacao_id", "autuado_id", "enquadramento_legal", "descricao_infracao", "penalidade"]),
-  Notificacao: obj({ id: uuid, fiscalizacao_id: { type: ["string", "null"] }, processo_id: { type: ["string", "null"] }, numero: { type: "string", examples: ["NOT-ITB-005/2026"] }, notificado_id: uuid, exigencia: str, prazo_dias: { type: "integer" }, prazo_ate: data, status: enumStr("EMITIDA", "ATENDIDA", "VENCIDA", "CANCELADA"), documento: ref("Documento") }),
+  Notificacao: obj({ id: uuid, fiscalizacao_id: { type: ["string", "null"] }, processo_id: { type: ["string", "null"] }, numero: { type: "string", examples: ["NOT-LOR-005/2026"] }, notificado_id: uuid, exigencia: str, prazo_dias: { type: "integer" }, prazo_ate: data, status: enumStr("EMITIDA", "ATENDIDA", "VENCIDA", "CANCELADA"), documento: ref("Documento") }),
   NotificacaoCriar: obj({ fiscalizacao_id: uuid, processo_id: uuid, notificado_id: uuid, exigencia: str, prazo_dias: { type: "integer", minimum: 1 } }, ["notificado_id", "exigencia", "prazo_dias"]),
   Indicadores: obj({
     filtro: obj({ municipio: strN, de: data, ate: data }),
@@ -177,9 +177,9 @@ const paths: Obj = {
   "/api/v1/auth/login": {
     post: op({
       tags: ["Autenticação"], summary: "Login (e-mail + senha)", ...publico,
-      description: "Retorna access token (15 min) e refresh token (8 h); também grava cookies HttpOnly. Rate limit e bloqueio após 5 falhas.",
-      requestBody: corpo(obj({ email: { type: "string", format: "email" }, senha: str }, ["email", "senha"])),
-      responses: { "200": ok(ref("Tokens")), "401": erroResp("Credenciais inválidas", { code: "CREDENCIAIS_INVALIDAS", message: "E-mail ou senha inválidos.", details: null }), ...erros(422, 429, 500) },
+      description: "Retorna access token (15 min) e refresh token (8 h); também grava cookies HttpOnly. Rate limit e bloqueio após 5 falhas. `orgao` (opcional): sigla ou id do município em que o usuário vai atuar – usuários municipais só nos municípios dos seus papéis; ADMIN, TEC_CONSORCIO, SEMA_INEMA e requerentes em qualquer órgão.",
+      requestBody: corpo(obj({ email: { type: "string", format: "email" }, senha: str, orgao: { type: "string", examples: ["LOR"] } }, ["email", "senha"])),
+      responses: { "200": ok(ref("Tokens")), "401": erroResp("Credenciais inválidas", { code: "CREDENCIAIS_INVALIDAS", message: "E-mail ou senha inválidos.", details: null }), "403": erroResp("Sem acesso ao órgão", { code: "ORGAO_SEM_ACESSO", message: "Seu usuário não tem acesso a este órgão.", details: null }), ...erros(422, 429, 500) },
     }),
   },
   "/api/v1/auth/refresh": {
@@ -198,7 +198,7 @@ const paths: Obj = {
   "/api/v1/processos": {
     get: op({
       tags: ["Processos"], summary: "Lista processos (escopo do usuário)",
-      parameters: [...paginacao, filtroMun, busca, q("status", "Status (pode repetir)", arr(str)), q("tecnico_id", "Técnico responsável", uuid), q("semaforo", "VERDE|AMARELO|VERMELHO", enumStr("VERDE", "AMARELO", "VERMELHO")), q("numero", "Número exato (ex.: ITB-2026-000042)")],
+      parameters: [...paginacao, filtroMun, busca, q("status", "Status (pode repetir)", arr(str)), q("tecnico_id", "Técnico responsável", uuid), q("semaforo", "VERDE|AMARELO|VERMELHO", enumStr("VERDE", "AMARELO", "VERMELHO")), q("numero", "Número exato (ex.: LOR-2026-000042)")],
       responses: { "200": pagina("Processo"), ...errosInternos },
     }),
     post: op({ tags: ["Processos"], summary: "Cria requerimento (RASCUNHO)", description: "Use a ação `protocolar` para gerar o número.", requestBody: corpo(ref("ProcessoCriar")), responses: { "201": ok(ref("Processo"), "Criado"), ...erros(401, 403, 422, 500) } }),

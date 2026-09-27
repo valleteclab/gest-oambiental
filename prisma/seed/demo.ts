@@ -8,10 +8,10 @@
 // created_at de denúncia) – tramitacao e log_auditoria (imutáveis) não são tocados.
 //
 // Cenários dos testes de aceite (SPEC 13):
-//   T1 – "Laticínio Boa Vista – Itaberaba" (Laticínio Boa Vista Ltda, ITB) só com LP e LI concluídas (sem LO aberta).
-//   T2 – "Posto Estrela – Ruy Barbosa" com LP, LI e LO concluídas e licenças emitidas; RT com registro no CREA.
-//   T3 – tecnico.itb tem exatamente 2 processos com prazo correndo: um vence em 3 dias e outro vencido.
-//   T6/T7 – dados em todos os municípios (Itaberaba, Iaçu, Ruy Barbosa…).
+//   T1 – "Laticínio Boa Vista – Lagoa do Orvalho" (Laticínio Boa Vista Ltda, LOR) só com LP e LI concluídas (sem LO aberta).
+//   T2 – "Posto Estrela – Serra Serena" com LP, LI e LO concluídas e licenças emitidas; RT com registro no CREA.
+//   T3 – tecnico.lor tem exatamente 2 processos com prazo correndo: um vence em 3 dias e outro vencido.
+//   T6/T7 – dados em todos os municípios (Lagoa do Orvalho, Campo das Seriemas, Serra Serena…).
 //   T10 – backup nas últimas 24 h e teste de restauração no último mês.
 //
 // Os módulos de lib/ importam "server-only": rodar com `tsx --conditions=react-server` (ver package.json).
@@ -27,7 +27,7 @@ try {
 
 const RAIZ = path.resolve(__dirname, "../..");
 const FIXTURES = path.join(RAIZ, "tests/fixtures");
-const MARCADOR = "Posto Estrela – Ruy Barbosa";
+const MARCADOR = "Posto Estrela – Serra Serena";
 const SENHA_DEMO = "Demo@2026licencia";
 const DIA = 86400000;
 
@@ -80,24 +80,24 @@ const FOTOS = [readFileSync(path.join(FIXTURES, "vistoria-1.jpg")), readFileSync
 type PessoaDemo = { chave: string; tipo: "PF" | "PJ"; doc: string; nome: string; fantasia?: string; mun: string; email: string; telefone: string; logradouro: string; bairro: string };
 
 const PESSOAS: PessoaDemo[] = [
-  { chave: "primavera", tipo: "PJ", doc: gerarCnpj("27415836"), nome: "Primavera Empreendimentos Imobiliários Ltda", fantasia: "Primavera Urbanismo", mun: "ITB", email: "contato@primaveraurbanismo.com.br", telefone: "(75) 3251-4410", logradouro: "Av. Rio Branco, 812", bairro: "Centro" },
-  { chave: "mineracao", tipo: "PJ", doc: gerarCnpj("31872904"), nome: "Mineração Paraguaçu Areia e Cascalho Ltda", fantasia: "Areal Paraguaçu", mun: "IAC", email: "comercial@arealparaguacu.com.br", telefone: "(75) 3264-1180", logradouro: "Rodovia BA-245, km 4", bairro: "Zona Rural" },
-  { chave: "irmaos_silva", tipo: "PJ", doc: gerarCnpj("19634527"), nome: "Irmãos Silva Auto Center Ltda", fantasia: "Auto Center Irmãos Silva", mun: "IAC", email: "oficina@irmaossilva.com.br", telefone: "(75) 3264-2217", logradouro: "Rua Sete de Setembro, 145", bairro: "Centro" },
-  { chave: "chapada", tipo: "PJ", doc: gerarCnpj("08451963"), nome: "Auto Posto Chapada Ltda", fantasia: "Posto Chapada", mun: "MNV", email: "gerencia@postochapada.com.br", telefone: "(74) 3625-1090", logradouro: "Av. Getúlio Vargas, 1500", bairro: "São Francisco" },
-  { chave: "serra_verde", tipo: "PJ", doc: gerarCnpj("14789320"), nome: "Laticínios Serra Verde Ltda", fantasia: "Serra Verde", mun: "TPM", email: "industria@laticiniosserraverde.com.br", telefone: "(74) 3628-3321", logradouro: "Estrada Tapiramutá–Piritiba, km 2", bairro: "Zona Rural" },
-  { chave: "bela_vista", tipo: "PJ", doc: gerarCnpj("35120478"), nome: "Bela Vista Urbanismo SPE Ltda", mun: "RUY", email: "projetos@belavistaurbanismo.com.br", telefone: "(75) 3252-7788", logradouro: "Rua Barão do Rio Branco, 60", bairro: "Centro" },
-  { chave: "sorriso", tipo: "PJ", doc: gerarCnpj("22908163"), nome: "Clínica Odontológica Sorriso Ltda", fantasia: "Clínica Sorriso", mun: "ITB", email: "atendimento@clinicasorriso.com.br", telefone: "(75) 3251-9020", logradouro: "Praça Dr. Joaquim Dias, 22", bairro: "Centro" },
-  { chave: "comb_iacu", tipo: "PJ", doc: gerarCnpj("40317852"), nome: "Comercial de Combustíveis Iaçu Ltda", fantasia: "Posto Iaçu Diesel", mun: "IAC", email: "financeiro@postoiacu.com.br", telefone: "(75) 3264-3350", logradouro: "Av. ACM, 900", bairro: "Rodoviária" },
-  { chave: "antonio", tipo: "PF", doc: gerarCpf("284617395"), nome: "Antônio Carlos Ribeiro", mun: "RUY", email: "antonio.ribeiro@exemplo.com.br", telefone: "(75) 99141-2233", logradouro: "Fazenda Santa Luzia, s/n", bairro: "Zona Rural" },
-  { chave: "jose_roberto", tipo: "PF", doc: gerarCpf("517308462"), nome: "José Roberto Nascimento", mun: "RJB", email: "jr.nascimento@exemplo.com.br", telefone: "(75) 99208-7741", logradouro: "Fazenda Boa Esperança, s/n", bairro: "Zona Rural" },
-  { chave: "edvaldo", tipo: "PF", doc: gerarCpf("631825079"), nome: "Edvaldo Santos Lima", mun: "RUY", email: "edvaldo.funilaria@exemplo.com.br", telefone: "(75) 99177-0412", logradouro: "Rua do Comércio, 318", bairro: "Centro" },
-  { chave: "rosangela", tipo: "PF", doc: gerarCpf("749261538"), nome: "Rosângela Souza Pires", mun: "IBQ", email: "rosangela.pires@exemplo.com.br", telefone: "(75) 99812-3390", logradouro: "Rua Principal, 45", bairro: "Centro" },
-  { chave: "gilberto", tipo: "PF", doc: gerarCpf("852094176"), nome: "Gilberto Araújo Costa", mun: "TPM", email: "gilberto.mecanica@exemplo.com.br", telefone: "(74) 99933-1508", logradouro: "Av. Luiz Viana, 77", bairro: "Centro" },
+  { chave: "primavera", tipo: "PJ", doc: gerarCnpj("27415836"), nome: "Primavera Empreendimentos Imobiliários Ltda", fantasia: "Primavera Urbanismo", mun: "LOR", email: "contato@primaveraurbanismo.com.br", telefone: "(75) 3555-4410", logradouro: "Av. Rio Branco, 812", bairro: "Centro" },
+  { chave: "mineracao", tipo: "PJ", doc: gerarCnpj("31872904"), nome: "Mineração Seriemas Areia e Cascalho Ltda", fantasia: "Areal Seriemas", mun: "CSE", email: "comercial@arealseriemas.com.br", telefone: "(75) 3555-1180", logradouro: "Rodovia BA-245, km 4", bairro: "Zona Rural" },
+  { chave: "irmaos_silva", tipo: "PJ", doc: gerarCnpj("19634527"), nome: "Irmãos Silva Auto Center Ltda", fantasia: "Auto Center Irmãos Silva", mun: "CSE", email: "oficina@irmaossilva.com.br", telefone: "(75) 3555-2217", logradouro: "Rua Sete de Setembro, 145", bairro: "Centro" },
+  { chave: "chapada", tipo: "PJ", doc: gerarCnpj("08451963"), nome: "Auto Posto Chapada Ltda", fantasia: "Posto Chapada", mun: "AUM", email: "gerencia@postochapada.com.br", telefone: "(74) 3555-1090", logradouro: "Av. Getúlio Vargas, 1500", bairro: "São Francisco" },
+  { chave: "serra_verde", tipo: "PJ", doc: gerarCnpj("14789320"), nome: "Laticínios Serra Verde Ltda", fantasia: "Serra Verde", mun: "AUM", email: "industria@laticiniosserraverde.com.br", telefone: "(74) 3555-3321", logradouro: "Estrada do Umbuzeiro, km 2", bairro: "Zona Rural" },
+  { chave: "bela_vista", tipo: "PJ", doc: gerarCnpj("35120478"), nome: "Bela Vista Urbanismo SPE Ltda", mun: "SSR", email: "projetos@belavistaurbanismo.com.br", telefone: "(75) 3555-7788", logradouro: "Rua Barão do Rio Branco, 60", bairro: "Centro" },
+  { chave: "sorriso", tipo: "PJ", doc: gerarCnpj("22908163"), nome: "Clínica Odontológica Sorriso Ltda", fantasia: "Clínica Sorriso", mun: "LOR", email: "atendimento@clinicasorriso.com.br", telefone: "(75) 3555-9020", logradouro: "Praça Dr. Joaquim Dias, 22", bairro: "Centro" },
+  { chave: "comb_cse", tipo: "PJ", doc: gerarCnpj("40317852"), nome: "Comercial de Combustíveis Seriemas Ltda", fantasia: "Posto Seriemas Diesel", mun: "CSE", email: "financeiro@postoseriemas.com.br", telefone: "(75) 3555-3350", logradouro: "Av. ACM, 900", bairro: "Rodoviária" },
+  { chave: "antonio", tipo: "PF", doc: gerarCpf("284617395"), nome: "Antônio Carlos Ribeiro", mun: "SSR", email: "antonio.ribeiro@exemplo.com.br", telefone: "(75) 99000-2233", logradouro: "Fazenda Santa Luzia, s/n", bairro: "Zona Rural" },
+  { chave: "jose_roberto", tipo: "PF", doc: gerarCpf("517308462"), nome: "José Roberto Nascimento", mun: "VMA", email: "jr.nascimento@exemplo.com.br", telefone: "(75) 99000-7741", logradouro: "Fazenda Boa Esperança, s/n", bairro: "Zona Rural" },
+  { chave: "edvaldo", tipo: "PF", doc: gerarCpf("631825079"), nome: "Edvaldo Santos Lima", mun: "SSR", email: "edvaldo.funilaria@exemplo.com.br", telefone: "(75) 99000-0412", logradouro: "Rua do Comércio, 318", bairro: "Centro" },
+  { chave: "rosangela", tipo: "PF", doc: gerarCpf("749261538"), nome: "Rosângela Souza Pires", mun: "VMA", email: "rosangela.pires@exemplo.com.br", telefone: "(75) 99000-3390", logradouro: "Rua Principal, 45", bairro: "Centro" },
+  { chave: "gilberto", tipo: "PF", doc: gerarCpf("852094176"), nome: "Gilberto Araújo Costa", mun: "AUM", email: "gilberto.mecanica@exemplo.com.br", telefone: "(74) 99000-1508", logradouro: "Av. Luiz Viana, 77", bairro: "Centro" },
   // Pessoas dos responsáveis técnicos
-  { chave: "rt_ricardo", tipo: "PF", doc: gerarCpf("193745286"), nome: "Ricardo Almeida Souza", mun: "ITB", email: "ricardo.almeida.eng@exemplo.com.br", telefone: "(75) 99115-6070", logradouro: "Rua J. J. Seabra, 210", bairro: "Centro" },
-  { chave: "rt_fernanda", tipo: "PF", doc: gerarCpf("402918573"), nome: "Fernanda Lima Carvalho", mun: "RUY", email: "fernanda.bio@exemplo.com.br", telefone: "(75) 99264-1122", logradouro: "Rua Otaviano Alves, 58", bairro: "Centro" },
-  { chave: "rt_paulo", tipo: "PF", doc: gerarCpf("275836104"), nome: "Paulo Henrique Mendes", mun: "IAC", email: "paulo.agronomo@exemplo.com.br", telefone: "(75) 99387-4410", logradouro: "Travessa São João, 12", bairro: "Centro" },
-  { chave: "rt_marcos", tipo: "PF", doc: gerarCpf("368190257"), nome: "Marcos Vinícius Tavares", mun: "ITT", email: "marcos.geologia@exemplo.com.br", telefone: "(75) 99456-9031", logradouro: "Rua Rui Barbosa, 101", bairro: "Centro" },
+  { chave: "rt_ricardo", tipo: "PF", doc: gerarCpf("193745286"), nome: "Ricardo Almeida Souza", mun: "LOR", email: "ricardo.almeida.eng@exemplo.com.br", telefone: "(75) 99000-6070", logradouro: "Rua J. J. Seabra, 210", bairro: "Centro" },
+  { chave: "rt_fernanda", tipo: "PF", doc: gerarCpf("402918573"), nome: "Fernanda Lima Carvalho", mun: "SSR", email: "fernanda.bio@exemplo.com.br", telefone: "(75) 99000-1122", logradouro: "Rua Otaviano Alves, 58", bairro: "Centro" },
+  { chave: "rt_paulo", tipo: "PF", doc: gerarCpf("275836104"), nome: "Paulo Henrique Mendes", mun: "CSE", email: "paulo.agronomo@exemplo.com.br", telefone: "(75) 99000-4410", logradouro: "Travessa São João, 12", bairro: "Centro" },
+  { chave: "rt_marcos", tipo: "PF", doc: gerarCpf("368190257"), nome: "Marcos Vinícius Tavares", mun: "PCA", email: "marcos.geologia@exemplo.com.br", telefone: "(75) 99000-9031", logradouro: "Rua da Matriz, 101", bairro: "Centro" },
 ];
 
 const RTS = [
@@ -120,31 +120,31 @@ type EmpDemo = { chave: string; nome: string; mun: string; req: string; tip: str
 
 // Coordenadas: sede do município (seed base) + deslocamento de poucos km.
 const EMPREENDIMENTOS: EmpDemo[] = [
-  { chave: "posto_estrela", nome: MARCADOR, mun: "RUY", req: "posto", tip: "E1.1", grandeza: 90, area: 1800, dLat: 0.0071, dLng: -0.0093, rt: "ricardo", logradouro: "Rodovia BA-046, km 1, s/n", bairro: "Alto da Boa Vista" },
-  { chave: "lat_bv", nome: "Laticínio Boa Vista – Itaberaba", mun: "ITB", req: "laticinio", tip: "C1.1", grandeza: 15000, area: 5200, dLat: -0.0182, dLng: 0.0214, rt: "ricardo", logradouro: "Estrada do Boa Vista, km 3", bairro: "Zona Rural" },
-  { chave: "ceramica_ptg", nome: "Cerâmica Paraguaçu – Itatim", mun: "ITT", req: "ceramica", tip: "C2.1", grandeza: 400, area: 12000, dLat: 0.0125, dLng: 0.0187, rt: "marcos", logradouro: "Rodovia BR-116, km 519", bairro: "Zona Rural" },
-  { chave: "olaria_itatim", nome: "Olaria Itatim Tijolos – Itatim", mun: "ITT", req: "ceramica", tip: "C2.1", grandeza: 120, area: 6500, dLat: -0.0098, dLng: 0.0072, rt: "marcos", logradouro: "Povoado de Tanquinho, s/n", bairro: "Zona Rural" },
-  { chave: "olaria_sj", nome: "Olaria São José – Iaçu", mun: "IAC", req: "joao", tip: "C2.1", grandeza: 80, area: 4300, dLat: 0.0154, dLng: -0.0121, logradouro: "Estrada de Lajedo Alto, km 2", bairro: "Zona Rural" },
-  { chave: "lavajato_brilho", nome: "Lava-Jato Brilho Total – Itaberaba", mun: "ITB", req: "maria", tip: "E1.2", grandeza: 150, area: 320, dLat: 0.0043, dLng: -0.0051, logradouro: "Rua Tenente Joaquim Nascimento, 480", bairro: "São João" },
-  { chave: "lavajato_estrela", nome: "Lava-Jato e Troca de Óleo Estrela – Ruy Barbosa", mun: "RUY", req: "posto", tip: "E1.2", grandeza: 300, area: 650, dLat: 0.0068, dLng: -0.0085, rt: "ricardo", logradouro: "Rodovia BA-046, km 1, anexo", bairro: "Alto da Boa Vista" },
-  { chave: "granja_sl", nome: "Granja Santa Luzia – Ruy Barbosa", mun: "RUY", req: "antonio", tip: "A1.1", grandeza: 80000, area: 38000, dLat: -0.0417, dLng: 0.0362, rt: "paulo", logradouro: "Fazenda Santa Luzia, Estrada do Morro Branco", bairro: "Zona Rural", car: "BA-2927200-5F1A2B3C4D5E6F7A8B9C0D1E2F3A4B5C" },
-  { chave: "areal", nome: "Areal Rio Paraguaçu – Iaçu", mun: "IAC", req: "mineracao", tip: "F1.1", grandeza: 15000, area: 90000, dLat: -0.0213, dLng: 0.0288, rt: "marcos", logradouro: "Margem direita do Rio Paraguaçu, Porto de Iaçu", bairro: "Zona Rural" },
-  { chave: "lagoa_funda", nome: "Extração de Areia Lagoa Funda – Rafael Jambeiro", mun: "RJB", req: "mineracao", tip: "F1.1", grandeza: 8000, area: 45000, dLat: 0.0264, dLng: -0.0197, rt: "marcos", logradouro: "Povoado de Lagoa Funda, s/n", bairro: "Zona Rural" },
-  { chave: "posto_chapada", nome: "Posto Chapada – Mundo Novo", mun: "MNV", req: "chapada", tip: "E1.1", grandeza: 150, area: 2400, dLat: 0.0052, dLng: 0.0068, rt: "ricardo", logradouro: "Av. Getúlio Vargas, 1500", bairro: "São Francisco" },
-  { chave: "faz_bom_jesus", nome: "Fazenda Leiteira Bom Jesus – Mundo Novo", mun: "MNV", req: "jose_roberto", tip: "A1.2", grandeza: 400, area: 250000, dLat: -0.0386, dLng: -0.0271, rt: "paulo", logradouro: "Fazenda Bom Jesus, Estrada de Alto Bonito", bairro: "Zona Rural", car: "BA-2922003-9A8B7C6D5E4F3A2B1C0D9E8F7A6B5C4D" },
-  { chave: "of_irmaos", nome: "Oficina Mecânica Irmãos Silva – Iaçu", mun: "IAC", req: "irmaos_silva", tip: "E1.3", grandeza: 350, area: 480, dLat: 0.0031, dLng: 0.0044, logradouro: "Rua Sete de Setembro, 145", bairro: "Centro" },
-  { chave: "of_central", nome: "Oficina e Funilaria Central – Ruy Barbosa", mun: "RUY", req: "edvaldo", tip: "E1.3", grandeza: 250, area: 390, dLat: -0.0038, dLng: 0.0029, logradouro: "Rua do Comércio, 318", bairro: "Centro" },
-  { chave: "mecanica_tpm", nome: "Auto Mecânica Tapiramutá", mun: "TPM", req: "gilberto", tip: "E1.3", grandeza: 180, area: 260, dLat: 0.0027, dLng: -0.0035, logradouro: "Av. Luiz Viana, 77", bairro: "Centro" },
-  { chave: "lat_serra_verde", nome: "Laticínio Serra Verde – Tapiramutá", mun: "TPM", req: "serra_verde", tip: "C1.1", grandeza: 30000, area: 7800, dLat: 0.0195, dLng: 0.0241, rt: "fernanda", logradouro: "Estrada Tapiramutá–Piritiba, km 2", bairro: "Zona Rural" },
-  { chave: "queijaria", nome: "Queijaria Artesanal Sertão – Ibiquera", mun: "IBQ", req: "rosangela", tip: "C1.1", grandeza: 3000, area: 600, dLat: 0.0089, dLng: -0.0113, rt: "fernanda", logradouro: "Sítio Lagoa do Boi, s/n", bairro: "Zona Rural" },
-  { chave: "lavajato_ibq", nome: "Lava-Jato Ibiquera Express", mun: "IBQ", req: "rosangela", tip: "E1.2", grandeza: 120, area: 210, dLat: 0.0021, dLng: 0.0019, logradouro: "Rua Principal, 45", bairro: "Centro" },
-  { chave: "granja_be", nome: "Granja Boa Esperança – Rafael Jambeiro", mun: "RJB", req: "jose_roberto", tip: "A1.1", grandeza: 150000, area: 52000, dLat: -0.0311, dLng: 0.0226, rt: "paulo", logradouro: "Fazenda Boa Esperança, s/n", bairro: "Zona Rural", car: "BA-2926202-1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6E" },
-  { chave: "lot_bela_vista", nome: "Loteamento Residencial Bela Vista – Ruy Barbosa", mun: "RUY", req: "bela_vista", tip: "G1.1", grandeza: 25, area: 250000, dLat: 0.0148, dLng: 0.0117, rt: "ricardo", logradouro: "Estrada do Bela Vista, s/n", bairro: "Bela Vista" },
-  { chave: "lot_primavera", nome: "Loteamento Jardim Primavera – Itaberaba", mun: "ITB", req: "primavera", tip: "G1.1", grandeza: 12, area: 120000, dLat: 0.0163, dLng: -0.0149, rt: "ricardo", logradouro: "Av. Primavera, s/n (prolongamento)", bairro: "Primavera" },
-  { chave: "lot_portal", nome: "Loteamento Portal do Sertão – Iaçu", mun: "IAC", req: "primavera", tip: "G1.1", grandeza: 8, area: 80000, dLat: -0.0122, dLng: -0.0164, rt: "fernanda", logradouro: "Saída para Milagres, s/n", bairro: "Portal" },
-  { chave: "clinica", nome: "Clínica Odontológica Sorriso – Itaberaba", mun: "ITB", req: "sorriso", tip: "H1.1", grandeza: 180, area: 180, dLat: -0.0022, dLng: 0.0017, logradouro: "Praça Dr. Joaquim Dias, 22", bairro: "Centro" },
-  { chave: "avicola_itb", nome: "Avícola Itaberaba", mun: "ITB", req: "antonio", tip: "A1.1", grandeza: 45000, area: 26000, dLat: -0.0347, dLng: -0.0298, rt: "paulo", logradouro: "Fazenda Riachão, Estrada de Ipirá", bairro: "Zona Rural" },
-  { chave: "posto_iacu", nome: "Posto Iaçu Diesel", mun: "IAC", req: "comb_iacu", tip: "E1.1", grandeza: 60, area: 1500, dLat: 0.0061, dLng: 0.0083, rt: "ricardo", logradouro: "Av. ACM, 900", bairro: "Rodoviária" },
+  { chave: "posto_estrela", nome: MARCADOR, mun: "SSR", req: "posto", tip: "E1.1", grandeza: 90, area: 1800, dLat: 0.0071, dLng: -0.0093, rt: "ricardo", logradouro: "Rodovia BA-046, km 1, s/n", bairro: "Alto da Boa Vista" },
+  { chave: "lat_bv", nome: "Laticínio Boa Vista – Lagoa do Orvalho", mun: "LOR", req: "laticinio", tip: "C1.1", grandeza: 15000, area: 5200, dLat: -0.0182, dLng: 0.0214, rt: "ricardo", logradouro: "Estrada do Boa Vista, km 3", bairro: "Zona Rural" },
+  { chave: "ceramica_ptg", nome: "Cerâmica Candeeiro – Pedra do Candeeiro", mun: "PCA", req: "ceramica", tip: "C2.1", grandeza: 400, area: 12000, dLat: 0.0125, dLng: 0.0187, rt: "marcos", logradouro: "Rodovia BR-116, km 519", bairro: "Zona Rural" },
+  { chave: "olaria_candeeiro", nome: "Olaria Candeeiro Tijolos – Pedra do Candeeiro", mun: "PCA", req: "ceramica", tip: "C2.1", grandeza: 120, area: 6500, dLat: -0.0098, dLng: 0.0072, rt: "marcos", logradouro: "Povoado de Tanquinho, s/n", bairro: "Zona Rural" },
+  { chave: "olaria_sj", nome: "Olaria São José – Campo das Seriemas", mun: "CSE", req: "joao", tip: "C2.1", grandeza: 80, area: 4300, dLat: 0.0154, dLng: -0.0121, logradouro: "Estrada de Lajedo Alto, km 2", bairro: "Zona Rural" },
+  { chave: "lavajato_brilho", nome: "Lava-Jato Brilho Total – Lagoa do Orvalho", mun: "LOR", req: "maria", tip: "E1.2", grandeza: 150, area: 320, dLat: 0.0043, dLng: -0.0051, logradouro: "Rua Tenente Joaquim Nascimento, 480", bairro: "São João" },
+  { chave: "lavajato_estrela", nome: "Lava-Jato e Troca de Óleo Estrela – Serra Serena", mun: "SSR", req: "posto", tip: "E1.2", grandeza: 300, area: 650, dLat: 0.0068, dLng: -0.0085, rt: "ricardo", logradouro: "Rodovia BA-046, km 1, anexo", bairro: "Alto da Boa Vista" },
+  { chave: "granja_sl", nome: "Granja Santa Luzia – Serra Serena", mun: "SSR", req: "antonio", tip: "A1.1", grandeza: 80000, area: 38000, dLat: -0.0417, dLng: 0.0362, rt: "paulo", logradouro: "Fazenda Santa Luzia, Estrada do Morro Branco", bairro: "Zona Rural", car: "BA-9900202-5F1A2B3C4D5E6F7A8B9C0D1E2F3A4B5C" },
+  { chave: "areal", nome: "Areal Rio das Seriemas – Campo das Seriemas", mun: "CSE", req: "mineracao", tip: "F1.1", grandeza: 15000, area: 90000, dLat: -0.0213, dLng: 0.0288, rt: "marcos", logradouro: "Margem direita do Rio das Seriemas, Porto das Seriemas", bairro: "Zona Rural" },
+  { chave: "lagoa_funda", nome: "Extração de Areia Lagoa Funda – Várzea do Mandacaru", mun: "VMA", req: "mineracao", tip: "F1.1", grandeza: 8000, area: 45000, dLat: 0.0264, dLng: -0.0197, rt: "marcos", logradouro: "Povoado de Lagoa Funda, s/n", bairro: "Zona Rural" },
+  { chave: "posto_chapada", nome: "Posto Chapada – Alto do Umbuzeiro", mun: "AUM", req: "chapada", tip: "E1.1", grandeza: 150, area: 2400, dLat: 0.0052, dLng: 0.0068, rt: "ricardo", logradouro: "Av. Getúlio Vargas, 1500", bairro: "São Francisco" },
+  { chave: "faz_bom_jesus", nome: "Fazenda Leiteira Bom Jesus – Alto do Umbuzeiro", mun: "AUM", req: "jose_roberto", tip: "A1.2", grandeza: 400, area: 250000, dLat: -0.0386, dLng: -0.0271, rt: "paulo", logradouro: "Fazenda Bom Jesus, Estrada de Alto Bonito", bairro: "Zona Rural", car: "BA-9900505-9A8B7C6D5E4F3A2B1C0D9E8F7A6B5C4D" },
+  { chave: "of_irmaos", nome: "Oficina Mecânica Irmãos Silva – Campo das Seriemas", mun: "CSE", req: "irmaos_silva", tip: "E1.3", grandeza: 350, area: 480, dLat: 0.0031, dLng: 0.0044, logradouro: "Rua Sete de Setembro, 145", bairro: "Centro" },
+  { chave: "of_central", nome: "Oficina e Funilaria Central – Serra Serena", mun: "SSR", req: "edvaldo", tip: "E1.3", grandeza: 250, area: 390, dLat: -0.0038, dLng: 0.0029, logradouro: "Rua do Comércio, 318", bairro: "Centro" },
+  { chave: "mecanica_aum", nome: "Auto Mecânica Umbuzeiro", mun: "AUM", req: "gilberto", tip: "E1.3", grandeza: 180, area: 260, dLat: 0.0027, dLng: -0.0035, logradouro: "Av. Luiz Viana, 77", bairro: "Centro" },
+  { chave: "lat_serra_verde", nome: "Laticínio Serra Verde – Alto do Umbuzeiro", mun: "AUM", req: "serra_verde", tip: "C1.1", grandeza: 30000, area: 7800, dLat: 0.0195, dLng: 0.0241, rt: "fernanda", logradouro: "Estrada do Umbuzeiro, km 2", bairro: "Zona Rural" },
+  { chave: "queijaria", nome: "Queijaria Artesanal Sertão – Várzea do Mandacaru", mun: "VMA", req: "rosangela", tip: "C1.1", grandeza: 3000, area: 600, dLat: 0.0089, dLng: -0.0113, rt: "fernanda", logradouro: "Sítio Lagoa do Boi, s/n", bairro: "Zona Rural" },
+  { chave: "lavajato_vma", nome: "Lava-Jato Mandacaru Express", mun: "VMA", req: "rosangela", tip: "E1.2", grandeza: 120, area: 210, dLat: 0.0021, dLng: 0.0019, logradouro: "Rua Principal, 45", bairro: "Centro" },
+  { chave: "granja_be", nome: "Granja Boa Esperança – Várzea do Mandacaru", mun: "VMA", req: "jose_roberto", tip: "A1.1", grandeza: 150000, area: 52000, dLat: -0.0311, dLng: 0.0226, rt: "paulo", logradouro: "Fazenda Boa Esperança, s/n", bairro: "Zona Rural", car: "BA-9900606-1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6E" },
+  { chave: "lot_bela_vista", nome: "Loteamento Residencial Bela Vista – Serra Serena", mun: "SSR", req: "bela_vista", tip: "G1.1", grandeza: 25, area: 250000, dLat: 0.0148, dLng: 0.0117, rt: "ricardo", logradouro: "Estrada do Bela Vista, s/n", bairro: "Bela Vista" },
+  { chave: "lot_primavera", nome: "Loteamento Jardim Primavera – Lagoa do Orvalho", mun: "LOR", req: "primavera", tip: "G1.1", grandeza: 12, area: 120000, dLat: 0.0163, dLng: -0.0149, rt: "ricardo", logradouro: "Av. Primavera, s/n (prolongamento)", bairro: "Primavera" },
+  { chave: "lot_portal", nome: "Loteamento Portal do Sertão – Campo das Seriemas", mun: "CSE", req: "primavera", tip: "G1.1", grandeza: 8, area: 80000, dLat: -0.0122, dLng: -0.0164, rt: "fernanda", logradouro: "Saída para o Portal, s/n", bairro: "Portal" },
+  { chave: "clinica", nome: "Clínica Odontológica Sorriso – Lagoa do Orvalho", mun: "LOR", req: "sorriso", tip: "H1.1", grandeza: 180, area: 180, dLat: -0.0022, dLng: 0.0017, logradouro: "Praça Dr. Joaquim Dias, 22", bairro: "Centro" },
+  { chave: "avicola_lor", nome: "Avícola Orvalho", mun: "LOR", req: "antonio", tip: "A1.1", grandeza: 45000, area: 26000, dLat: -0.0347, dLng: -0.0298, rt: "paulo", logradouro: "Fazenda Riachão, Estrada do Riachão", bairro: "Zona Rural" },
+  { chave: "posto_cse", nome: "Posto Seriemas Diesel", mun: "CSE", req: "comb_cse", tip: "E1.1", grandeza: 60, area: 1500, dLat: 0.0061, dLng: 0.0083, rt: "ricardo", logradouro: "Av. ACM, 900", bairro: "Rodoviária" },
 ];
 
 const DESCRICAO_ATIVIDADE: Record<string, string> = {
@@ -185,9 +185,9 @@ type ProcDemo = {
 };
 
 const T = {
-  itb: "tecnico.itb@licenciagov.demo",
-  ruy: "tecnico.ruy@licenciagov.demo",
-  iac: "tecnico.iac@licenciagov.demo",
+  lor: "tecnico.lor@licenciagov.demo",
+  ssr: "tecnico.ssr@licenciagov.demo",
+  cse: "tecnico.cse@licenciagov.demo",
   c1: "tec.consorcio1@licenciagov.demo",
   c2: "tec.consorcio2@licenciagov.demo",
 };
@@ -195,60 +195,60 @@ const T = {
 // ~44 processos em todos os status. Ordenados pelo protocolo antes da execução (numeração crescente no tempo).
 const PROCESSOS: ProcDemo[] = [
   // ── CONCLUÍDOS com licença (15) ──
-  { emp: "posto_estrela", ato: "LP", alvo: "CONCLUIDO", dias: 250, dur: 35, tec: T.ruy, conclusao: "FAVORAVEL_COM_CONDICIONANTES", rotulo: "T2 – LP" },
-  { emp: "posto_estrela", ato: "LI", alvo: "CONCLUIDO", dias: 195, dur: 40, tec: T.ruy, pendTec: true, conclusao: "FAVORAVEL_COM_CONDICIONANTES", rotulo: "T2 – LI" },
-  { emp: "posto_estrela", ato: "LO", alvo: "CONCLUIDO", dias: 120, dur: 45, tec: T.ruy, conclusao: "FAVORAVEL_COM_CONDICIONANTES", rotulo: "T2 – LO" },
+  { emp: "posto_estrela", ato: "LP", alvo: "CONCLUIDO", dias: 250, dur: 35, tec: T.ssr, conclusao: "FAVORAVEL_COM_CONDICIONANTES", rotulo: "T2 – LP" },
+  { emp: "posto_estrela", ato: "LI", alvo: "CONCLUIDO", dias: 195, dur: 40, tec: T.ssr, pendTec: true, conclusao: "FAVORAVEL_COM_CONDICIONANTES", rotulo: "T2 – LI" },
+  { emp: "posto_estrela", ato: "LO", alvo: "CONCLUIDO", dias: 120, dur: 45, tec: T.ssr, conclusao: "FAVORAVEL_COM_CONDICIONANTES", rotulo: "T2 – LO" },
   { emp: "lat_bv", ato: "LP", alvo: "CONCLUIDO", dias: 240, dur: 30, tec: T.c1, conclusao: "FAVORAVEL", rotulo: "T1 – LP anterior" },
-  { emp: "lat_bv", ato: "LI", alvo: "CONCLUIDO", dias: 170, dur: 50, tec: T.itb, pendDoc: true, conclusao: "FAVORAVEL_COM_CONDICIONANTES", rotulo: "T1 – LI anterior" },
+  { emp: "lat_bv", ato: "LI", alvo: "CONCLUIDO", dias: 170, dur: 50, tec: T.lor, pendDoc: true, conclusao: "FAVORAVEL_COM_CONDICIONANTES", rotulo: "T1 – LI anterior" },
   { emp: "ceramica_ptg", ato: "LO", alvo: "CONCLUIDO", dias: 220, dur: 60, tec: T.c2, conclusao: "FAVORAVEL_COM_CONDICIONANTES" },
-  { emp: "granja_sl", ato: "LO", alvo: "CONCLUIDO", dias: 205, dur: 55, tec: T.ruy, conclusao: "FAVORAVEL", validade: 25 },
-  { emp: "areal", ato: "LO", alvo: "CONCLUIDO", dias: 185, dur: 50, tec: T.iac, conclusao: "FAVORAVEL_COM_CONDICIONANTES", validade: 55 },
+  { emp: "granja_sl", ato: "LO", alvo: "CONCLUIDO", dias: 205, dur: 55, tec: T.ssr, conclusao: "FAVORAVEL", validade: 25 },
+  { emp: "areal", ato: "LO", alvo: "CONCLUIDO", dias: 185, dur: 50, tec: T.cse, conclusao: "FAVORAVEL_COM_CONDICIONANTES", validade: 55 },
   { emp: "posto_chapada", ato: "LO", alvo: "CONCLUIDO", dias: 160, dur: 45, tec: T.c1, conclusao: "FAVORAVEL", validade: 110 },
-  { emp: "of_irmaos", ato: "LS", alvo: "CONCLUIDO", dias: 150, dur: 25, tec: T.iac, conclusao: "FAVORAVEL" },
-  { emp: "of_central", ato: "LS", alvo: "CONCLUIDO", dias: 140, dur: 20, tec: T.ruy, conclusao: "FAVORAVEL" },
+  { emp: "of_irmaos", ato: "LS", alvo: "CONCLUIDO", dias: 150, dur: 25, tec: T.cse, conclusao: "FAVORAVEL" },
+  { emp: "of_central", ato: "LS", alvo: "CONCLUIDO", dias: 140, dur: 20, tec: T.ssr, conclusao: "FAVORAVEL" },
   { emp: "lat_serra_verde", ato: "LI", alvo: "CONCLUIDO", dias: 130, dur: 40, tec: T.c2, conclusao: "FAVORAVEL_COM_CONDICIONANTES" },
   { emp: "granja_be", ato: "LU", alvo: "CONCLUIDO", dias: 110, dur: 35, tec: T.c1, pendTec: true, conclusao: "FAVORAVEL" },
-  { emp: "olaria_sj", ato: "LAC", alvo: "CONCLUIDO", dias: 95, dur: 20, tec: T.iac, conclusao: "FAVORAVEL" },
-  { emp: "lot_bela_vista", ato: "LP", alvo: "CONCLUIDO", dias: 80, dur: 30, tec: T.ruy, pendDoc: true, conclusao: "FAVORAVEL_COM_CONDICIONANTES" },
+  { emp: "olaria_sj", ato: "LAC", alvo: "CONCLUIDO", dias: 95, dur: 20, tec: T.cse, conclusao: "FAVORAVEL" },
+  { emp: "lot_bela_vista", ato: "LP", alvo: "CONCLUIDO", dias: 80, dur: 30, tec: T.ssr, pendDoc: true, conclusao: "FAVORAVEL_COM_CONDICIONANTES" },
   // ── Outros concluídos: certidão e indeferimento com ofício ──
-  { emp: "clinica", ato: "CERT_DISP", alvo: "CONCLUIDO", dias: 100, dur: 15, tec: T.itb, conclusao: "FAVORAVEL" },
+  { emp: "clinica", ato: "CERT_DISP", alvo: "CONCLUIDO", dias: 100, dur: 15, tec: T.lor, conclusao: "FAVORAVEL" },
   { emp: "queijaria", ato: "LO", alvo: "INDEFERIDO", dias: 88, dur: 40, tec: T.c1, conclusao: "DESFAVORAVEL", rotulo: "indeferido → concluído (ofício)" },
   // ── Aguardando decisão (3) ──
-  { emp: "posto_iacu", ato: "LO", alvo: "AGUARDANDO_DECISAO", dias: 70, tec: T.iac, conclusao: "FAVORAVEL_COM_CONDICIONANTES", prazo: 1 },
-  { emp: "avicola_itb", ato: "LP", alvo: "AGUARDANDO_DECISAO", dias: 60, tec: T.c2, conclusao: "FAVORAVEL" },
-  { emp: "olaria_itatim", ato: "LO", alvo: "AGUARDANDO_DECISAO", dias: 55, tec: T.c1, conclusao: "FAVORAVEL_COM_CONDICIONANTES" },
+  { emp: "posto_cse", ato: "LO", alvo: "AGUARDANDO_DECISAO", dias: 70, tec: T.cse, conclusao: "FAVORAVEL_COM_CONDICIONANTES", prazo: 1 },
+  { emp: "avicola_lor", ato: "LP", alvo: "AGUARDANDO_DECISAO", dias: 60, tec: T.c2, conclusao: "FAVORAVEL" },
+  { emp: "olaria_candeeiro", ato: "LO", alvo: "AGUARDANDO_DECISAO", dias: 55, tec: T.c1, conclusao: "FAVORAVEL_COM_CONDICIONANTES" },
   // ── Deferido / indeferido aguardando emissão do documento ──
   { emp: "faz_bom_jesus", ato: "LO", alvo: "DEFERIDO", dias: 50, tec: T.c2, conclusao: "FAVORAVEL" },
-  { emp: "lavajato_ibq", ato: "LS", alvo: "INDEFERIDO", dias: 45, tec: T.c1, conclusao: "DESFAVORAVEL" },
+  { emp: "lavajato_vma", ato: "LS", alvo: "INDEFERIDO", dias: 45, tec: T.c1, conclusao: "DESFAVORAVEL" },
   // ── Aguardando vistoria (2) ──
   { emp: "lagoa_funda", ato: "LO", alvo: "AGUARDANDO_VISTORIA", dias: 40, tec: T.c1 },
-  { emp: "mecanica_tpm", ato: "LO", alvo: "AGUARDANDO_VISTORIA", dias: 35, tec: T.c2 },
-  // ── Em análise (5) – os dois de tecnico.itb são o cenário T3 ──
-  { emp: "lot_primavera", ato: "LI", alvo: "EM_ANALISE", dias: 58, tec: T.itb, prazo: 3, rotulo: "T3 – vence em 3 dias" },
-  { emp: "lavajato_brilho", ato: "LO", alvo: "EM_ANALISE", dias: 66, tec: T.itb, prazo: -4, rotulo: "T3 – vencido" },
-  { emp: "lot_portal", ato: "LP", alvo: "EM_ANALISE", dias: 30, tec: T.iac, pendTec: true },
-  { emp: "lavajato_estrela", ato: "LS", alvo: "EM_ANALISE", dias: 28, tec: T.ruy },
+  { emp: "mecanica_aum", ato: "LO", alvo: "AGUARDANDO_VISTORIA", dias: 35, tec: T.c2 },
+  // ── Em análise (5) – os dois de tecnico.lor são o cenário T3 ──
+  { emp: "lot_primavera", ato: "LI", alvo: "EM_ANALISE", dias: 58, tec: T.lor, prazo: 3, rotulo: "T3 – vence em 3 dias" },
+  { emp: "lavajato_brilho", ato: "LO", alvo: "EM_ANALISE", dias: 66, tec: T.lor, prazo: -4, rotulo: "T3 – vencido" },
+  { emp: "lot_portal", ato: "LP", alvo: "EM_ANALISE", dias: 30, tec: T.cse, pendTec: true },
+  { emp: "lavajato_estrela", ato: "LS", alvo: "EM_ANALISE", dias: 28, tec: T.ssr },
   { emp: "lat_serra_verde", ato: "LO", alvo: "EM_ANALISE", dias: 25, tec: T.c2, prazo: -2 },
   // ── Aguardando requerente (4) ──
-  { emp: "areal", ato: "ASV", alvo: "AGUARDANDO_REQUERENTE", dias: 22, tec: T.iac, pendTec: true },
+  { emp: "areal", ato: "ASV", alvo: "AGUARDANDO_REQUERENTE", dias: 22, tec: T.cse, pendTec: true },
   { emp: "ceramica_ptg", ato: "AA", alvo: "AGUARDANDO_REQUERENTE", dias: 20, tec: T.c2, pendDoc: true, pendPrazo: 3 },
   { emp: "granja_be", ato: "AA", alvo: "AGUARDANDO_REQUERENTE", dias: 38, tec: T.c1, pendTec: true, pendVencida: true },
-  { emp: "olaria_sj", ato: "LO", alvo: "AGUARDANDO_REQUERENTE", dias: 33, tec: T.iac, pendTec: true },
+  { emp: "olaria_sj", ato: "LO", alvo: "AGUARDANDO_REQUERENTE", dias: 33, tec: T.cse, pendTec: true },
   // ── Em triagem (3) ──
-  { emp: "granja_sl", ato: "RLO", alvo: "EM_TRIAGEM", dias: 10, tec: T.ruy, prazo: -2 },
+  { emp: "granja_sl", ato: "RLO", alvo: "EM_TRIAGEM", dias: 10, tec: T.ssr, prazo: -2 },
   { emp: "queijaria", ato: "LS", alvo: "EM_TRIAGEM", dias: 9, tec: T.c1 },
-  { emp: "of_irmaos", ato: "AA", alvo: "EM_TRIAGEM", dias: 12, tec: T.iac },
+  { emp: "of_irmaos", ato: "AA", alvo: "EM_TRIAGEM", dias: 12, tec: T.cse },
   // ── Protocolados (3) ──
   { emp: "posto_chapada", ato: "RLO", alvo: "PROTOCOLADO", dias: 5 },
   { emp: "lagoa_funda", ato: "AA", alvo: "PROTOCOLADO", dias: 4 },
   { emp: "lot_bela_vista", ato: "LI", alvo: "PROTOCOLADO", dias: 3 },
   // ── Rascunhos (3) ──
   { emp: "olaria_sj", ato: "AA", alvo: "RASCUNHO", dias: 2 },
-  { emp: "olaria_itatim", ato: "AA", alvo: "RASCUNHO", dias: 6 },
+  { emp: "olaria_candeeiro", ato: "AA", alvo: "RASCUNHO", dias: 6 },
   { emp: "faz_bom_jesus", ato: "ASV", alvo: "RASCUNHO", dias: 1 },
   // ── Arquivados (2) ──
-  { emp: "posto_iacu", ato: "AA", alvo: "ARQUIVADO_PENDENCIA", dias: 150, dur: 50, tec: T.iac },
-  { emp: "avicola_itb", ato: "LO", alvo: "ARQUIVADO_TRIAGEM", dias: 190, dur: 10, tec: T.c2 },
+  { emp: "posto_cse", ato: "AA", alvo: "ARQUIVADO_PENDENCIA", dias: 150, dur: 50, tec: T.cse },
+  { emp: "avicola_lor", ato: "LO", alvo: "ARQUIVADO_TRIAGEM", dias: 190, dur: 10, tec: T.c2 },
 ];
 
 const CONDICIONANTES = [
@@ -301,7 +301,7 @@ async function main() {
   const tipologias = Object.fromEntries((await prisma.tipologia.findMany()).map((t) => [t.codigo, t]));
   const atos = Object.fromEntries((await prisma.tipoAto.findMany()).map((t) => [t.sigla, t]));
   const admin = await sessao("admin@licenciagov.demo");
-  const COM_EQUIPE = new Set(["ITB", "RUY", "IAC"]); // municípios com técnico/gestor/fiscal próprios no seed base
+  const COM_EQUIPE = new Set(["LOR", "SSR", "CSE"]); // municípios com técnico/gestor/fiscal próprios no seed base
   const gestorDe = (sigla: string) => (COM_EQUIPE.has(sigla) ? sessao(`gestor.${sigla.toLowerCase()}@licenciagov.demo`) : Promise.resolve(admin));
   const fiscalDe = (sigla: string) => sessao(COM_EQUIPE.has(sigla) ? `fiscal.${sigla.toLowerCase()}@licenciagov.demo` : T.c2);
   const balcaoDe = (sigla: string) => sessao(COM_EQUIPE.has(sigla) ? `tecnico.${sigla.toLowerCase()}@licenciagov.demo` : T.c1);
@@ -485,16 +485,16 @@ async function main() {
   const lojaPos = (sig: string, dLat: number, dLng: number) => ({ latitude: round6(Number(mun[sig].latitude) + dLat), longitude: round6(Number(mun[sig].longitude) + dLng) });
   type DenDemo = { chave: string; sig: string; canal: "PORTAL" | "PRESENCIAL" | "TELEFONE" | "OUTRO"; descricao: string; endereco: string; dLat: number; dLng: number; nome?: string; contato?: string; dias: number };
   const DENUNCIAS: DenDemo[] = [
-    { chave: "d1", sig: "ITB", canal: "PRESENCIAL", descricao: "Lançamento de água com sabão e óleo de lava-jato diretamente na sarjeta, escorrendo até o córrego do bairro.", endereco: "Rua Tenente Joaquim Nascimento, próximo ao nº 480 – São João", dLat: 0.0045, dLng: -0.0049, nome: "Marcos Antônio Reis", contato: "(75) 99101-2020", dias: 14 },
-    { chave: "d2", sig: "ITB", canal: "TELEFONE", descricao: "Queima de lixo a céu aberto em terreno baldio, com fumaça intensa no fim da tarde.", endereco: "Terreno baldio na Rua Nova, bairro São José", dLat: -0.0071, dLng: 0.0088, dias: 40 },
-    { chave: "d3", sig: "RUY", canal: "PORTAL", descricao: "Desmatamento de vegetação nativa às margens do riacho, com uso de trator e queima das leiras, dentro de área de preservação permanente.", endereco: "Estrada do Morro Branco, após a Fazenda Santa Luzia", dLat: -0.0432, dLng: 0.0389, dias: 12 },
-    { chave: "d4", sig: "RUY", canal: "TELEFONE", descricao: "Fumaça preta e odor forte vindos de forno de olaria durante a madrugada.", endereco: "Saída para Macajuba, km 3", dLat: 0.0211, dLng: -0.0166, dias: 150 },
-    { chave: "d5", sig: "IAC", canal: "PRESENCIAL", descricao: "Extração de areia com draga no leito do Rio Paraguaçu fora da poligonal autorizada, com assoreamento visível.", endereco: "Porto de Iaçu, margem direita do Rio Paraguaçu", dLat: -0.0228, dLng: 0.0301, nome: "Colônia de Pescadores Z-18", contato: "(75) 99333-8181", dias: 9 },
-    { chave: "d6", sig: "ITT", canal: "OUTRO", descricao: "Descarte de cacos de telha e tijolos (resíduos cerâmicos) em área de caatinga ao lado da rodovia.", endereco: "BR-116, km 520, acostamento sentido Feira de Santana", dLat: 0.0141, dLng: 0.0203, dias: 7 },
-    { chave: "d7", sig: "MNV", canal: "PORTAL", descricao: "Cheiro forte de combustível no quintal das casas vizinhas ao posto; suspeita de vazamento em tanque subterrâneo.", endereco: "Av. Getúlio Vargas, imediações do nº 1500", dLat: 0.0058, dLng: 0.0072, dias: 3 },
-    { chave: "d8", sig: "TPM", canal: "TELEFONE", descricao: "Barulho de compressor e marteletes de oficina após as 22h.", endereco: "Av. Luiz Viana, próximo à praça", dLat: 0.0025, dLng: -0.0031, dias: 95 },
-    { chave: "d9", sig: "IBQ", canal: "PRESENCIAL", descricao: "Criação de porcos a menos de 30 metros de nascente usada para abastecimento da comunidade.", endereco: "Comunidade de Lagoa do Boi", dLat: 0.0132, dLng: -0.0144, nome: "Associação Comunitária de Lagoa do Boi", contato: "(75) 99845-1234", dias: 20 },
-    { chave: "d10", sig: "RJB", canal: "PORTAL", descricao: "Resíduos de serviços de saúde (seringas e frascos) descartados em terreno às margens da estrada vicinal.", endereco: "Estrada vicinal para o povoado de Lagoa Funda", dLat: 0.0247, dLng: -0.0181, dias: 1 },
+    { chave: "d1", sig: "LOR", canal: "PRESENCIAL", descricao: "Lançamento de água com sabão e óleo de lava-jato diretamente na sarjeta, escorrendo até o córrego do bairro.", endereco: "Rua Tenente Joaquim Nascimento, próximo ao nº 480 – São João", dLat: 0.0045, dLng: -0.0049, nome: "Marcos Antônio Reis", contato: "(75) 99000-2020", dias: 14 },
+    { chave: "d2", sig: "LOR", canal: "TELEFONE", descricao: "Queima de lixo a céu aberto em terreno baldio, com fumaça intensa no fim da tarde.", endereco: "Terreno baldio na Rua Nova, bairro São José", dLat: -0.0071, dLng: 0.0088, dias: 40 },
+    { chave: "d3", sig: "SSR", canal: "PORTAL", descricao: "Desmatamento de vegetação nativa às margens do riacho, com uso de trator e queima das leiras, dentro de área de preservação permanente.", endereco: "Estrada do Morro Branco, após a Fazenda Santa Luzia", dLat: -0.0432, dLng: 0.0389, dias: 12 },
+    { chave: "d4", sig: "SSR", canal: "TELEFONE", descricao: "Fumaça preta e odor forte vindos de forno de olaria durante a madrugada.", endereco: "Saída para a Serra, km 3", dLat: 0.0211, dLng: -0.0166, dias: 150 },
+    { chave: "d5", sig: "CSE", canal: "PRESENCIAL", descricao: "Extração de areia com draga no leito do Rio das Seriemas fora da poligonal autorizada, com assoreamento visível.", endereco: "Porto das Seriemas, margem direita do Rio das Seriemas", dLat: -0.0228, dLng: 0.0301, nome: "Colônia de Pescadores Z-18", contato: "(75) 99000-8181", dias: 9 },
+    { chave: "d6", sig: "PCA", canal: "OUTRO", descricao: "Descarte de cacos de telha e tijolos (resíduos cerâmicos) em área de caatinga ao lado da rodovia.", endereco: "BR-116, km 520, acostamento sentido capital", dLat: 0.0141, dLng: 0.0203, dias: 7 },
+    { chave: "d7", sig: "AUM", canal: "PORTAL", descricao: "Cheiro forte de combustível no quintal das casas vizinhas ao posto; suspeita de vazamento em tanque subterrâneo.", endereco: "Av. Getúlio Vargas, imediações do nº 1500", dLat: 0.0058, dLng: 0.0072, dias: 3 },
+    { chave: "d8", sig: "AUM", canal: "TELEFONE", descricao: "Barulho de compressor e marteletes de oficina após as 22h.", endereco: "Av. Luiz Viana, próximo à praça", dLat: 0.0025, dLng: -0.0031, dias: 95 },
+    { chave: "d9", sig: "VMA", canal: "PRESENCIAL", descricao: "Criação de porcos a menos de 30 metros de nascente usada para abastecimento da comunidade.", endereco: "Comunidade de Lagoa do Boi", dLat: 0.0132, dLng: -0.0144, nome: "Associação Comunitária de Lagoa do Boi", contato: "(75) 99000-1234", dias: 20 },
+    { chave: "d10", sig: "VMA", canal: "PORTAL", descricao: "Resíduos de serviços de saúde (seringas e frascos) descartados em terreno às margens da estrada vicinal.", endereco: "Estrada vicinal para o povoado de Lagoa Funda", dLat: 0.0247, dLng: -0.0181, dias: 1 },
   ];
   const den: Record<string, { id: string; protocolo: string }> = {};
   for (const d of DENUNCIAS) {
@@ -511,14 +511,14 @@ async function main() {
   // ── Vistorias (8) com fotos e coordenadas ──
   type VisDemo = { chave: string; sig: string; den?: string; emp?: string; dias: number; dLat: number; dLng: number; constatacao: "IRREGULAR" | "REGULAR" | "INCONCLUSIVA"; relato: string; fotos: number };
   const VISTORIAS: VisDemo[] = [
-    { chave: "v1", sig: "ITB", den: "d1", emp: "lavajato_brilho", dias: 12, dLat: 0.0044, dLng: -0.0050, constatacao: "IRREGULAR", fotos: 2, relato: "Constatado lançamento de efluente de lavagem de veículos na via pública, sem passagem pela caixa separadora de água e óleo, que se encontrava obstruída." },
-    { chave: "v2", sig: "ITB", den: "d2", dias: 37, dLat: -0.0070, dLng: 0.0089, constatacao: "INCONCLUSIVA", fotos: 1, relato: "No momento da vistoria não havia queima em andamento; foram observados vestígios de cinzas e resíduos domésticos. Responsável pelo terreno não identificado." },
-    { chave: "v3", sig: "RUY", den: "d3", emp: "granja_sl", dias: 10, dLat: -0.0430, dLng: 0.0385, constatacao: "IRREGULAR", fotos: 2, relato: "Constatada supressão de aproximadamente 1,8 ha de vegetação nativa em APP do riacho, sem autorização de supressão, com leiras queimadas no local." },
-    { chave: "v4", sig: "RUY", den: "d4", dias: 145, dLat: 0.0209, dLng: -0.0168, constatacao: "REGULAR", fotos: 1, relato: "Forno com chaminé e lenha de manejo com DOF; emissão dentro do esperado para a atividade. Orientado o proprietário quanto ao horário de queima." },
-    { chave: "v5", sig: "IAC", den: "d5", emp: "areal", dias: 7, dLat: -0.0225, dLng: 0.0296, constatacao: "IRREGULAR", fotos: 2, relato: "Draga em operação cerca de 400 m a jusante da poligonal licenciada, com pilhas de areia depositadas na margem e supressão da mata ciliar." },
-    { chave: "v6", sig: "ITT", den: "d6", emp: "ceramica_ptg", dias: 5, dLat: 0.0139, dLng: 0.0200, constatacao: "IRREGULAR", fotos: 1, relato: "Resíduos cerâmicos com identificação da Cerâmica Paraguaçu dispostos em área de caatinga, cerca de 30 m³, fora da área licenciada." },
-    { chave: "v7", sig: "ITB", emp: "avicola_itb", dias: 75, dLat: -0.0345, dLng: -0.0296, constatacao: "REGULAR", fotos: 2, relato: "Vistoria de rotina: galpões com cortinas e composteira em funcionamento; cama de frango armazenada em local coberto." },
-    { chave: "v8", sig: "IAC", emp: "of_irmaos", dias: 20, dLat: 0.0032, dLng: 0.0045, constatacao: "IRREGULAR", fotos: 1, relato: "Vistoria de rotina: tambores de óleo usado armazenados sobre solo sem impermeabilização e sem bacia de contenção." },
+    { chave: "v1", sig: "LOR", den: "d1", emp: "lavajato_brilho", dias: 12, dLat: 0.0044, dLng: -0.0050, constatacao: "IRREGULAR", fotos: 2, relato: "Constatado lançamento de efluente de lavagem de veículos na via pública, sem passagem pela caixa separadora de água e óleo, que se encontrava obstruída." },
+    { chave: "v2", sig: "LOR", den: "d2", dias: 37, dLat: -0.0070, dLng: 0.0089, constatacao: "INCONCLUSIVA", fotos: 1, relato: "No momento da vistoria não havia queima em andamento; foram observados vestígios de cinzas e resíduos domésticos. Responsável pelo terreno não identificado." },
+    { chave: "v3", sig: "SSR", den: "d3", emp: "granja_sl", dias: 10, dLat: -0.0430, dLng: 0.0385, constatacao: "IRREGULAR", fotos: 2, relato: "Constatada supressão de aproximadamente 1,8 ha de vegetação nativa em APP do riacho, sem autorização de supressão, com leiras queimadas no local." },
+    { chave: "v4", sig: "SSR", den: "d4", dias: 145, dLat: 0.0209, dLng: -0.0168, constatacao: "REGULAR", fotos: 1, relato: "Forno com chaminé e lenha de manejo com DOF; emissão dentro do esperado para a atividade. Orientado o proprietário quanto ao horário de queima." },
+    { chave: "v5", sig: "CSE", den: "d5", emp: "areal", dias: 7, dLat: -0.0225, dLng: 0.0296, constatacao: "IRREGULAR", fotos: 2, relato: "Draga em operação cerca de 400 m a jusante da poligonal licenciada, com pilhas de areia depositadas na margem e supressão da mata ciliar." },
+    { chave: "v6", sig: "PCA", den: "d6", emp: "ceramica_ptg", dias: 5, dLat: 0.0139, dLng: 0.0200, constatacao: "IRREGULAR", fotos: 1, relato: "Resíduos cerâmicos com identificação da Cerâmica Candeeiro dispostos em área de caatinga, cerca de 30 m³, fora da área licenciada." },
+    { chave: "v7", sig: "LOR", emp: "avicola_lor", dias: 75, dLat: -0.0345, dLng: -0.0296, constatacao: "REGULAR", fotos: 2, relato: "Vistoria de rotina: galpões com cortinas e composteira em funcionamento; cama de frango armazenada em local coberto." },
+    { chave: "v8", sig: "CSE", emp: "of_irmaos", dias: 20, dLat: 0.0032, dLng: 0.0045, constatacao: "IRREGULAR", fotos: 1, relato: "Vistoria de rotina: tambores de óleo usado armazenados sobre solo sem impermeabilização e sem bacia de contenção." },
   ];
   const vis: Record<string, string> = {};
   let fotosTotal = 0;
@@ -552,10 +552,10 @@ async function main() {
 
   // ── Autos de infração (4) e notificações (5) com PDF ──
   const autos = [
-    { v: "v1", sig: "ITB", autuado: { pessoa_id: pessoa.maria }, penalidade: "MULTA", valor_multa: 3500, enquadramento_legal: "Lei Federal nº 9.605/1998, art. 54, §2º, V; Decreto Federal nº 6.514/2008, art. 62, V.", descricao_infracao: "Lançar efluentes líquidos (água de lavagem com óleo e detergente) em via pública e galeria pluvial, em desacordo com as exigências estabelecidas." },
-    { v: "v3", sig: "RUY", autuado: { pessoa_id: pessoa.antonio }, penalidade: "EMBARGO", valor_multa: null, enquadramento_legal: "Lei Federal nº 12.651/2012, art. 4º; Decreto Federal nº 6.514/2008, arts. 43 e 51.", descricao_infracao: "Destruir vegetação nativa em área de preservação permanente (1,8 ha) sem autorização do órgão ambiental. Embargo da área suprimida." },
-    { v: "v5", sig: "IAC", autuado: { pessoa_id: pessoa.mineracao }, penalidade: "MULTA", valor_multa: 25000, enquadramento_legal: "Lei Federal nº 9.605/1998, art. 55; Decreto Federal nº 6.514/2008, art. 63.", descricao_infracao: "Executar extração de recursos minerais (areia) fora da poligonal autorizada e em desacordo com a licença ambiental vigente." },
-    { v: "v6", sig: "ITT", autuado: { pessoa_id: pessoa.ceramica }, penalidade: "ADVERTENCIA", valor_multa: null, enquadramento_legal: "Lei Federal nº 12.305/2010, art. 47, II; Decreto Federal nº 6.514/2008, art. 62, IX.", descricao_infracao: "Dispor resíduos sólidos industriais (cacos cerâmicos) a céu aberto, em área não licenciada." },
+    { v: "v1", sig: "LOR", autuado: { pessoa_id: pessoa.maria }, penalidade: "MULTA", valor_multa: 3500, enquadramento_legal: "Lei Federal nº 9.605/1998, art. 54, §2º, V; Decreto Federal nº 6.514/2008, art. 62, V.", descricao_infracao: "Lançar efluentes líquidos (água de lavagem com óleo e detergente) em via pública e galeria pluvial, em desacordo com as exigências estabelecidas." },
+    { v: "v3", sig: "SSR", autuado: { pessoa_id: pessoa.antonio }, penalidade: "EMBARGO", valor_multa: null, enquadramento_legal: "Lei Federal nº 12.651/2012, art. 4º; Decreto Federal nº 6.514/2008, arts. 43 e 51.", descricao_infracao: "Destruir vegetação nativa em área de preservação permanente (1,8 ha) sem autorização do órgão ambiental. Embargo da área suprimida." },
+    { v: "v5", sig: "CSE", autuado: { pessoa_id: pessoa.mineracao }, penalidade: "MULTA", valor_multa: 25000, enquadramento_legal: "Lei Federal nº 9.605/1998, art. 55; Decreto Federal nº 6.514/2008, art. 63.", descricao_infracao: "Executar extração de recursos minerais (areia) fora da poligonal autorizada e em desacordo com a licença ambiental vigente." },
+    { v: "v6", sig: "PCA", autuado: { pessoa_id: pessoa.ceramica }, penalidade: "ADVERTENCIA", valor_multa: null, enquadramento_legal: "Lei Federal nº 12.305/2010, art. 47, II; Decreto Federal nº 6.514/2008, art. 62, IX.", descricao_infracao: "Dispor resíduos sólidos industriais (cacos cerâmicos) a céu aberto, em área não licenciada." },
   ] as const;
   let pdfsFiscalizacao = 0;
   for (const a of autos) {
@@ -566,14 +566,14 @@ async function main() {
   }
   const lavajatoEstrela = criados.find((c) => c.spec.emp === "lavajato_estrela")!;
   const notificacoes = [
-    { sig: "ITB", fiscalizacao_id: vis.v1, notificado: { pessoa_id: pessoa.maria }, exigencia: "Desobstruir e adequar a caixa separadora de água e óleo e apresentar comprovante de limpeza por empresa licenciada.", prazo_dias: 15 },
-    { sig: "RUY", fiscalizacao_id: vis.v3, notificado: { pessoa_id: pessoa.antonio }, exigencia: "Apresentar Projeto de Recuperação de Área Degradada (PRAD) para a APP suprimida, elaborado por profissional habilitado com ART.", prazo_dias: 30 },
-    { sig: "IAC", fiscalizacao_id: vis.v5, notificado: { pessoa_id: pessoa.mineracao }, exigencia: "Paralisar a dragagem fora da poligonal e apresentar levantamento planialtimétrico georreferenciado da área explorada.", prazo_dias: 10 },
-    { sig: "IAC", fiscalizacao_id: vis.v8, notificado: { nova_pessoa: { tipo: "PJ", cpf_cnpj: gerarCnpj("19634527"), nome: "Irmãos Silva Auto Center Ltda" } }, exigencia: "Instalar bacia de contenção impermeabilizada para os tambores de óleo usado e comprovar a destinação a coletor autorizado pela ANP.", prazo_dias: 20 },
-    { sig: "RUY", processo_id: lavajatoEstrela.id, notificado: { pessoa_id: pessoa.posto }, exigencia: "Apresentar outorga (ou dispensa) de uso de recursos hídricos do poço tubular que abastece a lavagem de veículos.", prazo_dias: 30 },
+    { sig: "LOR", fiscalizacao_id: vis.v1, notificado: { pessoa_id: pessoa.maria }, exigencia: "Desobstruir e adequar a caixa separadora de água e óleo e apresentar comprovante de limpeza por empresa licenciada.", prazo_dias: 15 },
+    { sig: "SSR", fiscalizacao_id: vis.v3, notificado: { pessoa_id: pessoa.antonio }, exigencia: "Apresentar Projeto de Recuperação de Área Degradada (PRAD) para a APP suprimida, elaborado por profissional habilitado com ART.", prazo_dias: 30 },
+    { sig: "CSE", fiscalizacao_id: vis.v5, notificado: { pessoa_id: pessoa.mineracao }, exigencia: "Paralisar a dragagem fora da poligonal e apresentar levantamento planialtimétrico georreferenciado da área explorada.", prazo_dias: 10 },
+    { sig: "CSE", fiscalizacao_id: vis.v8, notificado: { nova_pessoa: { tipo: "PJ", cpf_cnpj: gerarCnpj("19634527"), nome: "Irmãos Silva Auto Center Ltda" } }, exigencia: "Instalar bacia de contenção impermeabilizada para os tambores de óleo usado e comprovar a destinação a coletor autorizado pela ANP.", prazo_dias: 20 },
+    { sig: "SSR", processo_id: lavajatoEstrela.id, notificado: { pessoa_id: pessoa.posto }, exigencia: "Apresentar outorga (ou dispensa) de uso de recursos hídricos do poço tubular que abastece a lavagem de veículos.", prazo_dias: 30 },
   ];
   for (const n of notificacoes) {
-    const u = n.processo_id ? await sessao(T.ruy) : await fiscalDe(n.sig);
+    const u = n.processo_id ? await sessao(T.ssr) : await fiscalDe(n.sig);
     const r = await fisc.criarNotificacao(u, NotificacaoSchema.parse({ ...n, sig: undefined }));
     if (r.erro_pdf) throw new Error(`PDF da notificação ${r.notificacao.numero}: ${r.erro_pdf}`);
     pdfsFiscalizacao++;
@@ -597,13 +597,13 @@ async function main() {
   const porStatus = await prisma.processo.groupBy({ by: ["status"], _count: true, orderBy: { status: "asc" } });
   const porMun = await prisma.processo.groupBy({ by: ["municipio_id"], _count: true });
   const docs = await prisma.documentoOficial.groupBy({ by: ["tipo"], _count: true, orderBy: { tipo: "asc" } });
-  const tecItb = await sessao(T.itb);
-  const alertasItb = await prisma.alerta.count({ where: { usuario_id: tecItb.id, lido: false } });
+  const tecLor = await sessao(T.lor);
+  const alertasLor = await prisma.alerta.count({ where: { usuario_id: tecLor.id, lido: false } });
   const vencendo = await prisma.documentoOficial.count({ where: { tipo: "LICENCA", status: "VALIDO", validade_ate: { lte: new Date(Date.now() + 120 * DIA) } } });
   const [nDen, nFis, nAutos, nNot, nEmails, nEmp, nPessoas] = await Promise.all([
     prisma.denuncia.count(), prisma.fiscalizacao.count({ where: { status: "REALIZADA" } }), prisma.autoInfracao.count(), prisma.notificacao.count(), prisma.emailEnviado.count(), prisma.empreendimento.count(), prisma.pessoa.count(),
   ]);
-  const tecItbProc = await prisma.processo.findMany({ where: { tecnico_id: tecItb.id }, select: { numero: true, status: true, prazo_etapa_ate: true } });
+  const tecLorProc = await prisma.processo.findMany({ where: { tecnico_id: tecLor.id }, select: { numero: true, status: true, prazo_etapa_ate: true } });
 
   console.log("\n══════════ Seed de demonstração concluído ══════════");
   console.log(`Tempo: ${((Date.now() - t0) / 1000).toFixed(0)} s`);
@@ -614,12 +614,12 @@ async function main() {
   console.log(`Documentos oficiais: ${docs.map((d) => `${d.tipo}=${d._count}`).join(" ")} (licenças vencendo em ≤120 dias: ${vencendo})`);
   console.log(`Denúncias: ${nDen} · Vistorias realizadas: ${nFis} · Autos: ${nAutos} · Notificações: ${nNot} · PDFs de fiscalização: ${pdfsFiscalizacao}`);
   console.log(`E-mails na caixa de teste (email_enviado): ${nEmails}`);
-  console.log(`T3 – tecnico.itb: ${alertasItb} alerta(s) não lido(s); processos: ${tecItbProc.map((p) => `${p.numero} ${p.status}`).join(", ")}`);
+  console.log(`T3 – tecnico.lor: ${alertasLor} alerta(s) não lido(s); processos: ${tecLorProc.map((p) => `${p.numero} ${p.status}`).join(", ")}`);
   const t2 = await prisma.processo.findMany({ where: { empreendimento: { nome: MARCADOR } }, include: { tipo_ato: true, documentos: { where: { tipo: "LICENCA" } } }, orderBy: { data_protocolo: "asc" } });
   console.log(`T2 – ${MARCADOR}: ${t2.map((p) => `${p.tipo_ato.sigla} ${p.numero} ${p.status} [${p.documentos.map((d) => d.numero).join(",")}]`).join(" · ")}`);
   console.log(`\nLogins (senha de todos: ${SENHA_DEMO}):`);
   console.log("  admin@licenciagov.demo · sema@licenciagov.demo · tec.consorcio1@… · tec.consorcio2@…");
-  console.log("  tecnico.itb@ · gestor.itb@ · fiscal.itb@ (também .ruy e .iac) – domínio @licenciagov.demo");
+  console.log("  tecnico.lor@ · gestor.lor@ · fiscal.lor@ (também .ssr e .cse) – domínio @licenciagov.demo");
   console.log("  Requerentes: laticinio@ · posto@ · joao@ · maria@ · ceramica@ (licenciagov.demo)");
 
   await prisma.$disconnect();

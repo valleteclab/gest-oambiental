@@ -1,4 +1,4 @@
-// Seed de configuração (idempotente): organização, 8 municípios, tipos de ato, tipologias,
+// Seed de configuração (idempotente): organização de demonstração, 6 municípios fictícios, tipos de ato, tipologias,
 // checklists, prazos, feriados e usuários de demonstração. Executar: npm run seed:base
 import { PrismaClient, type Papel } from "@prisma/client";
 import { hash } from "@node-rs/argon2";
@@ -7,16 +7,15 @@ import { cifrar, hashBusca } from "../../lib/crypto";
 const prisma = new PrismaClient();
 export const SENHA_DEMO = "Demo@2026licencia";
 
-// Códigos IBGE e coordenadas das sedes – conferir com IBGE na implantação (SPEC 17).
+// Municípios FICTÍCIOS de demonstração/teste – não correspondem a municípios reais.
+// Códigos "IBGE" começam com 99 (não colidem com códigos reais); coordenadas no interior da Bahia.
 export const MUNICIPIOS = [
-  { sigla: "IAC", nome: "Iaçu", codigo_ibge: "2913200", lat: -12.7667, lng: -40.2117 },
-  { sigla: "IBQ", nome: "Ibiquera", codigo_ibge: "2913507", lat: -12.6447, lng: -40.9333 },
-  { sigla: "ITB", nome: "Itaberaba", codigo_ibge: "2914604", lat: -12.5275, lng: -40.3067 },
-  { sigla: "ITT", nome: "Itatim", codigo_ibge: "2916856", lat: -12.7103, lng: -39.6953 },
-  { sigla: "MNV", nome: "Mundo Novo", codigo_ibge: "2922003", lat: -11.8589, lng: -40.4719 },
-  { sigla: "RJB", nome: "Rafael Jambeiro", codigo_ibge: "2926202", lat: -12.4053, lng: -39.5006 },
-  { sigla: "RUY", nome: "Ruy Barbosa", codigo_ibge: "2927200", lat: -12.2842, lng: -40.4936 },
-  { sigla: "TPM", nome: "Tapiramutá", codigo_ibge: "2931202", lat: -11.8475, lng: -40.7911 },
+  { sigla: "LOR", nome: "Lagoa do Orvalho", codigo_ibge: "9900101", lat: -12.4012, lng: -40.1187 },
+  { sigla: "SSR", nome: "Serra Serena", codigo_ibge: "9900202", lat: -12.0853, lng: -40.6241 },
+  { sigla: "CSE", nome: "Campo das Seriemas", codigo_ibge: "9900303", lat: -12.8461, lng: -40.0527 },
+  { sigla: "PCA", nome: "Pedra do Candeeiro", codigo_ibge: "9900404", lat: -12.6218, lng: -39.6235 },
+  { sigla: "AUM", nome: "Alto do Umbuzeiro", codigo_ibge: "9900505", lat: -11.7236, lng: -40.5512 },
+  { sigla: "VMA", nome: "Várzea do Mandacaru", codigo_ibge: "9900606", lat: -12.3027, lng: -40.8964 },
 ];
 
 const TIPOS_ATO = [
@@ -51,8 +50,8 @@ const PORTES = ["MICRO", "PEQUENO", "MEDIO", "GRANDE", "EXCEPCIONAL"] as const;
 
 async function main() {
   const org =
-    (await prisma.organizacao.findFirst({ where: { sigla: "CDS-PIEMONTE" } })) ??
-    (await prisma.organizacao.create({ data: { nome: "Consórcio de Desenvolvimento Sustentável do Piemonte do Paraguaçu", sigla: "CDS-PIEMONTE", cnpj: "00.000.000/0001-00", logo_url: "/brasao-generico.svg" } }));
+    (await prisma.organizacao.findFirst({ where: { sigla: "CID-DEMO" } })) ??
+    (await prisma.organizacao.create({ data: { nome: "Consórcio Intermunicipal de Demonstração", sigla: "CID-DEMO", cnpj: "00.000.000/0001-00", logo_url: "/brasao-generico.svg" } }));
 
   const mun: Record<string, string> = {};
   for (const m of MUNICIPIOS) {
@@ -62,7 +61,7 @@ async function main() {
       create: {
         organizacao_id: org.id, sigla: m.sigla, nome: m.nome, codigo_ibge: m.codigo_ibge,
         orgao_ambiental_nome: `Secretaria Municipal de Meio Ambiente de ${m.nome}`, brasao_url: "/brasao-generico.svg",
-        endereco: `Praça Central, s/n – ${m.nome}/BA`, email: `meioambiente@${m.sigla.toLowerCase()}.ba.gov.br`, telefone: "(75) 3000-0000",
+        endereco: `Praça Central, s/n – ${m.nome}/BA`, email: `meioambiente.${m.sigla.toLowerCase()}@demo.licenciagov.app`, telefone: "(75) 3000-0000",
         latitude: m.lat, longitude: m.lng,
       },
     });
@@ -136,7 +135,8 @@ async function main() {
   }
 
   if ((await prisma.feriado.count()) === 0) {
-    const f = [["2026-01-01", "Confraternização Universal"], ["2026-02-16", "Carnaval"], ["2026-02-17", "Carnaval"], ["2026-04-03", "Sexta-feira Santa"], ["2026-04-21", "Tiradentes"], ["2026-05-01", "Dia do Trabalho"], ["2026-06-04", "Corpus Christi"], ["2026-06-24", "São João"], ["2026-07-02", "Independência da Bahia"], ["2026-09-07", "Independência do Brasil"], ["2026-10-12", "Nossa Senhora Aparecida"], ["2026-11-02", "Finados"], ["2026-11-15", "Proclamação da República"], ["2026-11-20", "Consciência Negra"], ["2026-12-25", "Natal"]];
+    // Somente feriados nacionais (e pontos facultativos federais); feriados estaduais/municipais são cadastrados por órgão em /admin/feriados.
+    const f = [["2026-01-01", "Confraternização Universal"], ["2026-02-16", "Carnaval"], ["2026-02-17", "Carnaval"], ["2026-04-03", "Sexta-feira Santa"], ["2026-04-21", "Tiradentes"], ["2026-05-01", "Dia do Trabalho"], ["2026-06-04", "Corpus Christi"], ["2026-09-07", "Independência do Brasil"], ["2026-10-12", "Nossa Senhora Aparecida"], ["2026-11-02", "Finados"], ["2026-11-15", "Proclamação da República"], ["2026-11-20", "Consciência Negra"], ["2026-12-25", "Natal"]];
     await prisma.feriado.createMany({ data: f.map(([d, descricao]) => ({ data: new Date(`${d}T00:00:00Z`), descricao })) });
   }
 
@@ -148,7 +148,7 @@ async function main() {
     { email: "tec.consorcio2@licenciagov.demo", nome: "Carla Técnica Consórcio", cargo: "Analista Ambiental", papeis: [["TEC_CONSORCIO", null]] },
     { email: "sema@licenciagov.demo", nome: "Sérgio SEMA/INEMA", cargo: "Gestor Estadual", papeis: [["SEMA_INEMA", null]] },
   ];
-  const nomesMun: Record<string, string> = { ITB: "Itaberaba", RUY: "Ruy Barbosa", IAC: "Iaçu" };
+  const nomesMun: Record<string, string> = { LOR: "Lagoa do Orvalho", SSR: "Serra Serena", CSE: "Campo das Seriemas" };
   for (const [sig, nomeMun] of Object.entries(nomesMun)) {
     const s = sig.toLowerCase();
     usuarios.push(
@@ -171,11 +171,11 @@ async function main() {
 
   // 5 requerentes (PF/PJ) com login
   const requerentes = [
-    { email: "laticinio@licenciagov.demo", nome: "Laticínio Boa Vista Ltda", tipo: "PJ", doc: "11222333000181", mun: "ITB" },
-    { email: "posto@licenciagov.demo", nome: "Posto Estrela Comércio de Combustíveis Ltda", tipo: "PJ", doc: "45723174000110", mun: "RUY" },
-    { email: "joao@licenciagov.demo", nome: "João Pereira dos Santos", tipo: "PF", doc: "52998224725", mun: "IAC" },
-    { email: "maria@licenciagov.demo", nome: "Maria de Lourdes Oliveira", tipo: "PF", doc: "11144477735", mun: "ITB" },
-    { email: "ceramica@licenciagov.demo", nome: "Cerâmica Paraguaçu Ltda", tipo: "PJ", doc: "04252011000110", mun: "ITT" },
+    { email: "laticinio@licenciagov.demo", nome: "Laticínio Boa Vista Ltda", tipo: "PJ", doc: "11222333000181", mun: "LOR" },
+    { email: "posto@licenciagov.demo", nome: "Posto Estrela Comércio de Combustíveis Ltda", tipo: "PJ", doc: "45723174000110", mun: "SSR" },
+    { email: "joao@licenciagov.demo", nome: "João Pereira dos Santos", tipo: "PF", doc: "52998224725", mun: "CSE" },
+    { email: "maria@licenciagov.demo", nome: "Maria de Lourdes Oliveira", tipo: "PF", doc: "11144477735", mun: "LOR" },
+    { email: "ceramica@licenciagov.demo", nome: "Cerâmica Candeeiro Ltda", tipo: "PJ", doc: "04252011000110", mun: "PCA" },
   ] as const;
   for (const r of requerentes) {
     const h = hashBusca(r.doc);

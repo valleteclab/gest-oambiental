@@ -114,12 +114,12 @@ describe("utilitários de formulário", () => {
   it("formParaObjeto aninha endereço", () => {
     const f = new FormData();
     f.set("nome", "X");
-    f.set("endereco.cidade", "Iaçu");
+    f.set("endereco.cidade", "Campo das Seriemas");
     f.set("endereco.uf", "BA");
-    expect(formParaObjeto(f)).toEqual({ nome: "X", endereco: { cidade: "Iaçu", uf: "BA" } });
+    expect(formParaObjeto(f)).toEqual({ nome: "X", endereco: { cidade: "Campo das Seriemas", uf: "BA" } });
   });
   it("formatarEndereco", () => {
-    expect(formatarEndereco({ logradouro: "Rua A", numero: "10", bairro: "Centro", cidade: "Iaçu", uf: "BA", cep: "46860000" })).toBe("Rua A, 10 · Centro · Iaçu/BA · CEP 46860-000");
+    expect(formatarEndereco({ logradouro: "Rua A", numero: "10", bairro: "Centro", cidade: "Campo das Seriemas", uf: "BA", cep: "46860000" })).toBe("Rua A, 10 · Centro · Campo das Seriemas/BA · CEP 46860-000");
     expect(formatarEndereco({ uf: "BA" })).toBe("—");
     expect(formatarEndereco(null)).toBe("—");
   });

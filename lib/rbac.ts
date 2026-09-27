@@ -182,6 +182,34 @@ export function podeVerMunicipio(u: UsuarioSessao, municipioId: string): boolean
   return escopo === "TODOS" || escopo.includes(municipioId);
 }
 
+/**
+ * O usuário pode atuar no ÓRGÃO (município) escolhido no login / "Trocar órgão"?
+ * - papéis de organização (ADMIN, TEC_CONSORCIO, SEMA_INEMA) → qualquer órgão;
+ * - REQUERENTE → qualquer órgão (pode requerer em qualquer município);
+ * - papéis municipais → somente os municípios dos seus papéis.
+ * O órgão é CONTEXTO (padrões de filtro/cabeçalho), não substitui o escopo de whereMunicipio()/can().
+ */
+export function podeAcessarOrgao(papeis: PapelVinculo[], municipioId: string | null | undefined): boolean {
+  if (!municipioId) return false;
+  return papeis.some((p) => PAPEIS_ORGANIZACAO.includes(p.papel) || p.papel === "REQUERENTE" || p.municipio_id === municipioId);
+}
+
+/** Filtra a lista de órgãos (municípios) aos que o usuário pode escolher. */
+export function orgaosPermitidos<T extends { id: string }>(papeis: PapelVinculo[], municipios: T[]): T[] {
+  return municipios.filter((m) => podeAcessarOrgao(papeis, m.id));
+}
+
+/**
+ * Filtro de município PADRÃO das listagens (painel, processos, prazos): se o parâmetro não veio na URL e o
+ * usuário enxerga mais de um município, usa o órgão ativo. Parâmetro presente (mesmo vazio = "Todos") prevalece.
+ */
+export function filtroMunicipioPadrao(u: UsuarioSessao, pedido: string | string[] | undefined, orgaoAtivoId: string | null | undefined): string | undefined {
+  if (pedido !== undefined) return Array.isArray(pedido) ? pedido[0] : pedido;
+  if (!orgaoAtivoId || !podeVerMunicipio(u, orgaoAtivoId)) return undefined;
+  const escopo = escopoMunicipios(u);
+  return escopo === "TODOS" || escopo.length > 1 ? orgaoAtivoId : undefined;
+}
+
 export const ROTULO_PAPEL: Record<Papel, string> = {
   ADMIN: "Administrador do consórcio",
   TEC_CONSORCIO: "Técnico do consórcio",

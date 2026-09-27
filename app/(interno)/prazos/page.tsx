@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { exigirUsuario } from "@/lib/auth";
+import { exigirUsuario, getOrgaoAtivo } from "@/lib/auth";
 import { AcessoNegado } from "@/components/acesso-negado";
 import { prisma } from "@/lib/db";
-import { can, escopoMunicipios, whereMunicipio } from "@/lib/rbac";
+import { can, escopoMunicipios, filtroMunicipioPadrao, whereMunicipio } from "@/lib/rbac";
 import { configPrazo } from "@/lib/prazos";
 import { diasRestantes, rotuloDiasRestantes, semaforo } from "@/lib/dias";
 import { fmtData } from "@/lib/format";
@@ -25,7 +25,9 @@ export default async function PaginaPrazos({ searchParams }: { searchParams: Pro
   if (!can(u, "ver", "processo")) return <AcessoNegado mensagem="Seu perfil não pode consultar prazos de processos." />;
   const sp = await searchParams;
   const aba: AbaPrazo = (ABAS.find((a) => a.id === sp.aba)?.id ?? "vencidos") as AbaPrazo;
-  const municipio = sp.municipio || null;
+  // Sem ?municipio= na URL: padrão = órgão ativo (escopo amplo); "Todos do meu escopo" (municipio=) continua disponível.
+  const municipioParam = filtroMunicipioPadrao(u, sp.municipio, (await getOrgaoAtivo())?.id);
+  const municipio = municipioParam || null;
   const tecnico = sp.tecnico || null;
   const hoje = new Date();
 
@@ -78,8 +80,8 @@ export default async function PaginaPrazos({ searchParams }: { searchParams: Pro
 
   const href = (o: Partial<SP>) => {
     const q = new URLSearchParams();
-    const v = { aba, municipio: municipio ?? undefined, tecnico: tecnico ?? undefined, ...o };
-    for (const [k, x] of Object.entries(v)) if (x) q.set(k, x);
+    const v = { aba, municipio: municipio ?? (municipioParam === "" ? "" : undefined), tecnico: tecnico ?? undefined, ...o };
+    for (const [k, x] of Object.entries(v)) if (x || (k === "municipio" && x === "")) q.set(k, x ?? "");
     return `/prazos?${q}`;
   };
 

@@ -11,15 +11,15 @@ export const USUARIOS = {
   tecConsorcio1: "tec.consorcio1@licenciagov.demo",
   tecConsorcio2: "tec.consorcio2@licenciagov.demo",
   sema: "sema@licenciagov.demo",
-  tecnicoItb: "tecnico.itb@licenciagov.demo",
-  gestorItb: "gestor.itb@licenciagov.demo",
-  fiscalItb: "fiscal.itb@licenciagov.demo",
-  tecnicoRuy: "tecnico.ruy@licenciagov.demo",
-  gestorRuy: "gestor.ruy@licenciagov.demo",
-  fiscalRuy: "fiscal.ruy@licenciagov.demo",
-  tecnicoIac: "tecnico.iac@licenciagov.demo",
-  gestorIac: "gestor.iac@licenciagov.demo",
-  fiscalIac: "fiscal.iac@licenciagov.demo",
+  tecnicoLor: "tecnico.lor@licenciagov.demo",
+  gestorLor: "gestor.lor@licenciagov.demo",
+  fiscalLor: "fiscal.lor@licenciagov.demo",
+  tecnicoSsr: "tecnico.ssr@licenciagov.demo",
+  gestorSsr: "gestor.ssr@licenciagov.demo",
+  fiscalSsr: "fiscal.ssr@licenciagov.demo",
+  tecnicoCse: "tecnico.cse@licenciagov.demo",
+  gestorCse: "gestor.cse@licenciagov.demo",
+  fiscalCse: "fiscal.cse@licenciagov.demo",
   // requerentes
   laticinio: "laticinio@licenciagov.demo",
   posto: "posto@licenciagov.demo",
@@ -33,10 +33,22 @@ export type UsuarioDemo = keyof typeof USUARIOS;
 const REQUERENTES: UsuarioDemo[] = ["laticinio", "posto", "joao", "maria", "ceramica"];
 export const ehRequerente = (u: UsuarioDemo) => REQUERENTES.includes(u);
 
-/** Login pela UI (/login, campos "E-mail" e "Senha"). Aguarda sair da tela de login. */
-export async function login(page: Page, usuario: UsuarioDemo | string, senha = SENHA_DEMO) {
+/** Município principal de teste (órgão usado por padrão pelos usuários de escopo organização). */
+export const ORGAO_PRINCIPAL = "LOR";
+
+/** Órgão padrão de cada usuário demo no login: o município do papel/cadastro; escopo organização → ORGAO_PRINCIPAL. */
+export function orgaoPadrao(usuario: UsuarioDemo | string): string {
+  const m = /^[a-z]+(Lor|Ssr|Cse)$/.exec(usuario);
+  if (m) return m[1].toUpperCase();
+  const req: Partial<Record<UsuarioDemo, string>> = { laticinio: "LOR", posto: "SSR", joao: "CSE", maria: "LOR", ceramica: "PCA" };
+  return req[usuario as UsuarioDemo] ?? ORGAO_PRINCIPAL;
+}
+
+/** Login pela UI (/login: "Órgão", "E-mail" e "Senha"). Aguarda sair da tela de login. */
+export async function login(page: Page, usuario: UsuarioDemo | string, senha = SENHA_DEMO, orgao = orgaoPadrao(usuario)) {
   const email = usuario in USUARIOS ? USUARIOS[usuario as UsuarioDemo] : usuario;
   await page.goto("/login");
+  await page.getByLabel("Órgão").selectOption(orgao);
   await page.getByLabel("E-mail").fill(email);
   await page.getByLabel("Senha").fill(senha);
   await page.getByRole("button", { name: /entrar/i }).click();

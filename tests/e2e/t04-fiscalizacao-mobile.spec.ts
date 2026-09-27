@@ -5,8 +5,8 @@ import { FOTOS_VISTORIA, PROJETO_MOBILE, apenasNoProjeto, login } from "./helper
 // vistoria a partir de denúncia com "Capturar localização" + 2 fotos → aparece no mapa no ponto capturado →
 // Auto de Infração e Notificação com PDFs numerados. Altera dados: roda só no projeto mobile.
 
-// Ponto simulado pelo GPS do aparelho (zona urbana de Itaberaba)
-const GPS = { latitude: -12.531234, longitude: -40.302468, accuracy: 8 };
+// Ponto simulado pelo GPS do aparelho (zona urbana de Lagoa do Orvalho)
+const GPS = { latitude: -12.403812, longitude: -40.116245, accuracy: 8 };
 
 test.use({ geolocation: GPS, permissions: ["geolocation"] });
 
@@ -27,14 +27,14 @@ test("T4 – fiscal no celular registra vistoria de denúncia com GPS e 2 fotos,
   test.setTimeout(180_000);
   expect(isMobile).toBe(true);
 
-  await login(page, "fiscalItb");
+  await login(page, "fiscalLor");
 
-  // ── Denúncia de Itaberaba ainda não concluída ──
+  // ── Denúncia de Lagoa do Orvalho ainda não concluída ──
   await page.goto("/fiscalizacao/denuncias");
   const denuncia = page.getByTestId("lista-denuncias").locator("li").filter({ hasNotText: /Concluída|Arquivada|Improcedente/ }).first();
   await expect(denuncia).toBeVisible();
   const protocolo = (await denuncia.locator(".font-medium").first().innerText()).trim();
-  expect(protocolo).toMatch(/^DEN-ITB-\d{3}\/2026$/);
+  expect(protocolo).toMatch(/^DEN-LOR-\d{3}\/2026$/);
   await denuncia.getByRole("link").click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(`Denúncia ${protocolo}`);
   await page.getByTestId("registrar-vistoria").click();
@@ -116,7 +116,7 @@ test("T4 – fiscal no celular registra vistoria de denúncia com GPS e 2 fotos,
   await page.getByTestId("lavrar-auto").click();
   await page.waitForURL(/\/fiscalizacao\/[0-9a-f-]{36}\?auto=/, { timeout: 60_000 });
   const numAuto = decodeURIComponent(new URL(page.url()).searchParams.get("auto")!);
-  expect(numAuto).toMatch(/ITB.*\d+\/2026$/);
+  expect(numAuto).toMatch(/LOR.*\d+\/2026$/);
   await expect(page.getByText(`Auto de infração ${numAuto} lavrado e PDF emitido.`)).toBeVisible();
   const itemAuto = page.getByTestId("lista-autos").locator("li", { hasText: numAuto });
   await expect(itemAuto).toContainText(AUTUADO.nome);
@@ -138,7 +138,7 @@ test("T4 – fiscal no celular registra vistoria de denúncia com GPS e 2 fotos,
   await page.getByTestId("emitir-notificacao").click();
   await page.waitForURL(/\/fiscalizacao\/[0-9a-f-]{36}\?notificacao=/, { timeout: 60_000 });
   const numNot = decodeURIComponent(new URL(page.url()).searchParams.get("notificacao")!);
-  expect(numNot).toMatch(/ITB.*\d+\/2026$/);
+  expect(numNot).toMatch(/LOR.*\d+\/2026$/);
   await expect(page.getByText(`Notificação ${numNot} emitida com PDF.`)).toBeVisible();
   const itemNot = page.getByTestId("lista-notificacoes").locator("li", { hasText: numNot });
   await expect(itemNot).toContainText(AUTUADO.nome);

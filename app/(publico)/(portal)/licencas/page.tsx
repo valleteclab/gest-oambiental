@@ -4,6 +4,7 @@ import { listarLicencasPublicas, opcoesFiltroPublico } from "@/lib/documentos/pu
 import { ROTULO_STATUS_PUBLICO } from "@/lib/documentos/render";
 import { fmtData } from "@/lib/format";
 import { Badge, Paginacao, Vazio } from "@/components/ui";
+import { ContextoOrgao } from "@/components/contexto-orgao";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Licenças emitidas" };
@@ -11,10 +12,13 @@ export const metadata: Metadata = { title: "Licenças emitidas" };
 const COR = { VALIDO: "verde", VENCIDO: "amarelo", CANCELADO: "vermelho", SUBSTITUIDO: "amarelo" } as const;
 const TAMANHO = 20;
 
-type SP = { municipio?: string; tipo?: string; sigla?: string; de?: string; ate?: string; page?: string };
+type SP = { municipio?: string; orgao?: string; tipo?: string; sigla?: string; de?: string; ate?: string; page?: string };
 
 export default async function LicencasPage({ searchParams }: { searchParams: Promise<SP> }) {
-  const sp = await searchParams;
+  const bruto = await searchParams;
+  // ?orgao=SIGLA (links do portal do órgão) equivale a ?municipio=SIGLA
+  const { orgao, ...resto } = bruto;
+  const sp: SP = { ...resto, municipio: resto.municipio ?? orgao };
   const page = Math.max(1, Number(sp.page ?? 1) || 1);
   const [{ municipios, siglas }, r] = await Promise.all([
     opcoesFiltroPublico(),
@@ -27,6 +31,7 @@ export default async function LicencasPage({ searchParams }: { searchParams: Pro
 
   return (
     <div className="space-y-6">
+      <ContextoOrgao sigla={sp.municipio} />
       <div>
         <h1 className="titulo-pagina">Licenças emitidas</h1>
         <p className="mt-1 max-w-2xl text-sm text-slate-600">Transparência ativa: licenças, autorizações e certidões ambientais emitidas pelos municípios. Clique em “Validar” para conferir a autenticidade de cada documento.</p>

@@ -1,8 +1,8 @@
 import Link from "next/link";
 import type { StatusProcesso } from "@prisma/client";
-import { exigirUsuario } from "@/lib/auth";
+import { exigirUsuario, getOrgaoAtivo } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { can, escopoMunicipios, isSomenteLeitura } from "@/lib/rbac";
+import { can, escopoMunicipios, filtroMunicipioPadrao, isSomenteLeitura } from "@/lib/rbac";
 import { CabecalhoPagina, Card, Paginacao, ROTULO_STATUS } from "@/components/ui";
 import { listarProcessos, mapaDiasAlerta } from "@/lib/processo/consultas";
 import { TabelaProcessos } from "./_componentes/tabela-processos";
@@ -15,7 +15,9 @@ type Busca = { municipio?: string; status?: string; tipo?: string; tecnico?: str
 export default async function PaginaProcessos({ searchParams }: { searchParams: Promise<Busca> }) {
   const u = await exigirUsuario({ interno: true });
   if (!can(u, "ver", "processo")) return <Proibido voltar="/dashboard" mensagem="Seu perfil não tem acesso a processos." />;
-  const sp = await searchParams;
+  const bruto = await searchParams;
+  // Sem ?municipio= na URL: padrão = órgão ativo (escopo amplo); "Todos" (municipio=) continua disponível.
+  const sp: Busca = { ...bruto, municipio: filtroMunicipioPadrao(u, bruto.municipio, (await getOrgaoAtivo())?.id) };
   const page = Math.max(1, Number(sp.page ?? 1) || 1);
   const size = 20;
   const status = sp.status && sp.status in ROTULO_STATUS ? (sp.status as StatusProcesso) : null;
@@ -29,10 +31,10 @@ export default async function PaginaProcessos({ searchParams }: { searchParams: 
       select: { id: true, nome: true },
       orderBy: { nome: "asc" },
     }),
-    listarProcessos(u, { municipio: sp.municipio, status, tipo: sp.tipo, tecnico: sp.tecnico, q: sp.q, skip: (page - 1) * size, take: size }),
+    listarProcessos(u, { municipio: sp.municipio || undefined, status, tipo: sp.tipo, tecnico: sp.tecnico, q: sp.q, skip: (page - 1) * size, take: size }),
   ]);
   const href = (p: number) => {
-    const q = new URLSearchParams(Object.entries({ ...sp, page: String(p) }).filter(([, v]) => v) as [string, string][]);
+    const q = new URLSearchParams(Object.entries({ ...sp, page: String(p) }).filter(([k, v]) => v || (k === "municipio" && v === "")) as [string, string][]);
     return `/processos?${q}`;
   };
   return (

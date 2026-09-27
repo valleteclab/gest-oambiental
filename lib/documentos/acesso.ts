@@ -21,5 +21,5 @@ export async function podeBaixarDocumento(u: UsuarioSessao | null, doc: Pick<Doc
   return !!p && (p.requerente_id === u.pessoa_id || p.rt?.pessoa_id === u.pessoa_id);
 }
 
-/** Nome de arquivo amigável: "LO-ITB-001-2026.pdf" */
+/** Nome de arquivo amigável: "LO-LOR-001-2026.pdf" */
 export const nomeArquivoPdf = (numero: string) => `${numero.replace(/[^A-Za-z0-9_-]+/g, "-")}.pdf`;

@@ -15,22 +15,22 @@ import {
 } from "@/lib/processo/maquina";
 import { calcularPorte } from "@/lib/processo/porte";
 
-const ITB = "11111111-1111-1111-1111-111111111111";
-const IAC = "22222222-2222-2222-2222-222222222222";
+const LOR = "11111111-1111-1111-1111-111111111111";
+const CSE = "22222222-2222-2222-2222-222222222222";
 const PESSOA = "33333333-3333-3333-3333-333333333333";
 
 const usuario = (papeis: PapelVinculo[], pessoa_id: string | null = null): UsuarioSessao => ({ id: "u", nome: "U", email: "u@x", cargo: null, pessoa_id, trocar_senha: false, papeis });
-const tecItb = usuario([{ papel: "TEC_MUNICIPAL", municipio_id: ITB }]);
-const tecIac = usuario([{ papel: "TEC_MUNICIPAL", municipio_id: IAC }]);
+const tecLor = usuario([{ papel: "TEC_MUNICIPAL", municipio_id: LOR }]);
+const tecCse = usuario([{ papel: "TEC_MUNICIPAL", municipio_id: CSE }]);
 const tecConsorcio = usuario([{ papel: "TEC_CONSORCIO", municipio_id: null }]);
-const gestorItb = usuario([{ papel: "GESTOR_MUNICIPAL", municipio_id: ITB }]);
+const gestorLor = usuario([{ papel: "GESTOR_MUNICIPAL", municipio_id: LOR }]);
 const admin = usuario([{ papel: "ADMIN", municipio_id: null }]);
 const sema = usuario([{ papel: "SEMA_INEMA", municipio_id: null }]);
-const fiscal = usuario([{ papel: "FISCAL", municipio_id: ITB }]);
+const fiscal = usuario([{ papel: "FISCAL", municipio_id: LOR }]);
 const requerente = usuario([{ papel: "REQUERENTE", municipio_id: null }], PESSOA);
 const outroRequerente = usuario([{ papel: "REQUERENTE", municipio_id: null }], "44444444-4444-4444-4444-444444444444");
 
-const ctx = (status: StatusProcesso, extra: Partial<ContextoAcao> = {}): ContextoAcao => ({ status, municipio_id: ITB, requerente_id: PESSOA, exige_parecer: true, delega_decisao: false, ...extra });
+const ctx = (status: StatusProcesso, extra: Partial<ContextoAcao> = {}): ContextoAcao => ({ status, municipio_id: LOR, requerente_id: PESSOA, exige_parecer: true, delega_decisao: false, ...extra });
 
 describe("tabela de transições (SPEC 6)", () => {
   it.each([
@@ -102,29 +102,29 @@ describe("ações disponíveis por perfil", () => {
   });
 
   it("técnico do município tria, analisa e emite parecer, mas não decide", () => {
-    expect(acoesDisponiveis(ctx("PROTOCOLADO"), tecItb)).toEqual(["distribuir", "arquivar"]);
-    expect(acoesDisponiveis(ctx("EM_TRIAGEM"), tecItb)).toEqual(["distribuir", "pendencia", "aceitar", "arquivar"]);
-    expect(acoesDisponiveis(ctx("EM_ANALISE"), tecItb)).toEqual(["distribuir", "pendencia", "agendar_vistoria", "parecer", "arquivar"]);
-    expect(acoesDisponiveis(ctx("AGUARDANDO_DECISAO"), tecItb)).not.toContain("deferir");
+    expect(acoesDisponiveis(ctx("PROTOCOLADO"), tecLor)).toEqual(["distribuir", "arquivar"]);
+    expect(acoesDisponiveis(ctx("EM_TRIAGEM"), tecLor)).toEqual(["distribuir", "pendencia", "aceitar", "arquivar"]);
+    expect(acoesDisponiveis(ctx("EM_ANALISE"), tecLor)).toEqual(["distribuir", "pendencia", "agendar_vistoria", "parecer", "arquivar"]);
+    expect(acoesDisponiveis(ctx("AGUARDANDO_DECISAO"), tecLor)).not.toContain("deferir");
   });
 
   it("técnico de outro município não tem ações (escopo)", () => {
-    for (const s of ["PROTOCOLADO", "EM_TRIAGEM", "EM_ANALISE", "AGUARDANDO_DECISAO"] as const) expect(acoesDisponiveis(ctx(s), tecIac)).toEqual([]);
+    for (const s of ["PROTOCOLADO", "EM_TRIAGEM", "EM_ANALISE", "AGUARDANDO_DECISAO"] as const) expect(acoesDisponiveis(ctx(s), tecCse)).toEqual([]);
   });
 
   it("gestor decide; técnico do consórcio só decide com delegação", () => {
-    expect(acoesDisponiveis(ctx("AGUARDANDO_DECISAO"), gestorItb)).toEqual(["distribuir", "deferir", "indeferir", "arquivar"]);
+    expect(acoesDisponiveis(ctx("AGUARDANDO_DECISAO"), gestorLor)).toEqual(["distribuir", "deferir", "indeferir", "arquivar"]);
     expect(acoesDisponiveis(ctx("AGUARDANDO_DECISAO"), tecConsorcio)).not.toContain("deferir");
     expect(acoesDisponiveis(ctx("AGUARDANDO_DECISAO", { delega_decisao: true }), tecConsorcio)).toContain("deferir");
   });
 
   it("não deferir direto da análise quando o ato exige parecer", () => {
-    expect(acoesDisponiveis(ctx("EM_ANALISE"), gestorItb)).not.toContain("deferir");
-    expect(acoesDisponiveis(ctx("EM_ANALISE", { exige_parecer: false }), gestorItb)).toContain("deferir");
+    expect(acoesDisponiveis(ctx("EM_ANALISE"), gestorLor)).not.toContain("deferir");
+    expect(acoesDisponiveis(ctx("EM_ANALISE", { exige_parecer: false }), gestorLor)).toContain("deferir");
   });
 
   it("emitir documento disponível após decisão", () => {
-    expect(acoesDisponiveis(ctx("DEFERIDO"), gestorItb)).toContain("emitir_documento");
+    expect(acoesDisponiveis(ctx("DEFERIDO"), gestorLor)).toContain("emitir_documento");
     expect(acoesDisponiveis(ctx("DEFERIDO"), admin)).toContain("emitir_documento");
   });
 

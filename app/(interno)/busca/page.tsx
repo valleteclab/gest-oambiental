@@ -19,7 +19,7 @@ export default async function PaginaBusca({ searchParams }: { searchParams: Prom
       <CabecalhoPagina titulo="Busca" subtitulo={q ? <>Resultados para “{q}”{r.porDocumento ? " (CPF/CNPJ)" : ""} – {total} encontrado(s) no seu escopo</> : "Busque por nº de processo, CPF/CNPJ, nome ou empreendimento"} />
       <form className="mb-6 flex gap-2" role="search">
         <label htmlFor="q-busca" className="sr-only">Termo de busca</label>
-        <input id="q-busca" name="q" defaultValue={q} className="input max-w-xl" placeholder="Ex.: ITB-2026-000042, 11.222.333/0001-81, Laticínio" autoFocus />
+        <input id="q-busca" name="q" defaultValue={q} className="input max-w-xl" placeholder="Ex.: LOR-2026-000042, 11.222.333/0001-81, Laticínio" autoFocus />
         <button className="btn-primario">Buscar</button>
       </form>
       {q.length > 0 && q.length < 2 && <Vazio>Digite ao menos 2 caracteres.</Vazio>}

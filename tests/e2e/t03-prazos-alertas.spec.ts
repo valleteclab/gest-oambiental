@@ -2,11 +2,11 @@ import { test, expect } from "@playwright/test";
 import { entrarComo, login, USUARIOS } from "./helpers";
 
 // T3 – Prazos e alertas [PoC-3] (SPEC 13). Somente leitura (não marca alertas como lidos): roda nos dois projetos.
-// Seed: tecnico.itb tem um processo vencendo em 3 dias e outro vencido; o job de alertas já rodou
+// Seed: tecnico.lor tem um processo vencendo em 3 dias e outro vencido; o job de alertas já rodou
 // (alertas no sino + e-mails na caixa de teste, pois não há SMTP na demo).
 
 test("T3 – técnico vê 2 alertas no sino, os processos nas abas Vencendo/Vencidos com semáforo e o e-mail na caixa de teste", async ({ page }) => {
-  await login(page, "tecnicoItb");
+  await login(page, "tecnicoLor");
 
   // Sino com 2 alertas não lidos
   const sino = page.getByTestId("sino-alertas");
@@ -25,8 +25,8 @@ test("T3 – técnico vê 2 alertas no sino, os processos nas abas Vencendo/Venc
   const vencido = msgs.find((m) => /vencido há \d+ dia\(s\)/.test(m));
   expect(vencendo, `alertas: ${msgs.join(" | ")}`).toBeTruthy();
   expect(vencido, `alertas: ${msgs.join(" | ")}`).toBeTruthy();
-  const numVencendo = vencendo!.match(/ITB-2026-\d{6}/)![0];
-  const numVencido = vencido!.match(/ITB-2026-\d{6}/)![0];
+  const numVencendo = vencendo!.match(/LOR-2026-\d{6}/)![0];
+  const numVencido = vencido!.match(/LOR-2026-\d{6}/)![0];
 
   // Tela de prazos, filtrada nos processos do técnico
   await page.goto("/prazos");
@@ -50,12 +50,12 @@ test("T3 – técnico vê 2 alertas no sino, os processos nas abas Vencendo/Venc
 
   // E-mails de alerta na caixa de teste (admin)
   await entrarComo(page, "admin");
-  await page.goto(`/admin/emails?q=${encodeURIComponent(USUARIOS.tecnicoItb)}`);
+  await page.goto(`/admin/emails?q=${encodeURIComponent(USUARIOS.tecnicoLor)}`);
   const caixa = page.getByTestId("caixa-emails");
   for (const numero of [numVencendo, numVencido]) {
     const email = caixa.locator("li").filter({ hasText: `Processo ${numero}: prazo da etapa` });
     await expect(email).toHaveCount(1);
-    await expect(email).toContainText(`para ${USUARIOS.tecnicoItb}`);
+    await expect(email).toContainText(`para ${USUARIOS.tecnicoLor}`);
     await expect(email).toContainText(/Caixa de teste|Enviado/);
   }
 });

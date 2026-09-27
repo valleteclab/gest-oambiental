@@ -1,8 +1,8 @@
 import { forbidden } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Clock, XCircle } from "lucide-react";
-import { exigirUsuario } from "@/lib/auth";
-import { can, escopoMunicipios } from "@/lib/rbac";
+import { exigirUsuario, getOrgaoAtivo } from "@/lib/auth";
+import { can, escopoMunicipios, filtroMunicipioPadrao } from "@/lib/rbac";
 import { fmtData, fmtMoeda, fmtNumero } from "@/lib/format";
 import { calcularIndicadores, opcoesFiltros } from "@/lib/indicadores/calcular";
 import { lerFiltros, municipioPermitido, queryFiltros } from "@/lib/indicadores/filtros";
@@ -34,7 +34,10 @@ function Kpi({ rotulo, valor, detalhe, href, testId, alerta }: { rotulo: string;
 
 export default async function PaginaDashboard({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const u = await exigirUsuario({ interno: true });
-  const filtros = lerFiltros(await searchParams);
+  const sp = await searchParams;
+  const orgao = await getOrgaoAtivo();
+  // Sem ?municipio= na URL: padrão = órgão ativo (usuários com escopo amplo); "Todos" continua selecionável.
+  const filtros = lerFiltros({ ...sp, municipio: filtroMunicipioPadrao(u, sp.municipio, orgao?.id) });
   if (!can(u, "ver", "dashboard") || !municipioPermitido(u, filtros)) {
     forbidden();
   }
@@ -42,7 +45,7 @@ export default async function PaginaDashboard({ searchParams }: { searchParams: 
   const [ind, opcoes] = await Promise.all([calcularIndicadores(u, filtros), opcoesFiltros(u)]);
   const t = ind.totais;
   const mostrarTodos = escopoMunicipios(u) === "TODOS" || opcoes.municipios.length > 1;
-  const qPrazos = (aba: string) => `/prazos${queryFiltros({ municipio_id: filtros.municipio_id, tecnico_id: filtros.tecnico_id }, { aba })}`;
+  const qPrazos = (aba: string) => `/prazos${queryFiltros({ municipio_id: filtros.municipio_id, tecnico_id: filtros.tecnico_id }, { ...(filtros.municipio_id ? {} : { municipio: "" }), aba })}`;
   const d = ind.filtros.descricao;
 
   const dadosStatus = ind.porStatus.filter((s) => s.total > 0).map((s) => ({ rotulo: ROTULO_STATUS[s.status], valor: s.total }));

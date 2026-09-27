@@ -2,15 +2,17 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { normalizarCodigo } from "@/lib/documentos/render";
 import { Aviso } from "@/components/ui";
+import { ContextoOrgao } from "@/components/contexto-orgao";
 
 export const metadata: Metadata = { title: "Validar documento" };
 
-export default async function ValidarPage({ searchParams }: { searchParams: Promise<{ codigo?: string }> }) {
-  const { codigo } = await searchParams;
+export default async function ValidarPage({ searchParams }: { searchParams: Promise<{ codigo?: string; orgao?: string }> }) {
+  const { codigo, orgao } = await searchParams;
   const normal = codigo ? normalizarCodigo(codigo) : null;
   if (normal) redirect(`/validar/${normal}`);
   return (
     <div className="mx-auto max-w-xl">
+      <ContextoOrgao sigla={orgao} />
       <h1 className="titulo-pagina">Validar documento oficial</h1>
       <p className="mt-2 text-sm text-slate-600">
         Confira a autenticidade de licenças, autorizações, certidões, autos de infração, notificações e demais documentos emitidos pelos órgãos ambientais municipais.

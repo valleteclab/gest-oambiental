@@ -10,6 +10,8 @@ import { FormAcao } from "../../(interno)/processos/_componentes/acoes-processo"
 import { UploadAnexo } from "../../(interno)/processos/_componentes/formularios";
 
 export type DadosWizard = {
+  /** Município padrão de um novo empreendimento (órgão ativo da sessão). */
+  municipioPadrao?: string | null;
   municipios: { id: string; nome: string; lat: number | null; lng: number | null }[];
   tipologias: { id: string; codigo: string; divisao: string; descricao: string; unidade_porte: string; faixas_porte: unknown; potencial_poluidor: string }[];
   tiposAto: { id: string; sigla: string; nome: string; categoria: string; validade_meses_padrao: number | null; prazo_analise_dias: number }[];
@@ -34,7 +36,7 @@ export function Wizard({ dados, passoInicial }: { dados: DadosWizard; passoInici
   const [passo, setPasso] = useState(passoInicial);
   const [modo, setModo] = useState<"existente" | "novo">(r || dados.empreendimentos.length ? "existente" : "novo");
   const [empId, setEmpId] = useState(r?.empreendimento_id ?? dados.empreendimentos[0]?.id ?? "");
-  const [novo, setNovo] = useState({ nome: "", municipio_id: "", logradouro: "", numero: "", bairro: "", cep: "", area_m2: "", numero_car: "" });
+  const [novo, setNovo] = useState({ nome: "", municipio_id: dados.municipioPadrao ?? "", logradouro: "", numero: "", bairro: "", cep: "", area_m2: "", numero_car: "" });
   const [ponto, setPonto] = useState<[number, number] | null>(null);
   const empSel = dados.empreendimentos.find((e) => e.id === empId);
   const [tipologiaId, setTipologiaId] = useState(r?.tipologia_id ?? "");
@@ -159,7 +161,7 @@ export function Wizard({ dados, passoInicial }: { dados: DadosWizard; passoInici
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <label htmlFor="w-nome" className="label">Nome do empreendimento *</label>
-                  <input id="w-nome" className="input" value={novo.nome} onChange={(e) => setNovo({ ...novo, nome: e.target.value })} placeholder="Ex.: Laticínio Boa Vista – unidade Itaberaba" />
+                  <input id="w-nome" className="input" value={novo.nome} onChange={(e) => setNovo({ ...novo, nome: e.target.value })} placeholder="Ex.: Laticínio Boa Vista – unidade Lagoa do Orvalho" />
                 </div>
                 <div>
                   <label htmlFor="w-mun" className="label">Município *</label>

@@ -33,7 +33,7 @@ export async function salvarMunicipio(_: EstadoAcao, f: FormData): Promise<Estad
       return `Município ${depois.nome} atualizado.`;
     }
     const sigla = obrigatorio(f, "sigla", "a sigla").toUpperCase();
-    if (!/^[A-Z]{3}$/.test(sigla)) throw invalido("A sigla deve ter 3 letras (ex.: ITB).", { campo: "sigla" });
+    if (!/^[A-Z]{3}$/.test(sigla)) throw invalido("A sigla deve ter 3 letras (ex.: LOR).", { campo: "sigla" });
     const codigo_ibge = obrigatorio(f, "codigo_ibge", "o código IBGE");
     if (!/^\d{7}$/.test(codigo_ibge)) throw invalido("Código IBGE deve ter 7 dígitos.", { campo: "codigo_ibge" });
     const org = await prisma.organizacao.findFirstOrThrow();

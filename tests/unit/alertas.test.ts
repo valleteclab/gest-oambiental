@@ -102,9 +102,9 @@ describe("chaveAlerta (idempotência)", () => {
 
 describe("mensagemPrazo", () => {
   it("textos em português", () => {
-    expect(mensagemPrazo("VENCENDO", "ITB-2026-000001", "análise", 3)).toContain("vence em 3 dia(s)");
-    expect(mensagemPrazo("VENCENDO", "ITB-2026-000001", "análise", 0)).toContain("vence hoje");
-    expect(mensagemPrazo("VENCIDO", "ITB-2026-000001", "análise", -2)).toContain("vencido há 2 dia(s)");
+    expect(mensagemPrazo("VENCENDO", "LOR-2026-000001", "análise", 3)).toContain("vence em 3 dia(s)");
+    expect(mensagemPrazo("VENCENDO", "LOR-2026-000001", "análise", 0)).toContain("vence hoje");
+    expect(mensagemPrazo("VENCIDO", "LOR-2026-000001", "análise", -2)).toContain("vencido há 2 dia(s)");
   });
 });
 

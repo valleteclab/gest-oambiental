@@ -11,7 +11,7 @@ export default function TermosPage() {
 
       <h2>1. Objeto</h2>
       <p>
-        O LicenciaGov é o sistema oficial de licenciamento e fiscalização ambiental dos municípios do CDS Piemonte do Paraguaçu. Permite requerer licenças, acompanhar
+        O LicenciaGov é a plataforma de licenciamento e fiscalização ambiental utilizada pelos órgãos ambientais municipais (e consórcios públicos) que a contratam. Permite requerer licenças, acompanhar
         processos, consultar licenças emitidas, validar documentos e registrar denúncias ambientais.
       </p>
 

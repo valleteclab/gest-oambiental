@@ -4,9 +4,9 @@ import { can, escopoMunicipios, isInterno, isSomenteLeitura, podeVerMunicipio, U
 import { whereEmpreendimentoEscopo, wherePessoaEscopo } from "@/lib/cadastros/escopo";
 
 // Matriz de permissões e regras de escopo (SPEC 4 / T7).
-const IAC = "11111111-1111-4111-8111-111111111111";
-const ITB = "22222222-2222-4222-8222-222222222222";
-const RUY = "33333333-3333-4333-8333-333333333333";
+const CSE = "11111111-1111-4111-8111-111111111111";
+const LOR = "22222222-2222-4222-8222-222222222222";
+const SSR = "33333333-3333-4333-8333-333333333333";
 const PESSOA = "44444444-4444-4444-8444-444444444444";
 
 function usuario(papeis: [Papel, string | null][], pessoa_id: string | null = null): UsuarioSessao {
@@ -15,55 +15,55 @@ function usuario(papeis: [Papel, string | null][], pessoa_id: string | null = nu
 
 const admin = usuario([["ADMIN", null]]);
 const tecConsorcio = usuario([["TEC_CONSORCIO", null]]);
-const tecIacu = usuario([["TEC_MUNICIPAL", IAC]]);
-const gestorItb = usuario([["GESTOR_MUNICIPAL", ITB]]);
-const fiscalItb = usuario([["FISCAL", ITB]]);
+const tecCse = usuario([["TEC_MUNICIPAL", CSE]]);
+const gestorLor = usuario([["GESTOR_MUNICIPAL", LOR]]);
+const fiscalLor = usuario([["FISCAL", LOR]]);
 const sema = usuario([["SEMA_INEMA", null]]);
 const requerente = usuario([["REQUERENTE", null]], PESSOA);
 const requerenteSemPessoa = usuario([["REQUERENTE", null]]);
-const multi = usuario([["TEC_MUNICIPAL", IAC], ["FISCAL", RUY]]);
+const multi = usuario([["TEC_MUNICIPAL", CSE], ["FISCAL", SSR]]);
 
 const RECURSOS: Recurso[] = ["processo", "empreendimento", "pessoa", "fiscalizacao", "denuncia", "documento", "relatorio", "dashboard", "admin", "auditoria", "exportacao"];
 const ESCRITA: Acao[] = ["criar", "editar", "triar", "analisar", "pendencia", "parecer", "decidir", "emitir_documento", "cancelar_documento", "fiscalizar", "configurar", "requerer"];
 
-describe("escopo por município – técnico de Iaçu (T7)", () => {
-  it("não vê Itaberaba", () => {
-    expect(can(tecIacu, "ver", "processo", ITB)).toBe(false);
-    expect(can(tecIacu, "ver", "empreendimento", ITB)).toBe(false);
-    expect(podeVerMunicipio(tecIacu, ITB)).toBe(false);
+describe("escopo por município – técnico de Campo das Seriemas (T7)", () => {
+  it("não vê Lagoa do Orvalho", () => {
+    expect(can(tecCse, "ver", "processo", LOR)).toBe(false);
+    expect(can(tecCse, "ver", "empreendimento", LOR)).toBe(false);
+    expect(podeVerMunicipio(tecCse, LOR)).toBe(false);
   });
-  it("vê e analisa Iaçu", () => {
-    expect(can(tecIacu, "ver", "processo", IAC)).toBe(true);
-    expect(can(tecIacu, "analisar", "processo", IAC)).toBe(true);
-    expect(can(tecIacu, "editar", "empreendimento", IAC)).toBe(true);
-    expect(podeVerMunicipio(tecIacu, IAC)).toBe(true);
+  it("vê e analisa Campo das Seriemas", () => {
+    expect(can(tecCse, "ver", "processo", CSE)).toBe(true);
+    expect(can(tecCse, "analisar", "processo", CSE)).toBe(true);
+    expect(can(tecCse, "editar", "empreendimento", CSE)).toBe(true);
+    expect(podeVerMunicipio(tecCse, CSE)).toBe(true);
   });
   it("não decide nem configura", () => {
-    expect(can(tecIacu, "decidir", "processo", IAC)).toBe(false);
-    expect(can(tecIacu, "configurar", "admin")).toBe(false);
+    expect(can(tecCse, "decidir", "processo", CSE)).toBe(false);
+    expect(can(tecCse, "configurar", "admin")).toBe(false);
   });
   it("whereMunicipio restringe aos municípios vinculados", () => {
-    expect(escopoMunicipios(tecIacu)).toEqual([IAC]);
-    expect(whereMunicipio(tecIacu)).toEqual({ municipio_id: { in: [IAC] } });
-    expect(whereMunicipio(tecIacu, IAC)).toEqual({ municipio_id: IAC });
+    expect(escopoMunicipios(tecCse)).toEqual([CSE]);
+    expect(whereMunicipio(tecCse)).toEqual({ municipio_id: { in: [CSE] } });
+    expect(whereMunicipio(tecCse, CSE)).toEqual({ municipio_id: CSE });
   });
   it("pedido de município fora do escopo vira filtro vazio com UUID válido (coluna @db.Uuid)", () => {
-    const w = whereMunicipio(tecIacu, ITB);
+    const w = whereMunicipio(tecCse, LOR);
     expect(w).toEqual({ municipio_id: UUID_NENHUM });
     expect(UUID_NENHUM).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   });
   it("pessoas e empreendimentos seguem o mesmo escopo", () => {
-    expect(whereEmpreendimentoEscopo(tecIacu)).toEqual({ municipio_id: { in: [IAC] } });
-    const wp = wherePessoaEscopo(tecIacu) as { OR: unknown[] };
-    expect(wp.OR[0]).toEqual({ municipio_id: { in: [IAC] } });
-    expect(JSON.stringify(wp)).not.toContain(ITB);
+    expect(whereEmpreendimentoEscopo(tecCse)).toEqual({ municipio_id: { in: [CSE] } });
+    const wp = wherePessoaEscopo(tecCse) as { OR: unknown[] };
+    expect(wp.OR[0]).toEqual({ municipio_id: { in: [CSE] } });
+    expect(JSON.stringify(wp)).not.toContain(LOR);
   });
   it("usuário com papéis em dois municípios soma os escopos, mas cada ação respeita o papel do município", () => {
-    expect(escopoMunicipios(multi)).toEqual([IAC, RUY]);
-    expect(can(multi, "analisar", "processo", IAC)).toBe(true);
-    expect(can(multi, "analisar", "processo", RUY)).toBe(false); // em RUY é só FISCAL
-    expect(can(multi, "fiscalizar", "fiscalizacao", RUY)).toBe(true);
-    expect(can(multi, "ver", "processo", ITB)).toBe(false);
+    expect(escopoMunicipios(multi)).toEqual([CSE, SSR]);
+    expect(can(multi, "analisar", "processo", CSE)).toBe(true);
+    expect(can(multi, "analisar", "processo", SSR)).toBe(false); // em SSR é só FISCAL
+    expect(can(multi, "fiscalizar", "fiscalizacao", SSR)).toBe(true);
+    expect(can(multi, "ver", "processo", LOR)).toBe(false);
   });
 });
 
@@ -72,27 +72,27 @@ describe("escopo organização", () => {
     for (const u of [admin, tecConsorcio, sema]) {
       expect(escopoMunicipios(u)).toBe("TODOS");
       expect(whereMunicipio(u)).toEqual({});
-      expect(whereMunicipio(u, ITB)).toEqual({ municipio_id: ITB });
-      expect(podeVerMunicipio(u, ITB)).toBe(true);
+      expect(whereMunicipio(u, LOR)).toEqual({ municipio_id: LOR });
+      expect(podeVerMunicipio(u, LOR)).toBe(true);
     }
   });
   it("somente ADMIN configura e vê auditoria", () => {
     expect(can(admin, "configurar", "admin")).toBe(true);
     expect(can(admin, "ver", "auditoria")).toBe(true);
-    for (const u of [tecConsorcio, tecIacu, gestorItb, fiscalItb, sema, requerente]) {
+    for (const u of [tecConsorcio, tecCse, gestorLor, fiscalLor, sema, requerente]) {
       expect(can(u, "configurar", "admin")).toBe(false);
       expect(can(u, "ver", "auditoria")).toBe(false);
     }
   });
   it("TEC_CONSORCIO analisa em qualquer município, mas não decide por padrão", () => {
-    expect(can(tecConsorcio, "parecer", "processo", ITB)).toBe(true);
-    expect(can(tecConsorcio, "decidir", "processo", ITB)).toBe(false);
+    expect(can(tecConsorcio, "parecer", "processo", LOR)).toBe(true);
+    expect(can(tecConsorcio, "decidir", "processo", LOR)).toBe(false);
   });
 });
 
 describe("SEMA_INEMA – somente leitura + exportação", () => {
   it("vê tudo", () => {
-    for (const r of ["processo", "empreendimento", "pessoa", "fiscalizacao", "denuncia", "documento", "relatorio", "dashboard"] as Recurso[]) expect(can(sema, "ver", r, ITB)).toBe(true);
+    for (const r of ["processo", "empreendimento", "pessoa", "fiscalizacao", "denuncia", "documento", "relatorio", "dashboard"] as Recurso[]) expect(can(sema, "ver", r, LOR)).toBe(true);
   });
   it("só possui as ações 'ver' e 'exportar'", () => {
     for (const r of RECURSOS) for (const a of ESCRITA) expect(can(sema, a, r), `${a} ${r}`).toBe(false);
@@ -103,23 +103,23 @@ describe("SEMA_INEMA – somente leitura + exportação", () => {
   it("isSomenteLeitura", () => {
     expect(isSomenteLeitura(sema)).toBe(true);
     expect(isSomenteLeitura(admin)).toBe(false);
-    expect(isSomenteLeitura(usuario([["SEMA_INEMA", null], ["TEC_MUNICIPAL", IAC]]))).toBe(false);
+    expect(isSomenteLeitura(usuario([["SEMA_INEMA", null], ["TEC_MUNICIPAL", CSE]]))).toBe(false);
     expect(isSomenteLeitura(usuario([]))).toBe(false);
   });
 });
 
 describe("perfis municipais", () => {
   it("GESTOR decide no próprio município, não em outro", () => {
-    expect(can(gestorItb, "decidir", "processo", ITB)).toBe(true);
-    expect(can(gestorItb, "decidir", "processo", RUY)).toBe(false);
-    expect(can(gestorItb, "cancelar_documento", "documento", ITB)).toBe(true);
-    expect(can(gestorItb, "editar", "empreendimento", ITB)).toBe(false);
+    expect(can(gestorLor, "decidir", "processo", LOR)).toBe(true);
+    expect(can(gestorLor, "decidir", "processo", SSR)).toBe(false);
+    expect(can(gestorLor, "cancelar_documento", "documento", LOR)).toBe(true);
+    expect(can(gestorLor, "editar", "empreendimento", LOR)).toBe(false);
   });
   it("FISCAL fiscaliza e cadastra pessoa (autuado), mas não analisa processo", () => {
-    expect(can(fiscalItb, "fiscalizar", "fiscalizacao", ITB)).toBe(true);
-    expect(can(fiscalItb, "criar", "pessoa", ITB)).toBe(true);
-    expect(can(fiscalItb, "editar", "pessoa", ITB)).toBe(false);
-    expect(can(fiscalItb, "analisar", "processo", ITB)).toBe(false);
+    expect(can(fiscalLor, "fiscalizar", "fiscalizacao", LOR)).toBe(true);
+    expect(can(fiscalLor, "criar", "pessoa", LOR)).toBe(true);
+    expect(can(fiscalLor, "editar", "pessoa", LOR)).toBe(false);
+    expect(can(fiscalLor, "analisar", "processo", LOR)).toBe(false);
   });
 });
 

@@ -21,8 +21,8 @@ const texto = (v: ExcelJS.CellValue) => (v === null || v === undefined ? "" : ty
 test("T9 – Indicadores por município em PDF e XLSX com cabeçalho institucional e os números do painel", async ({ page }) => {
   await login(page, "admin");
 
-  // Números da tela (painel, Todos)
-  await page.goto("/dashboard");
+  // Números da tela (painel, Todos – sem o parâmetro o painel abriria no órgão ativo)
+  await page.goto("/dashboard?municipio=");
   const tabela = page.getByTestId("tabela-municipios");
   await expect(tabela).toBeVisible();
   const tela = new Map<string, (number | null)[]>();
@@ -30,7 +30,7 @@ test("T9 – Indicadores por município em PDF e XLSX com cabeçalho institucion
     const nome = (await tr.locator("td").first().innerText()).trim();
     tela.set(nome, await Promise.all(COLS.map(async (c) => numeroBr(await tr.locator(`td[data-col="${c}"]`).innerText()))));
   }
-  expect(tela.size).toBe(9); // 8 municípios + Total
+  expect(tela.size).toBe(7); // 6 municípios + Total
 
   // Tela de relatórios → "Indicadores por município"
   await page.goto("/relatorios");

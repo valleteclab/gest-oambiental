@@ -25,6 +25,7 @@ Topologia: 1 projeto com **Postgres** (plugin), serviço **app** (Next.js) e ser
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | chaves do bucket |
 | `CHROMIUM_PATH` | `/usr/bin/chromium` (já definido na imagem) |
 | `SMTP_URL` / `EMAIL_FROM` | SMTP transacional (sem SMTP os e-mails ficam só em /admin/emails) |
+| `DEMO_MODE` | `true` em ambientes de demonstração (faixa "dados fictícios"); omitir/`false` em produção |
 | `TZ` | `America/Bahia` |
 | `PORT` | `3000` (app) |
 

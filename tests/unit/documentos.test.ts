@@ -17,15 +17,15 @@ import { renderizarDocumento } from "@/lib/documentos/modelo";
 const ctxBase = (over: Partial<ContextoDocumento> = {}): ContextoDocumento => ({
   tipo: "LICENCA",
   titulo: "Licença de Operação",
-  numero: "LO-ITB-001/2026",
+  numero: "LO-LOR-001/2026",
   codigo: "7KQ2-M9XA-D3PL",
   url_validacao: "https://licenciagov.exemplo/validar/7KQ2-M9XA-D3PL",
   dominio: "licenciagov.exemplo",
   emitido_em: new Date("2026-09-27T15:00:00Z"),
   signatario: { nome: "Gestora <Teste>", cargo: "Secretária" },
-  municipio: { nome: "Itaberaba", sigla: "ITB", orgao: "Secretaria de Meio Ambiente", endereco: null, email: null, telefone: null, brasao: "data:image/svg+xml;base64,AA==", organizacao: null },
+  municipio: { nome: "Lagoa do Orvalho", sigla: "LOR", orgao: "Secretaria de Meio Ambiente", endereco: null, email: null, telefone: null, brasao: "data:image/svg+xml;base64,AA==", organizacao: null },
   titular: { nome: "Maria <script>alert(1)</script>", tipo: "PF", documento: "***.456.789-**", endereco: "Rua A" },
-  processo: { numero: "ITB-2026-000001", data_protocolo: new Date("2026-09-01T12:00:00Z"), tipo_ato_nome: "Licença de Operação", tipo_ato_sigla: "LO", descricao_atividade: null },
+  processo: { numero: "LOR-2026-000001", data_protocolo: new Date("2026-09-01T12:00:00Z"), tipo_ato_nome: "Licença de Operação", tipo_ato_sigla: "LO", descricao_atividade: null },
   empreendimento: null,
   rt: null,
   validade_ate: new Date("2030-09-27T12:00:00Z"),
@@ -71,7 +71,7 @@ describe("escape e placeholders", () => {
   });
 
   it("formatarEndereco aceita objeto ou string", () => {
-    expect(formatarEndereco({ logradouro: "Rua A", numero: "10", bairro: "Centro", cidade: "Itaberaba", uf: "BA", cep: "46880-000" })).toBe("Rua A, 10 – Centro – Itaberaba/BA – CEP 46880-000");
+    expect(formatarEndereco({ logradouro: "Rua A", numero: "10", bairro: "Centro", cidade: "Lagoa do Orvalho", uf: "BA", cep: "46880-000" })).toBe("Rua A, 10 – Centro – Lagoa do Orvalho/BA – CEP 46880-000");
     expect(formatarEndereco("Praça X")).toBe("Praça X");
     expect(formatarEndereco(null)).toBe("");
   });
@@ -113,7 +113,7 @@ describe("modelos embutidos", () => {
   it("todos os tipos renderizam com título, número, assinatura e sem HTML injetado", () => {
     for (const tipo of Object.keys(MODELOS) as ContextoDocumento["tipo"][]) {
       const html = MODELOS[tipo](ctxBase({ tipo, dados: { texto: "<img src=x onerror=alert(1)>", motivo: "m", exigencia: "e" } }));
-      expect(html).toContain("LO-ITB-001/2026");
+      expect(html).toContain("LO-LOR-001/2026");
       expect(html).toContain("Gestora &lt;Teste&gt;");
       expect(html).not.toContain("<script>alert(1)</script>");
       expect(html).not.toContain("<img src=x");

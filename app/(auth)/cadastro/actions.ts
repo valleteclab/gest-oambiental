@@ -1,7 +1,7 @@
 "use server";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { criarSessao, hashSenha, validarPoliticaSenha } from "@/lib/auth";
+import { criarSessao, hashSenha, resolverOrgao, ultimoOrgaoEscolhido, validarPoliticaSenha } from "@/lib/auth";
 import { auditar } from "@/lib/audit";
 import { cifrar, hashBusca, mascararCpfCnpj, somenteDigitos } from "@/lib/crypto";
 import { PessoaSchema } from "@/lib/cadastros/validacao";
@@ -61,6 +61,8 @@ export async function cadastrarRequerente(_: EstadoCadastro, form: FormData): Pr
     await auditar({ usuario_id: u.id, acao: "CADASTRO_REQUERENTE", entidade: "usuario", entidade_id: u.id, depois: { email, pessoa_id: pessoa.id, papel: "REQUERENTE" } }, tx);
     return u;
   });
-  await criarSessao(usuario.id);
+  // Órgão ativo inicial: município informado no cadastro ou o último escolhido neste navegador.
+  const orgao = (await resolverOrgao(e.municipio_id)) ?? (await resolverOrgao(await ultimoOrgaoEscolhido()));
+  await criarSessao(usuario.id, orgao);
   redirect("/meus-processos");
 }

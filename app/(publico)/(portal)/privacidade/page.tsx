@@ -9,8 +9,8 @@ export default function PrivacidadePage() {
       <h1 className="titulo-pagina">Política de privacidade</h1>
       <p className="text-slate-600">Última atualização: 27/09/2026.</p>
       <p>
-        Esta política explica como o sistema LicenciaGov, operado pelo Consórcio de Desenvolvimento Sustentável do Piemonte do Paraguaçu (CDS Piemonte) e pelos
-        órgãos ambientais dos municípios consorciados, trata dados pessoais, em conformidade com a Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018 – LGPD)
+        Esta política explica como o sistema LicenciaGov, utilizado pelos órgãos ambientais municipais e, quando for o caso,
+        pelo consórcio público que os reúne, trata dados pessoais, em conformidade com a Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018 – LGPD)
         e com a Lei de Acesso à Informação (Lei nº 12.527/2011).
       </p>
 

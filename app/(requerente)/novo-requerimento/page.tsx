@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { exigirUsuario } from "@/lib/auth";
+import { exigirUsuario, getOrgaoAtivo } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { Aviso, CabecalhoPagina } from "@/components/ui";
 import { documentosExigidos, UUID_RE } from "@/lib/processo/consultas";
@@ -49,7 +49,8 @@ export default async function NovoRequerimento({ searchParams }: { searchParams:
     };
   }
 
-  const [municipios, tipologias, tiposAto, empreendimentos] = await Promise.all([
+  const [orgao, municipios, tipologias, tiposAto, empreendimentos] = await Promise.all([
+    getOrgaoAtivo(),
     prisma.municipio.findMany({ where: { ativo: true }, select: { id: true, nome: true, latitude: true, longitude: true }, orderBy: { nome: "asc" } }),
     prisma.tipologia.findMany({ where: { ativo: true }, select: { id: true, codigo: true, divisao: true, descricao: true, unidade_porte: true, faixas_porte: true, potencial_poluidor: true }, orderBy: { codigo: "asc" } }),
     prisma.tipoAto.findMany({ where: { ativo: true }, select: { id: true, sigla: true, nome: true, categoria: true, validade_meses_padrao: true, prazo_analise_dias: true }, orderBy: { sigla: "asc" } }),
@@ -61,6 +62,7 @@ export default async function NovoRequerimento({ searchParams }: { searchParams:
   ]);
 
   const dados: DadosWizard = {
+    municipioPadrao: orgao && municipios.some((m) => m.id === orgao.id) ? orgao.id : null,
     municipios: municipios.map((m) => ({ id: m.id, nome: m.nome, lat: m.latitude ? Number(m.latitude) : null, lng: m.longitude ? Number(m.longitude) : null })),
     tipologias: tipologias.map((t) => ({ ...t, faixas_porte: t.faixas_porte as unknown })),
     tiposAto,
