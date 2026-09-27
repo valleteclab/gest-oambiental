@@ -5,8 +5,10 @@ Topologia: 1 projeto com **Postgres** (plugin), serviço **app** (Next.js) e ser
 ## 1. Criar o projeto
 1. railway.com → **New Project → Deploy from GitHub repo** → `valleteclab/gest-oambiental` (branch do deploy).
 2. **+ New → Database → PostgreSQL**.
-3. No serviço criado a partir do repo (renomeie para `app`): *Settings → Config-as-code* = `railway.json`.
-4. **+ New → GitHub Repo** (mesmo repo) → renomeie para `worker` → *Config-as-code* = `railway.worker.json`. O worker roda `prisma migrate deploy` antes de cada deploy.
+3. Serviço `app` (do repo): *Settings → Build → Dockerfile path* = `Dockerfile`; *Deploy → Healthcheck path* = `/api/health`.
+4. Serviço `worker` (mesmo repo): *Dockerfile path* = `Dockerfile.worker`; *Pre-deploy command* =
+   `sh -c 'npx prisma migrate deploy && if [ "$SEED_DEMO" = "true" ]; then npm run seed:demo; fi'`
+   (migrações a cada deploy; `SEED_DEMO=true` só em homologação – o seed é idempotente).
 5. No `app`: *Settings → Networking → Generate Domain* (ou domínio próprio, ex.: `licenciagov.valleteclab.com.br`).
 
 ## 2. Variáveis (app e worker – use *Shared Variables*)
