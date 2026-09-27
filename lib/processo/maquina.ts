@@ -44,6 +44,21 @@ export const ROTULO_ACAO: Record<AcaoProcesso, string> = {
   arquivar: "Arquivar",
 };
 
+/** Rótulos de status (cópia de components/ui ROTULO_STATUS para uso em código de servidor/jobs sem React). */
+export const ROTULO_STATUS_PROCESSO: Record<StatusProcesso, string> = {
+  RASCUNHO: "Rascunho",
+  PROTOCOLADO: "Protocolado",
+  EM_TRIAGEM: "Em triagem",
+  AGUARDANDO_REQUERENTE: "Aguardando requerente",
+  EM_ANALISE: "Em análise",
+  AGUARDANDO_VISTORIA: "Aguardando vistoria",
+  AGUARDANDO_DECISAO: "Aguardando decisão",
+  DEFERIDO: "Deferido",
+  INDEFERIDO: "Indeferido",
+  CONCLUIDO: "Concluído",
+  ARQUIVADO: "Arquivado",
+};
+
 /** Status em que o processo está "em andamento" (relógio correndo ou pausado). */
 export const STATUS_ATIVOS: StatusProcesso[] = ["PROTOCOLADO", "EM_TRIAGEM", "AGUARDANDO_REQUERENTE", "EM_ANALISE", "AGUARDANDO_VISTORIA", "AGUARDANDO_DECISAO"];
 export const STATUS_FINAIS: StatusProcesso[] = ["CONCLUIDO", "ARQUIVADO"];

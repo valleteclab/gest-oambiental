@@ -10,8 +10,7 @@ import { somarDias } from "../dias";
 import { esc } from "../pdf";
 import { enviarEmail } from "../email";
 import type { UsuarioSessao } from "../rbac";
-import { ROTULO_STATUS } from "@/components/ui";
-import { destino, itensChecklistPendentes, lerItensChecklist, normalizarAcao, permitido, proximoDoRodizio, ROTULO_ACAO, type AcaoProcesso } from "./maquina";
+import { destino, ROTULO_STATUS_PROCESSO, itensChecklistPendentes, lerItensChecklist, normalizarAcao, permitido, proximoDoRodizio, ROTULO_ACAO, type AcaoProcesso } from "./maquina";
 import { podeVerProcesso, tecnicosElegiveis, UUID_RE } from "./consultas";
 import { emitirDocumentoDecisao, emitirPdfParecer, emitirRecibo, tentarEmitir, tipoDocumentoDoAto } from "./documentos";
 
@@ -410,7 +409,7 @@ async function concluirComDocumento(processoId: string, doc: DocumentoOficial, u
     await tx.$queryRaw`SELECT id FROM processo WHERE id = ${processoId}::uuid FOR UPDATE`;
     const p = await tx.processo.findUniqueOrThrow({ where: { id: processoId }, include: INCLUDE });
     if (p.status === "CONCLUIDO") return p;
-    if (!destino("emitir_documento", p.status)) throw conflito(`Processo em "${ROTULO_STATUS[p.status]}" não aguarda emissão de documento.`);
+    if (!destino("emitir_documento", p.status)) throw conflito(`Processo em "${ROTULO_STATUS_PROCESSO[p.status]}" não aguarda emissão de documento.`);
     const nome = { LICENCA: "Licença", AUTORIZACAO: "Autorização", CERTIDAO: "Certidão", OFICIO: "Ofício de indeferimento" }[doc.tipo as "LICENCA"] ?? "Documento";
     return aplicarPasso(tx, p, p.status, { acao: "emitir_documento", para: "CONCLUIDO", data: { data_conclusao: new Date() }, despacho: `${nome} nº ${doc.numero} emitido(a) (código ${doc.codigo_verificador}).`, publico: true, extra: { documento_id: doc.id } }, u);
   });
@@ -446,7 +445,7 @@ export async function transicionar(processoId: string, acaoBruta: string, payloa
   if (acao === "emitir_documento") {
     const ctx = { status: previa.status, municipio_id: previa.municipio_id, requerente_id: previa.requerente_id, rt_pessoa_id: previa.rt?.pessoa_id, delega_decisao: previa.municipio.delega_decisao, exige_parecer: previa.tipo_ato.exige_parecer };
     if (!permitido(usuario, acao, ctx)) throw proibido("Seu perfil não pode emitir o documento deste processo.");
-    if (!destino(acao, previa.status)) throw conflito(`Ação "${ROTULO_ACAO[acao]}" não permitida em "${ROTULO_STATUS[previa.status]}".`);
+    if (!destino(acao, previa.status)) throw conflito(`Ação "${ROTULO_ACAO[acao]}" não permitida em "${ROTULO_STATUS_PROCESSO[previa.status]}".`);
     const r = await tentarEmitir(() => emitirDocumentoDecisao(processoId, usuario));
     if (!r.ok) throw new ErroApi(502, "FALHA_EMISSAO", `Não foi possível emitir o documento: ${r.erro}`);
     documentos.push(r.valor);
@@ -462,7 +461,7 @@ export async function transicionar(processoId: string, acaoBruta: string, payloa
       let p = await tx.processo.findUniqueOrThrow({ where: { id: processoId }, include: INCLUDE });
       const ctx = { status: p.status, municipio_id: p.municipio_id, requerente_id: p.requerente_id, rt_pessoa_id: p.rt?.pessoa_id, delega_decisao: p.municipio.delega_decisao, exige_parecer: p.tipo_ato.exige_parecer };
       if (!permitido(usuario, acao, ctx)) throw proibido(`Seu perfil não pode executar "${ROTULO_ACAO[acao]}" neste processo.`);
-      if (!destino(acao, p.status)) throw conflito(`Ação "${ROTULO_ACAO[acao]}" não permitida no status "${ROTULO_STATUS[p.status]}".`);
+      if (!destino(acao, p.status)) throw conflito(`Ação "${ROTULO_ACAO[acao]}" não permitida no status "${ROTULO_STATUS_PROCESSO[p.status]}".`);
       const passos = await montarPassos(tx, p, acao, payload, usuario, pos);
       let atual = p.status;
       for (const passo of passos) {
