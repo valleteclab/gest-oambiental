@@ -13,6 +13,7 @@ export const POST = rota(async (req: Request, { params }: { params: Promise<{ id
   const { id } = await params;
   const corpo = await req.json();
   const a = await confirmarUpload(id, Corpo.parse(corpo), corpo, u);
-  const { storage_key: _k, ...resto } = a;
+  const resto: Partial<typeof a> = { ...a };
+  delete resto.storage_key;
   return NextResponse.json({ ...resto, url: `/api/v1/anexos/${a.id}` }, { status: 201 });
 });

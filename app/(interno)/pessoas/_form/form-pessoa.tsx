@@ -1,8 +1,8 @@
 "use client";
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useState } from "react";
 import { salvarPessoa } from "../actions";
-import { CampoSelect, CampoTexto, CamposEndereco, MensagemEstado } from "./campos";
+import { useFormAcao, CampoSelect, CampoTexto, CamposEndereco, MensagemEstado } from "./campos";
 
 export type ValorPessoa = {
   id?: string;
@@ -17,10 +17,10 @@ export type ValorPessoa = {
 };
 
 export function FormPessoa({ valor, municipios, exigeMunicipio }: { valor?: ValorPessoa; municipios: { id: string; nome: string }[]; exigeMunicipio: boolean }) {
-  const [estado, acao, pendente] = useActionState(salvarPessoa, undefined);
+  const [estado, onSubmit, pendente] = useFormAcao(salvarPessoa);
   const [tipo, setTipo] = useState<"PF" | "PJ">(valor?.tipo ?? "PJ");
   return (
-    <form action={acao} className="space-y-5" noValidate>
+    <form onSubmit={onSubmit} className="space-y-5" noValidate>
       {valor?.id && <input type="hidden" name="id" value={valor.id} />}
       <MensagemEstado estado={estado} />
       {estado?.extra?.existente && (

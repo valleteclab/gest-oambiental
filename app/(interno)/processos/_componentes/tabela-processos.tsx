@@ -3,6 +3,7 @@ import type { StatusProcesso } from "@prisma/client";
 import { fmtData } from "@/lib/format";
 import { diasRestantes, semaforo } from "@/lib/dias";
 import { BadgeStatus, PontoSemaforo, Vazio } from "@/components/ui";
+import { diasAlertaDe } from "@/lib/processo/consultas";
 
 export type LinhaProcesso = {
   id: string;
@@ -11,15 +12,16 @@ export type LinhaProcesso = {
   data_protocolo: Date | null;
   prazo_etapa_ate: Date | null;
   prazo_pausado: boolean;
-  municipio: { sigla: string; nome: string };
+  etapa_atual?: string | null;
+  municipio: { id?: string; sigla: string; nome: string };
   tipo_ato: { sigla: string; nome: string };
   empreendimento: { nome: string };
   requerente: { nome: string };
   tecnico: { nome: string } | null;
 };
 
-function Prazo({ p }: { p: LinhaProcesso }) {
-  const s = semaforo(p.prazo_etapa_ate, 5, p.prazo_pausado);
+function Prazo({ p, diasAlerta }: { p: LinhaProcesso; diasAlerta: number }) {
+  const s = semaforo(p.prazo_etapa_ate, diasAlerta, p.prazo_pausado);
   const r = p.prazo_etapa_ate ? diasRestantes(p.prazo_etapa_ate) : null;
   return (
     <span className="inline-flex items-center gap-2 whitespace-nowrap">
@@ -36,7 +38,7 @@ function Prazo({ p }: { p: LinhaProcesso }) {
   );
 }
 
-export function TabelaProcessos({ itens, vazio = "Nenhum processo encontrado." }: { itens: LinhaProcesso[]; vazio?: string }) {
+export function TabelaProcessos({ itens, vazio = "Nenhum processo encontrado.", alertas = {} }: { itens: LinhaProcesso[]; vazio?: string; alertas?: Record<string, number> }) {
   if (!itens.length) return <Vazio>{vazio}</Vazio>;
   return (
     <div className="overflow-x-auto">
@@ -47,7 +49,7 @@ export function TabelaProcessos({ itens, vazio = "Nenhum processo encontrado." }
         <tbody>
           {itens.map((p) => (
             <tr key={p.id}>
-              <td><Prazo p={p} /></td>
+              <td><Prazo p={p} diasAlerta={diasAlertaDe(alertas, p.municipio.id ?? "", p.etapa_atual)} /></td>
               <td className="whitespace-nowrap">
                 <Link href={`/processos/${p.id}`} className="font-medium text-primaria-700 hover:underline">{p.numero ?? "Rascunho"}</Link>
                 <div className="text-xs text-slate-500">{fmtData(p.data_protocolo)}</div>

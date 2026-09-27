@@ -6,7 +6,7 @@ import { can, isSomenteLeitura, whereProcessoEscopo } from "@/lib/rbac";
 import { obterResponsavel } from "@/lib/cadastros/responsaveis";
 import { whereEmpreendimentoEscopo } from "@/lib/cadastros/escopo";
 import { podeVerPessoa } from "@/lib/cadastros/pessoas";
-import { fmtData } from "@/lib/format";
+import { fmtDataPura } from "@/lib/cadastros/datas";
 import { AcessoNegado } from "@/components/acesso-negado";
 import { Aviso, Badge, BadgeStatus, CabecalhoPagina, Card, Vazio } from "@/components/ui";
 
@@ -56,8 +56,8 @@ export default async function PaginaRt({ params, searchParams }: { params: Promi
                     <tr key={v.id}>
                       <td><Link href={`/empreendimentos/${v.empreendimento.id}`} className="text-primaria-700 hover:underline">{v.empreendimento.nome}</Link></td>
                       <td>{v.empreendimento.municipio.nome}</td>
-                      <td>{fmtData(v.desde)}</td>
-                      <td>{v.ate ? fmtData(v.ate) : <Badge cor="verde">Atual</Badge>}</td>
+                      <td>{fmtDataPura(v.desde)}</td>
+                      <td>{v.ate ? fmtDataPura(v.ate) : <Badge cor="verde">Atual</Badge>}</td>
                     </tr>
                   ))}
                 </tbody>

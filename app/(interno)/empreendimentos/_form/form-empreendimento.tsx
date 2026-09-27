@@ -1,10 +1,10 @@
 "use client";
 import Link from "next/link";
-import { useActionState, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Mapa } from "@/components/mapa";
 import { calcularPorte, PORTES, ROTULO_PORTE } from "@/lib/cadastros/porte";
 import { salvarEmpreendimento } from "../actions";
-import { CampoSelect, CampoTexto, CamposEndereco, Erro, MensagemEstado } from "../../pessoas/_form/campos";
+import { useFormAcao, CampoSelect, CampoTexto, CamposEndereco, Erro, MensagemEstado } from "../../pessoas/_form/campos";
 
 type Opc = { id: string; nome: string };
 type Tip = { id: string; codigo: string; descricao: string; unidade_porte: string; faixas_porte: unknown; potencial_poluidor: string };
@@ -33,7 +33,7 @@ const ROTULO_PP: Record<string, string> = { BAIXO: "Baixo", MEDIO: "Médio", ALT
 
 export function FormEmpreendimento(props: { valor?: ValorEmp; municipios: Mun[]; requerentes: (Opc & { doc: string })[]; tipologias: Tip[]; rts: (Opc & { registro: string })[]; podeAjustarPorte: boolean }) {
   const { valor, municipios, requerentes, tipologias, rts, podeAjustarPorte } = props;
-  const [estado, acao, pendente] = useActionState(salvarEmpreendimento, undefined);
+  const [estado, onSubmit, pendente] = useFormAcao(salvarEmpreendimento);
   const [municipioId, setMunicipioId] = useState(valor?.municipio_id ?? (municipios.length === 1 ? municipios[0].id : ""));
   const [lat, setLat] = useState<string>(valor?.latitude?.toString() ?? "");
   const [lng, setLng] = useState<string>(valor?.longitude?.toString() ?? "");
@@ -61,7 +61,7 @@ export function FormEmpreendimento(props: { valor?: ValorEmp; municipios: Mun[];
   }
 
   return (
-    <form action={acao} className="space-y-6" noValidate>
+    <form onSubmit={onSubmit} className="space-y-6" noValidate>
       {valor?.id && <input type="hidden" name="id" value={valor.id} />}
       <MensagemEstado estado={estado} />
       <div className="grid gap-3 sm:grid-cols-2">

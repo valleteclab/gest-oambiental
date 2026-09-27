@@ -8,6 +8,7 @@ import { whereEmpreendimentoEscopo } from "./escopo";
 import { podeVerPessoa } from "./pessoas";
 import { calcularPorte } from "./porte";
 import { EmpreendimentoSchema } from "./validacao";
+import { hojeDataPura } from "./datas";
 
 // Empreendimentos (SPEC 5.2): porte calculado pela tipologia + grandeza; ajuste manual só por técnico com justificativa.
 
@@ -58,7 +59,9 @@ export async function obterEmpreendimentoBasico(u: UsuarioSessao, id: string): P
 
 function paraLog(e: Empreendimento | null, rt_id?: string | null) {
   if (!e) return null;
-  const { created_at: _c, updated_at: _u, ...resto } = e;
+  const resto: Partial<Empreendimento> = { ...e };
+  delete resto.created_at;
+  delete resto.updated_at;
   return rt_id === undefined ? resto : { ...resto, rt_id };
 }
 
@@ -92,7 +95,7 @@ async function checarRequerente(u: UsuarioSessao, requerenteId: string) {
 async function trocarRt(tx: Prisma.TransactionClient, empreendimentoId: string, rtId: string | null) {
   const ativo = await tx.empreendimentoRt.findFirst({ where: { empreendimento_id: empreendimentoId, ate: null } });
   if ((ativo?.rt_id ?? null) === rtId) return false;
-  const hoje = new Date();
+  const hoje = hojeDataPura();
   if (ativo) await tx.empreendimentoRt.update({ where: { id: ativo.id }, data: { ate: hoje } });
   if (rtId) await tx.empreendimentoRt.create({ data: { empreendimento_id: empreendimentoId, rt_id: rtId, desde: hoje } });
   return true;

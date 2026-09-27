@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { can, temPapel } from "@/lib/rbac";
 import { semaforo } from "@/lib/dias";
 import { CabecalhoPagina, Card } from "@/components/ui";
-import { SELECT_LISTA, whereProcessos } from "@/lib/processo/consultas";
+import { diasAlertaDe, mapaDiasAlerta, SELECT_LISTA, whereProcessos } from "@/lib/processo/consultas";
 import { STATUS_ATIVOS } from "@/lib/processo/maquina";
 import { TabelaProcessos } from "../processos/_componentes/tabela-processos";
 
@@ -18,14 +18,15 @@ export default async function PaginaCaixa() {
   const escopo = whereProcessos(u, { incluirRascunhos: false });
   const ordem = [{ prazo_etapa_ate: { sort: "asc" as const, nulls: "last" as const } }, { data_protocolo: "asc" as const }];
 
-  const [meus, decisao, distribuir] = await Promise.all([
+  const [alertas, meus, decisao, distribuir] = await Promise.all([
+    mapaDiasAlerta(),
     prisma.processo.findMany({ where: { AND: [escopo, { tecnico_id: u.id, status: { in: STATUS_ATIVOS } }] }, select: SELECT_LISTA, orderBy: ordem, take: 200 }),
     gestor
       ? prisma.processo.findMany({ where: { AND: [escopo, { status: "AGUARDANDO_DECISAO" }, temPapel(u, "ADMIN") ? {} : { municipio_id: { in: municipiosGestor } }] }, select: SELECT_LISTA, orderBy: ordem, take: 200 })
       : Promise.resolve([]),
     can(u, "triar", "processo") ? prisma.processo.findMany({ where: { AND: [escopo, { status: "PROTOCOLADO" }] }, select: SELECT_LISTA, orderBy: ordem, take: 200 }) : Promise.resolve([]),
   ]);
-  const contar = (l: typeof meus) => ({ vencidos: l.filter((p) => semaforo(p.prazo_etapa_ate, 5, p.prazo_pausado) === "vermelho").length, vencendo: l.filter((p) => semaforo(p.prazo_etapa_ate, 5, p.prazo_pausado) === "amarelo").length });
+  const contar = (l: typeof meus) => ({ vencidos: l.filter((p) => semaforo(p.prazo_etapa_ate, diasAlertaDe(alertas, p.municipio.id, p.etapa_atual), p.prazo_pausado) === "vermelho").length, vencendo: l.filter((p) => semaforo(p.prazo_etapa_ate, diasAlertaDe(alertas, p.municipio.id, p.etapa_atual), p.prazo_pausado) === "amarelo").length });
   const c = contar(meus);
   return (
     <>
@@ -33,16 +34,16 @@ export default async function PaginaCaixa() {
       <div className="space-y-5">
         {distribuir.length > 0 && (
           <Card titulo={`Aguardando distribuição (${distribuir.length})`}>
-            <TabelaProcessos itens={distribuir} />
+            <TabelaProcessos itens={distribuir} alertas={alertas} />
           </Card>
         )}
         {gestor && (
           <Card titulo={`Aguardando decisão (${decisao.length})`}>
-            <TabelaProcessos itens={decisao} vazio="Nenhum processo aguardando decisão." />
+            <TabelaProcessos itens={decisao} alertas={alertas} vazio="Nenhum processo aguardando decisão." />
           </Card>
         )}
         <Card titulo="Meus processos (por prazo)">
-          <TabelaProcessos itens={meus} vazio="Nenhum processo distribuído para você." />
+          <TabelaProcessos itens={meus} alertas={alertas} vazio="Nenhum processo distribuído para você." />
         </Card>
       </div>
     </>

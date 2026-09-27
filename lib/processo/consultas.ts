@@ -135,3 +135,14 @@ export function whereTitular(u: UsuarioSessao): Prisma.ProcessoWhereInput {
   if (!u.pessoa_id) return { id: "00000000-0000-0000-0000-000000000000" };
   return { OR: [{ requerente_id: u.pessoa_id }, { rt: { pessoa_id: u.pessoa_id } }] };
 }
+
+/** dias_alerta por etapa/município (prazo_config; município sobrepõe organização) – para o semáforo das listas. */
+export async function mapaDiasAlerta(): Promise<Record<string, number>> {
+  const cfgs = await prisma.prazoConfig.findMany({ select: { municipio_id: true, etapa: true, dias_alerta: true } });
+  return Object.fromEntries(cfgs.map((c) => [`${c.municipio_id ?? "*"}:${c.etapa}`, c.dias_alerta]));
+}
+
+export function diasAlertaDe(mapa: Record<string, number>, municipioId: string, etapa: string | null | undefined): number {
+  if (!etapa) return 5;
+  return mapa[`${municipioId}:${etapa}`] ?? mapa[`*:${etapa}`] ?? 5;
+}

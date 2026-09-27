@@ -24,9 +24,16 @@ export function podeVerDadosPessoais(u: UsuarioSessao, p: Pick<Pessoa, "municipi
   return escopoMunicipios(u) === "TODOS" || !p.municipio_id || can(u, "ver", "pessoa", p.municipio_id);
 }
 
+function semSegredos(p: Pessoa): Omit<Pessoa, "cpf_cnpj_cifrado" | "cpf_cnpj_hash"> {
+  const r: Partial<Pessoa> = { ...p };
+  delete r.cpf_cnpj_cifrado;
+  delete r.cpf_cnpj_hash;
+  return r as Omit<Pessoa, "cpf_cnpj_cifrado" | "cpf_cnpj_hash">;
+}
+
 export function decifrarPessoa(p: Pessoa): PessoaDecifrada {
   const doc = decifrar(p.cpf_cnpj_cifrado);
-  const { cpf_cnpj_cifrado: _c, cpf_cnpj_hash: _h, ...resto } = p;
+  const resto = semSegredos(p);
   return {
     ...resto,
     email: p.tipo === "PF" ? decifrar(p.email) : p.email,
@@ -38,7 +45,7 @@ export function decifrarPessoa(p: Pessoa): PessoaDecifrada {
 
 /** Versão mascarada para quem não pode ver os dados pessoais. */
 export function mascararPessoa(p: Pessoa): PessoaDecifrada {
-  const { cpf_cnpj_cifrado: _c, cpf_cnpj_hash: _h, ...resto } = p;
+  const resto = semSegredos(p);
   return { ...resto, email: p.tipo === "PF" ? null : p.email, telefone: p.tipo === "PF" ? null : p.telefone, cpf_cnpj: null, cpf_cnpj_formatado: p.cpf_cnpj_mascara };
 }
 

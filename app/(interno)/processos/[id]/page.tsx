@@ -8,7 +8,7 @@ import { isInterno, isSomenteLeitura } from "@/lib/rbac";
 import { Aviso, Badge, BadgeStatus, Card, PontoSemaforo, Vazio } from "@/components/ui";
 import { formatarEndereco } from "@/lib/cadastros/validacao";
 import { ROTULO_PORTE } from "@/lib/processo/porte";
-import { acoesDoProcesso, documentosExigidos, tecnicosElegiveis } from "@/lib/processo/consultas";
+import { acoesDoProcesso, diasAlertaDe, documentosExigidos, mapaDiasAlerta, tecnicosElegiveis } from "@/lib/processo/consultas";
 import { itensChecklistPendentes, lerItensChecklist } from "@/lib/processo/maquina";
 import { podeEditarChecklist } from "@/lib/processo/checklist";
 import { podeAnexar } from "@/lib/processo/anexos";
@@ -34,6 +34,7 @@ const ABAS = [
 ] as const;
 type Aba = (typeof ABAS)[number][0];
 
+const ROTULO_ETAPA: Record<string, string> = { TRIAGEM: "triagem", ANALISE_CURTA: "análise", ANALISE_LONGA: "análise", PENDENCIA: "pendência do requerente", VISTORIA: "vistoria", DECISAO: "decisão" };
 const ROTULO_CONCLUSAO = { FAVORAVEL: "Favorável", DESFAVORAVEL: "Desfavorável", FAVORAVEL_COM_CONDICIONANTES: "Favorável com condicionantes" } as const;
 const ROTULO_DOC: Record<string, string> = { LICENCA: "Licença", AUTORIZACAO: "Autorização", CERTIDAO: "Certidão", PARECER: "Parecer técnico", OFICIO: "Ofício", RECIBO: "Recibo de protocolo", NOTIFICACAO: "Notificação", AUTO_INFRACAO: "Auto de infração" };
 
@@ -76,7 +77,7 @@ export default async function PaginaProcesso({ params, searchParams }: { params:
   const itensChecklist = lerItensChecklist(p.tipo_ato.checklist_modelo?.itens);
   const respostas = (checklist?.respostas as Record<string, unknown>) ?? {};
   const checklistPendente = itensChecklistPendentes(itensChecklist, respostas).map((i) => i.texto);
-  const sem = semaforo(p.prazo_etapa_ate, 5, p.prazo_pausado);
+  const sem = semaforo(p.prazo_etapa_ate, diasAlertaDe(await mapaDiasAlerta(), p.municipio_id, p.etapa_atual), p.prazo_pausado);
   const restantes = p.prazo_etapa_ate ? diasRestantes(p.prazo_etapa_ate) : null;
   const abertas = pendencias.filter((x) => x.status === "ABERTA" || x.status === "VENCIDA");
   const logs = aba === "log" ? await prisma.logAuditoria.findMany({
@@ -105,7 +106,7 @@ export default async function PaginaProcesso({ params, searchParams }: { params:
               <PontoSemaforo s={sem} />
               {p.prazo_etapa_ate ? (
                 <>
-                  Prazo da etapa{p.etapa_atual ? ` (${p.etapa_atual.replace("_", " ").toLowerCase()})` : ""}: {fmtData(p.prazo_etapa_ate)}
+                  Prazo da etapa{p.etapa_atual ? ` (${ROTULO_ETAPA[p.etapa_atual] ?? p.etapa_atual.toLowerCase()})` : ""}: {fmtData(p.prazo_etapa_ate)}
                   {p.prazo_pausado ? <Badge cor="amarelo">relógio pausado{p.prazo_saldo_dias !== null ? ` · saldo ${p.prazo_saldo_dias} d` : ""}</Badge> : restantes !== null && <span className="text-xs text-slate-500">({restantes >= 0 ? `${restantes} dia(s)` : `vencido há ${-restantes} dia(s)`})</span>}
                 </>
               ) : (

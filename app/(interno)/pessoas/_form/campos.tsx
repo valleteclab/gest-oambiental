@@ -1,10 +1,25 @@
 "use client";
 import clsx from "clsx";
+import { startTransition, useActionState } from "react";
 import { Aviso } from "@/components/ui";
 
 // Campos de formulário compartilhados pelos cadastros (pessoas, RTs, empreendimentos).
 
 export type Estado = { ok?: boolean; erro?: string; mensagem?: string; campos?: Record<string, string>; extra?: Record<string, string> } | undefined;
+
+/**
+ * Server Action via onSubmit (sem `action=`): o React 19 limpa formulários não controlados após uma
+ * action de `<form action>`, o que apagaria o que o usuário digitou quando há erro de validação.
+ */
+export function useFormAcao(fn: (estado: Estado, form: FormData) => Promise<Estado>) {
+  const [estado, acao, pendente] = useActionState<Estado, FormData>(fn, undefined);
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget, (e.nativeEvent as SubmitEvent).submitter);
+    startTransition(() => acao(fd));
+  };
+  return [estado, onSubmit, pendente] as const;
+}
 
 export function Erro({ id, msg }: { id: string; msg?: string }) {
   if (!msg) return null;

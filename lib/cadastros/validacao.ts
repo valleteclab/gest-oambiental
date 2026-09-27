@@ -45,6 +45,7 @@ export type Endereco = z.infer<typeof EnderecoSchema>;
 export function formatarEndereco(e: unknown): string {
   if (!e || typeof e !== "object") return "—";
   const x = e as Record<string, string | null | undefined>;
+  if (!x.logradouro && !x.bairro && !x.cidade && !x.cep) return "—";
   const cep = x.cep && x.cep.length === 8 ? `${x.cep.slice(0, 5)}-${x.cep.slice(5)}` : x.cep;
   const linha1 = [x.logradouro, x.numero].filter(Boolean).join(", ");
   const partes = [linha1 + (x.complemento ? ` – ${x.complemento}` : ""), x.bairro, [x.cidade, x.uf].filter(Boolean).join("/"), cep ? `CEP ${cep}` : null].filter(Boolean);

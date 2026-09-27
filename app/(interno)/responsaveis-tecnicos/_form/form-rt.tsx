@@ -1,17 +1,16 @@
 "use client";
 import Link from "next/link";
-import { useActionState } from "react";
 import { salvarResponsavel } from "../actions";
-import { CampoSelect, CampoTexto, MensagemEstado, UFS } from "../../pessoas/_form/campos";
+import { useFormAcao, CampoSelect, CampoTexto, MensagemEstado, UFS } from "../../pessoas/_form/campos";
 
 const CONSELHOS = ["CREA", "CRBio", "CRQ", "CAU", "CFT", "CRMV", "CORECON", "Outro"];
 
 export type ValorRt = { id?: string; pessoa_id?: string; formacao?: string; conselho?: string; registro_conselho?: string; uf_conselho?: string };
 
 export function FormRt({ valor, pessoas }: { valor?: ValorRt; pessoas: { id: string; nome: string; cpf_cnpj_mascara: string }[] }) {
-  const [estado, acao, pendente] = useActionState(salvarResponsavel, undefined);
+  const [estado, onSubmit, pendente] = useFormAcao(salvarResponsavel);
   return (
-    <form action={acao} className="space-y-5" noValidate>
+    <form onSubmit={onSubmit} className="space-y-5" noValidate>
       {valor?.id && <input type="hidden" name="id" value={valor.id} />}
       <MensagemEstado estado={estado} />
       <div className="grid gap-3 sm:grid-cols-2">

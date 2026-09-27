@@ -1,6 +1,6 @@
 "use client";
 import clsx from "clsx";
-import { useActionState, useEffect, useRef } from "react";
+import { startTransition, useActionState, useEffect, useRef } from "react";
 import { Aviso } from "@/components/ui";
 
 export type EstadoForm = { ok?: boolean; erro?: string; mensagem?: string; campos?: Record<string, string>; extra?: Record<string, string> } | undefined;
@@ -29,11 +29,14 @@ export function FormAdmin({ action, children, botao = "Salvar", classeBotao = "b
   return (
     <form
       ref={ref}
-      action={acao}
       aria-label={rotuloAcessivel}
       className={clsx(inline ? "inline-flex flex-wrap items-end gap-2" : "space-y-4", className)}
       onSubmit={(e) => {
-        if (confirmar && !window.confirm(confirmar)) e.preventDefault();
+        // Envio manual (sem action=): evita o reset automático do React 19 que apagaria os campos em caso de erro.
+        e.preventDefault();
+        if (confirmar && !window.confirm(confirmar)) return;
+        const fd = new FormData(e.currentTarget, (e.nativeEvent as SubmitEvent).submitter);
+        startTransition(() => acao(fd));
       }}
     >
       {children}

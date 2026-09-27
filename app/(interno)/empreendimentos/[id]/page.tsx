@@ -6,6 +6,7 @@ import { fichaEmpreendimento, obterEmpreendimentoBasico } from "@/lib/cadastros/
 import { podeVerPessoa } from "@/lib/cadastros/pessoas";
 import { ROTULO_PORTE } from "@/lib/cadastros/porte";
 import { formatarEndereco } from "@/lib/cadastros/validacao";
+import { fmtDataPura } from "@/lib/cadastros/datas";
 import { fmtData, fmtDataHora, fmtNumero } from "@/lib/format";
 import { AcessoNegado } from "@/components/acesso-negado";
 import { Mapa } from "@/components/mapa";
@@ -64,7 +65,7 @@ export default async function FichaEmpreendimento({ params, searchParams }: { pa
                     <>
                       <Link href={`/responsaveis-tecnicos/${rtAtual.rt.id}`} className="font-medium text-primaria-700 hover:underline">{rtAtual.rt.pessoa.nome}</Link>
                       <div>{rtAtual.rt.formacao} · <strong>{rtAtual.rt.conselho} nº {rtAtual.rt.registro_conselho}/{rtAtual.rt.uf_conselho}</strong></div>
-                      <div className="text-xs text-slate-500">desde {fmtData(rtAtual.desde)}</div>
+                      <div className="text-xs text-slate-500">desde {fmtDataPura(rtAtual.desde)}</div>
                     </>
                   ) : "—"}
                 </dd>
@@ -75,7 +76,7 @@ export default async function FichaEmpreendimento({ params, searchParams }: { pa
                   <dd>
                     <ul className="list-inside list-disc">
                       {e.rts.filter((r) => r.ate).map((r) => (
-                        <li key={r.id}>{r.rt.pessoa.nome} ({r.rt.conselho} {r.rt.registro_conselho}/{r.rt.uf_conselho}) – {fmtData(r.desde)} a {fmtData(r.ate)}</li>
+                        <li key={r.id}>{r.rt.pessoa.nome} ({r.rt.conselho} {r.rt.registro_conselho}/{r.rt.uf_conselho}) – {fmtDataPura(r.desde)} a {fmtDataPura(r.ate)}</li>
                       ))}
                     </ul>
                   </dd>

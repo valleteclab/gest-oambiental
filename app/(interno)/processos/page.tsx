@@ -1,9 +1,10 @@
+import Link from "next/link";
 import type { StatusProcesso } from "@prisma/client";
 import { exigirUsuario } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { can, escopoMunicipios, isSomenteLeitura } from "@/lib/rbac";
 import { CabecalhoPagina, Card, Paginacao, ROTULO_STATUS } from "@/components/ui";
-import { listarProcessos } from "@/lib/processo/consultas";
+import { listarProcessos, mapaDiasAlerta } from "@/lib/processo/consultas";
 import { TabelaProcessos } from "./_componentes/tabela-processos";
 import { Proibido } from "./_componentes/proibido";
 
@@ -19,7 +20,8 @@ export default async function PaginaProcessos({ searchParams }: { searchParams: 
   const size = 20;
   const status = sp.status && sp.status in ROTULO_STATUS ? (sp.status as StatusProcesso) : null;
   const escopo = escopoMunicipios(u);
-  const [municipios, tipos, tecnicos, { total, itens }] = await Promise.all([
+  const [alertas, municipios, tipos, tecnicos, { total, itens }] = await Promise.all([
+    mapaDiasAlerta(),
     prisma.municipio.findMany({ where: escopo === "TODOS" ? { ativo: true } : { id: { in: escopo } }, select: { id: true, nome: true }, orderBy: { nome: "asc" } }),
     prisma.tipoAto.findMany({ where: { ativo: true }, select: { id: true, sigla: true, nome: true }, orderBy: { sigla: "asc" } }),
     prisma.usuario.findMany({
@@ -73,12 +75,12 @@ export default async function PaginaProcessos({ searchParams }: { searchParams: 
           </div>
           <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-6">
             <button className="btn-primario">Filtrar</button>
-            <a href="/processos" className="btn-secundario">Limpar</a>
+            <Link href="/processos" className="btn-secundario">Limpar</Link>
           </div>
         </form>
       </Card>
       <Card>
-        <TabelaProcessos itens={itens} />
+        <TabelaProcessos itens={itens} alertas={alertas} />
         <Paginacao page={page} size={size} total={total} href={href} />
       </Card>
     </>

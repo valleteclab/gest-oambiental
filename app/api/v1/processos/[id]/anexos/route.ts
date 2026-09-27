@@ -13,7 +13,7 @@ export const GET = rota(async (_req: Request, { params }: { params: Promise<{ id
   const { id } = await params;
   const p = await obterProcessoAutorizado(id, u);
   const itens = await prisma.anexo.findMany({ where: { processo_id: p.id }, orderBy: { created_at: "asc" } });
-  return NextResponse.json({ items: itens.map(({ storage_key: _k, ...a }) => ({ ...a, url: `/api/v1/anexos/${a.id}` })) });
+  return NextResponse.json({ items: itens.map((a) => ({ ...a, storage_key: undefined, url: `/api/v1/anexos/${a.id}` })) });
 });
 
 const PedidoPreAssinado = z.object({ nome: z.string().min(1).max(200), mime: z.string().max(100).optional().nullable(), tamanho: z.number().int().min(1) });
@@ -39,7 +39,8 @@ export const POST = rota(async (req: Request, { params }: { params: Promise<{ id
       { tipo: form.get("tipo") ?? undefined, documento_exigido_id: form.get("documento_exigido_id") ?? undefined, pendencia_id: form.get("pendencia_id") ?? undefined },
       u,
     );
-    const { storage_key: _k, ...resto } = a;
+    const resto: Partial<typeof a> = { ...a };
+    delete resto.storage_key;
     return NextResponse.json({ ...resto, url: `/api/v1/anexos/${a.id}` }, { status: 201 });
   }
   const corpo = await req.json();

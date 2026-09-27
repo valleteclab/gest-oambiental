@@ -1,20 +1,21 @@
 "use client";
-import { useActionState, useState } from "react";
+import { useState } from "react";
 import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
 import { Aviso } from "@/components/ui";
 import { salvarChecklist } from "../actions";
+import { useFormAcao } from "../../../pessoas/_form/campos";
 
 type Item = { id: string; texto: string; tipo: "SIM_NAO" | "TEXTO" | "NUMERO"; obrigatorio: boolean };
 const TIPOS = [{ v: "SIM_NAO", r: "Sim/Não" }, { v: "TEXTO", r: "Texto" }, { v: "NUMERO", r: "Número" }] as const;
 
 export function EditorChecklist({ id, nome, itens: inicial }: { id?: string; nome?: string; itens: Item[] }) {
-  const [estado, acao, pendente] = useActionState(salvarChecklist, undefined);
+  const [estado, onSubmit, pendente] = useFormAcao(salvarChecklist);
   const [itens, setItens] = useState<Item[]>(inicial.length ? inicial : [{ id: "c1", texto: "", tipo: "SIM_NAO", obrigatorio: true }]);
   const upd = (i: number, p: Partial<Item>) => setItens((l) => l.map((x, j) => (j === i ? { ...x, ...p } : x)));
   const mover = (i: number, d: number) => setItens((l) => { const n = [...l]; const [x] = n.splice(i, 1); n.splice(i + d, 0, x); return n; });
   const novoId = () => { let k = itens.length + 1; while (itens.some((x) => x.id === `c${k}`)) k++; return `c${k}`; };
   return (
-    <form action={acao} className="space-y-4">
+    <form onSubmit={onSubmit} className="space-y-4">
       {id && <input type="hidden" name="id" value={id} />}
       <input type="hidden" name="itens" value={JSON.stringify(itens)} />
       <div>

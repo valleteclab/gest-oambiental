@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { exigirUsuario } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { Aviso, CabecalhoPagina } from "@/components/ui";
@@ -32,12 +32,9 @@ export default async function NovoRequerimento({ searchParams }: { searchParams:
     if (!p) notFound();
     if (!ehTitular(u, { requerente_id: p.requerente_id, rt_pessoa_id: p.rt?.pessoa_id })) return <Proibido voltar="/meus-processos" mensagem="Este requerimento não pertence ao seu cadastro." />;
     if (p.status !== "RASCUNHO") {
-      return (
-        <>
-          <CabecalhoPagina titulo="Requerimento já protocolado" />
-          <Aviso tipo="info">Este requerimento já foi protocolado. <Link className="underline" href={`/meus-processos/${p.id}`}>Acompanhe o processo</Link>.</Aviso>
-        </>
-      );
+      // Recém-protocolado (inclusive logo após o passo 5): vai para o acompanhamento com o aviso de sucesso.
+      const recente = p.data_protocolo && Date.now() - p.data_protocolo.getTime() < 10 * 60 * 1000;
+      redirect(`/meus-processos/${p.id}${recente ? "?protocolado=1" : ""}`);
     }
     const exigidos = await documentosExigidos(p.tipo_ato_id, p.empreendimento.tipologia_id);
     rascunho = {

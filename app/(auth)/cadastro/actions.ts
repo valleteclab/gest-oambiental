@@ -6,11 +6,13 @@ import { auditar } from "@/lib/audit";
 import { cifrar, hashBusca, mascararCpfCnpj, somenteDigitos } from "@/lib/crypto";
 import { PessoaSchema } from "@/lib/cadastros/validacao";
 
-export type EstadoCadastro = { erro?: string; campos?: Record<string, string> } | undefined;
+export type EstadoCadastro = { erro?: string; campos?: Record<string, string>; valores?: Record<string, string> } | undefined;
 
 /** Auto-cadastro do requerente: cria pessoa (CPF/CNPJ validado e cifrado) + usuário com papel REQUERENTE. */
 export async function cadastrarRequerente(_: EstadoCadastro, form: FormData): Promise<EstadoCadastro> {
   const g = (k: string) => String(form.get(k) ?? "").trim();
+  // Devolve o que foi digitado (exceto senhas) – o React reinicia o formulário após a action.
+  const valores = Object.fromEntries(["tipo", "nome", "nome_fantasia", "cpf_cnpj", "email", "telefone", "municipio_id", "aceite"].map((k) => [k, g(k)]));
   const email = g("email").toLowerCase();
   const senha = String(form.get("senha") ?? "");
   const confirmacao = String(form.get("confirmacao") ?? "");
@@ -22,15 +24,15 @@ export async function cadastrarRequerente(_: EstadoCadastro, form: FormData): Pr
   if (politica) campos.senha = politica;
   if (senha !== confirmacao) campos.confirmacao = "A confirmação não confere.";
   if (!form.get("aceite")) campos.aceite = "É necessário aceitar os termos de uso e a política de privacidade.";
-  if (Object.keys(campos).length || !r.success) return { erro: "Corrija os campos destacados.", campos };
+  if (Object.keys(campos).length || !r.success) return { erro: "Corrija os campos destacados.", campos, valores };
   const e = r.data;
 
   const doc = somenteDigitos(e.cpf_cnpj);
   const hash = hashBusca(doc);
-  if (await prisma.usuario.findUnique({ where: { email } })) return { erro: "Já existe uma conta com este e-mail. Use “Entrar” ou recupere a senha.", campos: { email: "E-mail já cadastrado." } };
+  if (await prisma.usuario.findUnique({ where: { email } })) return { erro: "Já existe uma conta com este e-mail. Use “Entrar” ou recupere a senha.", campos: { email: "E-mail já cadastrado." }, valores };
   if (await prisma.pessoa.findUnique({ where: { cpf_cnpj_hash: hash }, select: { id: true } })) {
     // Evita que terceiros se apropriem de um cadastro existente (e dos processos vinculados) apenas conhecendo o CPF/CNPJ.
-    return { erro: "Este CPF/CNPJ já possui cadastro no órgão ambiental. Procure o atendimento do seu município para liberar o acesso.", campos: { cpf_cnpj: "CPF/CNPJ já cadastrado." } };
+    return { erro: "Este CPF/CNPJ já possui cadastro no órgão ambiental. Procure o atendimento do seu município para liberar o acesso.", campos: { cpf_cnpj: "CPF/CNPJ já cadastrado." }, valores };
   }
   const municipio = e.municipio_id ? await prisma.municipio.findUnique({ where: { id: e.municipio_id }, select: { organizacao_id: true } }) : null;
   const org = municipio?.organizacao_id ?? (await prisma.organizacao.findFirst({ select: { id: true } }))?.id ?? null;
