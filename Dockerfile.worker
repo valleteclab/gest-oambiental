@@ -25,7 +25,7 @@ WORKDIR /app
 FROM base AS deps
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
-RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund \
+RUN npm ci --no-audit --no-fund \
  && npx prisma generate
 
 # ───────────── builder: next build (output standalone) ─────────────
