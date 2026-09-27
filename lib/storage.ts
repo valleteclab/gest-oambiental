@@ -11,7 +11,12 @@ const dirLocal = () => path.resolve(process.env.STORAGE_LOCAL_DIR ?? "./storage"
 let s3: S3Client | null = null;
 let s3Publico: S3Client | null = null;
 const novoCliente = (endpoint?: string) =>
-  new S3Client({ region: process.env.S3_REGION ?? "sa-east-1", endpoint: endpoint || undefined, forcePathStyle: !!endpoint });
+  new S3Client({
+    region: process.env.S3_REGION ?? "sa-east-1",
+    endpoint: endpoint || undefined,
+    // MinIO exige path-style; Railway Buckets/R2 usam virtual-hosted (S3_FORCE_PATH_STYLE=false)
+    forcePathStyle: process.env.S3_FORCE_PATH_STYLE ? process.env.S3_FORCE_PATH_STYLE === "true" : !!endpoint,
+  });
 function cliente() {
   s3 ??= novoCliente(process.env.S3_ENDPOINT);
   return s3;
