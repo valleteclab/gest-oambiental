@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { FormCadastro } from "./form";
 
 export const metadata = { title: "Cadastro de requerente" };
+// Lista de municípios vem do banco: renderizar por requisição (o banco não existe no build da imagem)
+export const dynamic = "force-dynamic";
 
 export default async function PaginaCadastro() {
   const municipios = await prisma.municipio.findMany({ where: { ativo: true }, select: { id: true, nome: true }, orderBy: { nome: "asc" } });
