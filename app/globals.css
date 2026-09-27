@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primaria-50: #ecfdf5;
+  --color-primaria-100: #d1fae5;
+  --color-primaria-600: #047857;
+  --color-primaria-700: #065f46;
+  --color-primaria-800: #064e3b;
+  --font-sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+html { color-scheme: light; }
+body { @apply bg-slate-50 text-slate-900 antialiased; }
+
+/* Utilitários de UI compartilhados (equivalentes simples do shadcn/ui) */
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primaria-600 disabled:opacity-50 disabled:pointer-events-none;
+}
+@utility btn-primario {
+  @apply btn bg-primaria-700 text-white hover:bg-primaria-800;
+}
+@utility btn-secundario {
+  @apply btn border border-slate-300 bg-white text-slate-800 hover:bg-slate-100;
+}
+@utility btn-perigo {
+  @apply btn bg-red-700 text-white hover:bg-red-800;
+}
+@utility btn-sm {
+  @apply px-3 py-1.5 text-xs;
+}
+@utility card {
+  @apply rounded-lg border border-slate-200 bg-white shadow-sm;
+}
+@utility input {
+  @apply block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:border-primaria-600 focus:outline-none focus:ring-2 focus:ring-primaria-600/30;
+}
+@utility label {
+  @apply mb-1 block text-sm font-medium text-slate-700;
+}
+@utility tabela {
+  @apply w-full text-left text-sm;
+  & th { @apply border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600; }
+  & td { @apply border-b border-slate-100 px-3 py-2 align-top; }
+}
+@utility badge {
+  @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;
+}
+@utility titulo-pagina {
+  @apply text-2xl font-semibold text-slate-900;
+}

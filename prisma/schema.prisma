@@ -1,0 +1,944 @@
+// LicenciaGov – Sistema de Gestão de Licenciamento e Fiscalização Ambiental
+// Fonte da verdade: docs/SPEC.md (seções 4–6). Nomes em português/snake_case no banco.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────── Enums ─────────────────────────────
+
+enum Papel {
+  ADMIN
+  TEC_CONSORCIO
+  TEC_MUNICIPAL
+  GESTOR_MUNICIPAL
+  FISCAL
+  SEMA_INEMA
+  REQUERENTE
+}
+
+enum TipoPessoa {
+  PF
+  PJ
+}
+
+enum PotencialPoluidor {
+  BAIXO
+  MEDIO
+  ALTO
+}
+
+enum Porte {
+  MICRO
+  PEQUENO
+  MEDIO
+  GRANDE
+  EXCEPCIONAL
+}
+
+enum CategoriaAto {
+  LICENCA
+  AUTORIZACAO
+  CERTIDAO
+  DECLARACAO
+}
+
+enum StatusEmpreendimento {
+  ATIVO
+  INATIVO
+}
+
+enum StatusProcesso {
+  RASCUNHO
+  PROTOCOLADO
+  EM_TRIAGEM
+  AGUARDANDO_REQUERENTE
+  EM_ANALISE
+  AGUARDANDO_VISTORIA
+  AGUARDANDO_DECISAO
+  DEFERIDO
+  INDEFERIDO
+  CONCLUIDO
+  ARQUIVADO
+}
+
+enum StatusPendencia {
+  ABERTA
+  RESPONDIDA
+  VENCIDA
+  CANCELADA
+}
+
+enum ConclusaoParecer {
+  FAVORAVEL
+  DESFAVORAVEL
+  FAVORAVEL_COM_CONDICIONANTES
+}
+
+enum StatusCondicionante {
+  PENDENTE
+  CUMPRIDA
+  VENCIDA
+  CANCELADA
+}
+
+enum TipoDocumento {
+  LICENCA
+  AUTORIZACAO
+  CERTIDAO
+  AUTO_INFRACAO
+  NOTIFICACAO
+  PARECER
+  OFICIO
+  RECIBO
+}
+
+enum StatusDocumento {
+  VALIDO
+  CANCELADO
+  SUBSTITUIDO
+}
+
+enum CanalDenuncia {
+  PORTAL
+  PRESENCIAL
+  TELEFONE
+  OUTRO
+}
+
+enum StatusDenuncia {
+  NOVA
+  EM_APURACAO
+  CONCLUIDA
+  ARQUIVADA
+}
+
+enum OrigemFiscalizacao {
+  DENUNCIA
+  ROTINA
+  PROCESSO
+}
+
+enum Constatacao {
+  IRREGULAR
+  REGULAR
+  INCONCLUSIVA
+}
+
+enum StatusFiscalizacao {
+  AGENDADA
+  REALIZADA
+  CANCELADA
+}
+
+enum Penalidade {
+  ADVERTENCIA
+  MULTA
+  EMBARGO
+  INTERDICAO
+  OUTRA
+}
+
+enum StatusAuto {
+  LAVRADO
+  EM_DEFESA
+  JULGADO
+  PAGO
+  CANCELADO
+}
+
+enum StatusNotificacao {
+  EMITIDA
+  ATENDIDA
+  VENCIDA
+  CANCELADA
+}
+
+enum TipoReuniao {
+  ORDINARIA
+  EXTRAORDINARIA
+}
+
+enum StatusExportacao {
+  PENDENTE
+  PROCESSANDO
+  CONCLUIDA
+  ERRO
+}
+
+enum Severidade {
+  CRITICO
+  NAO_CRITICO
+  DUVIDA
+}
+
+// ───────────────────────── 5.1 Configuração ─────────────────────────
+
+model Organizacao {
+  id         String   @id @default(uuid()) @db.Uuid
+  nome       String
+  cnpj       String?
+  sigla      String
+  logo_url   String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  created_by String?  @db.Uuid
+
+  municipios    Municipio[]
+  tipologias    Tipologia[]
+  tipos_ato     TipoAto[]
+  prazos_config PrazoConfig[]
+
+  @@map("organizacao")
+}
+
+model Municipio {
+  id                   String   @id @default(uuid()) @db.Uuid
+  organizacao_id       String   @db.Uuid
+  nome                 String
+  sigla                String   @unique // IAC, IBQ, ITB, ITT, MNV, RJB, RUY, TPM
+  codigo_ibge          String   @unique
+  orgao_ambiental_nome String
+  brasao_url           String?
+  endereco             String?
+  email                String?
+  telefone             String?
+  latitude             Decimal? @db.Decimal(9, 6)
+  longitude            Decimal? @db.Decimal(9, 6)
+  distribuicao_auto    Boolean  @default(false) // rodízio automático entre técnicos
+  delega_decisao       Boolean  @default(false) // TEC_CONSORCIO pode decidir
+  ativo                Boolean  @default(true)
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+  created_by           String?  @db.Uuid
+
+  organizacao    Organizacao      @relation(fields: [organizacao_id], references: [id])
+  papeis         UsuarioPapel[]
+  pessoas        Pessoa[]
+  empreendimentos Empreendimento[]
+  processos      Processo[]
+  documentos     DocumentoOficial[]
+  denuncias      Denuncia[]
+  fiscalizacoes  Fiscalizacao[]
+  alertas        Alerta[]
+  feriados       Feriado[]
+  prazos_config  PrazoConfig[]
+  conselhos      Conselho[]
+  chamados       ChamadoSuporte[]
+
+  @@map("municipio")
+}
+
+model Usuario {
+  id                  String    @id @default(uuid()) @db.Uuid
+  nome                String
+  cpf_cifrado         String?
+  cpf_hash            String?   @unique
+  email               String    @unique
+  senha_hash          String
+  ativo               Boolean   @default(true)
+  trocar_senha        Boolean   @default(true) // troca obrigatória no primeiro acesso
+  cargo               String?
+  falhas_login        Int       @default(0)
+  bloqueado_ate       DateTime?
+  ultimo_login        DateTime?
+  pessoa_id           String?   @db.Uuid // vínculo do REQUERENTE/RT com cadastro de pessoa
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
+  created_by          String?   @db.Uuid
+
+  pessoa  Pessoa?        @relation(fields: [pessoa_id], references: [id])
+  papeis  UsuarioPapel[]
+  alertas Alerta[]
+  logs    LogAuditoria[]
+
+  processos_tecnico Processo[] @relation("processo_tecnico")
+  processos_gestor  Processo[] @relation("processo_gestor")
+
+  @@map("usuario")
+}
+
+model UsuarioPapel {
+  id           String   @id @default(uuid()) @db.Uuid
+  usuario_id   String   @db.Uuid
+  papel        Papel
+  municipio_id String?  @db.Uuid // NULL = escopo organização
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+  created_by   String?  @db.Uuid
+
+  usuario   Usuario    @relation(fields: [usuario_id], references: [id])
+  municipio Municipio? @relation(fields: [municipio_id], references: [id])
+
+  @@unique([usuario_id, papel, municipio_id])
+  @@map("usuario_papel")
+}
+
+model Tipologia {
+  id                 String            @id @default(uuid()) @db.Uuid
+  organizacao_id     String            @db.Uuid
+  codigo             String
+  divisao            String
+  descricao          String
+  unidade_porte      String // ex.: 'área construída (m²)'
+  faixas_porte       Json // [{porte:'MICRO', ate: 500}, ...]
+  potencial_poluidor PotencialPoluidor
+  ativo              Boolean           @default(true)
+  created_at         DateTime          @default(now())
+  updated_at         DateTime          @updatedAt
+  created_by         String?           @db.Uuid
+
+  organizacao         Organizacao         @relation(fields: [organizacao_id], references: [id])
+  empreendimentos     Empreendimento[]
+  documentos_exigidos DocumentoExigido[]
+
+  @@unique([organizacao_id, codigo])
+  @@map("tipologia")
+}
+
+model TipoAto {
+  id                    String       @id @default(uuid()) @db.Uuid
+  organizacao_id        String       @db.Uuid
+  sigla                 String // LP, LI, LO, LS, LU, LAC, RLO, AA, ASV, CERT_DISP, DECL
+  nome                  String
+  categoria             CategoriaAto
+  validade_meses_padrao Int?
+  exige_vistoria        Boolean      @default(false)
+  exige_parecer         Boolean      @default(true)
+  modelo_documento      String? // tipo do modelo_documento a usar
+  checklist_modelo_id   String?      @db.Uuid
+  prazo_analise_dias    Int          @default(60)
+  ativo                 Boolean      @default(true)
+  created_at            DateTime     @default(now())
+  updated_at            DateTime     @updatedAt
+  created_by            String?      @db.Uuid
+
+  organizacao         Organizacao        @relation(fields: [organizacao_id], references: [id])
+  checklist_modelo    ChecklistModelo?   @relation(fields: [checklist_modelo_id], references: [id])
+  documentos_exigidos DocumentoExigido[]
+  processos           Processo[]
+
+  @@unique([organizacao_id, sigla])
+  @@map("tipo_ato")
+}
+
+model DocumentoExigido {
+  id           String   @id @default(uuid()) @db.Uuid
+  tipo_ato_id  String   @db.Uuid
+  tipologia_id String?  @db.Uuid
+  nome         String
+  obrigatorio  Boolean  @default(true)
+  formatos     String   @default("pdf") // ex.: "pdf,jpg,png"
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+  created_by   String?  @db.Uuid
+
+  tipo_ato  TipoAto    @relation(fields: [tipo_ato_id], references: [id])
+  tipologia Tipologia? @relation(fields: [tipologia_id], references: [id])
+
+  @@map("documento_exigido")
+}
+
+model ChecklistModelo {
+  id         String   @id @default(uuid()) @db.Uuid
+  nome       String
+  itens      Json // [{id, texto, tipo:'SIM_NAO'|'TEXTO'|'NUMERO', obrigatorio}]
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  created_by String?  @db.Uuid
+
+  tipos_ato   TipoAto[]
+  preenchidos ChecklistPreenchido[]
+
+  @@map("checklist_modelo")
+}
+
+model PrazoConfig {
+  id                String   @id @default(uuid()) @db.Uuid
+  organizacao_id    String   @db.Uuid
+  municipio_id      String?  @db.Uuid
+  etapa             String // TRIAGEM | ANALISE_CURTA | ANALISE_LONGA | PENDENCIA | DECISAO | VISTORIA
+  dias              Int
+  dias_alerta       Int      @default(5)
+  conta_dias_uteis  Boolean  @default(false)
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+  created_by        String?  @db.Uuid
+
+  organizacao Organizacao @relation(fields: [organizacao_id], references: [id])
+  municipio   Municipio?  @relation(fields: [municipio_id], references: [id])
+
+  @@map("prazo_config")
+}
+
+model Feriado {
+  id           String   @id @default(uuid()) @db.Uuid
+  municipio_id String?  @db.Uuid
+  data         DateTime @db.Date
+  descricao    String
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+  created_by   String?  @db.Uuid
+
+  municipio Municipio? @relation(fields: [municipio_id], references: [id])
+
+  @@map("feriado")
+}
+
+model ModeloDocumento {
+  id         String        @id @default(uuid()) @db.Uuid
+  tipo       TipoDocumento
+  nome       String
+  html       String
+  versao     Int           @default(1)
+  ativo      Boolean       @default(true)
+  created_at DateTime      @default(now())
+  updated_at DateTime      @updatedAt
+  created_by String?       @db.Uuid
+
+  @@map("modelo_documento")
+}
+
+model Sequencia {
+  id           String @id @default(uuid()) @db.Uuid
+  municipio_id String @db.Uuid
+  tipo         String
+  ano          Int
+  ultimo       Int    @default(0)
+
+  @@unique([municipio_id, tipo, ano])
+  @@map("sequencia")
+}
+
+// ───────────────────────── 5.2 Cadastros ─────────────────────────
+
+model Pessoa {
+  id                String     @id @default(uuid()) @db.Uuid
+  organizacao_id    String?    @db.Uuid
+  tipo              TipoPessoa
+  cpf_cnpj_cifrado  String
+  cpf_cnpj_hash     String     @unique
+  cpf_cnpj_mascara  String // ***.456.789-** (para exibição pública)
+  nome              String
+  nome_fantasia     String?
+  email             String? // cifrado quando PF
+  telefone          String? // cifrado quando PF
+  endereco          Json?
+  municipio_id      String?    @db.Uuid
+  created_at        DateTime   @default(now())
+  updated_at        DateTime   @updatedAt
+  created_by        String?    @db.Uuid
+
+  municipio           Municipio?          @relation(fields: [municipio_id], references: [id])
+  usuarios            Usuario[]
+  responsavel_tecnico ResponsavelTecnico?
+  empreendimentos     Empreendimento[]
+  processos           Processo[]          @relation("processo_requerente")
+  autos               AutoInfracao[]
+  notificacoes        Notificacao[]
+
+  @@map("pessoa")
+}
+
+model ResponsavelTecnico {
+  id                String   @id @default(uuid()) @db.Uuid
+  pessoa_id         String   @unique @db.Uuid
+  formacao          String
+  conselho          String // CREA, CRBio, CRQ...
+  registro_conselho String
+  uf_conselho       String   @db.Char(2)
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+  created_by        String?  @db.Uuid
+
+  pessoa          Pessoa              @relation(fields: [pessoa_id], references: [id])
+  empreendimentos EmpreendimentoRt[]
+  processos       Processo[]
+
+  @@map("responsavel_tecnico")
+}
+
+model Empreendimento {
+  id                 String               @id @default(uuid()) @db.Uuid
+  organizacao_id     String               @db.Uuid
+  municipio_id       String               @db.Uuid
+  requerente_id      String               @db.Uuid
+  nome               String
+  endereco           Json?
+  latitude           Decimal?             @db.Decimal(9, 6)
+  longitude          Decimal?             @db.Decimal(9, 6)
+  poligono_geojson   Json?
+  tipologia_id       String               @db.Uuid
+  grandeza_porte     Decimal?             @db.Decimal(14, 2) // valor informado na unidade da tipologia
+  porte              Porte
+  porte_justificativa String?
+  potencial_poluidor PotencialPoluidor
+  area_m2            Decimal?             @db.Decimal(14, 2)
+  numero_car         String?
+  status             StatusEmpreendimento @default(ATIVO)
+  created_at         DateTime             @default(now())
+  updated_at         DateTime             @updatedAt
+  created_by         String?              @db.Uuid
+
+  municipio     Municipio          @relation(fields: [municipio_id], references: [id])
+  requerente    Pessoa             @relation(fields: [requerente_id], references: [id])
+  tipologia     Tipologia          @relation(fields: [tipologia_id], references: [id])
+  rts           EmpreendimentoRt[]
+  processos     Processo[]
+  fiscalizacoes Fiscalizacao[]
+
+  @@index([municipio_id])
+  @@map("empreendimento")
+}
+
+model EmpreendimentoRt {
+  id                String    @id @default(uuid()) @db.Uuid
+  empreendimento_id String    @db.Uuid
+  rt_id             String    @db.Uuid
+  desde             DateTime  @default(now()) @db.Date
+  ate               DateTime? @db.Date
+
+  empreendimento Empreendimento     @relation(fields: [empreendimento_id], references: [id])
+  rt             ResponsavelTecnico @relation(fields: [rt_id], references: [id])
+
+  @@map("empreendimento_rt")
+}
+
+// ───────────────────────── 5.3 Processo ─────────────────────────
+
+model Processo {
+  id                  String         @id @default(uuid()) @db.Uuid
+  organizacao_id      String         @db.Uuid
+  municipio_id        String         @db.Uuid
+  numero              String?        @unique // RUY-2026-000123 (gerado ao protocolar)
+  empreendimento_id   String         @db.Uuid
+  requerente_id       String         @db.Uuid
+  rt_id               String?        @db.Uuid
+  tipo_ato_id         String         @db.Uuid
+  status              StatusProcesso @default(RASCUNHO)
+  etapa_atual         String?
+  tecnico_id          String?        @db.Uuid
+  gestor_id           String?        @db.Uuid
+  data_protocolo      DateTime?
+  data_conclusao      DateTime?
+  prazo_etapa_ate     DateTime?
+  prazo_pausado       Boolean        @default(false)
+  prazo_saldo_dias    Int? // saldo restante quando pausado
+  valor_taxa          Decimal?       @db.Decimal(12, 2)
+  taxa_paga           Boolean        @default(false)
+  descricao_atividade String?
+  observacoes         String?
+  created_at          DateTime       @default(now())
+  updated_at          DateTime       @updatedAt
+  created_by          String?        @db.Uuid
+
+  municipio      Municipio           @relation(fields: [municipio_id], references: [id])
+  empreendimento Empreendimento      @relation(fields: [empreendimento_id], references: [id])
+  requerente     Pessoa              @relation("processo_requerente", fields: [requerente_id], references: [id])
+  rt             ResponsavelTecnico? @relation(fields: [rt_id], references: [id])
+  tipo_ato       TipoAto             @relation(fields: [tipo_ato_id], references: [id])
+  tecnico        Usuario?            @relation("processo_tecnico", fields: [tecnico_id], references: [id])
+  gestor         Usuario?            @relation("processo_gestor", fields: [gestor_id], references: [id])
+
+  tramitacoes   Tramitacao[]
+  anexos        Anexo[]
+  pendencias    Pendencia[]
+  checklists    ChecklistPreenchido[]
+  pareceres     Parecer[]
+  condicionantes Condicionante[]
+  documentos    DocumentoOficial[]
+  fiscalizacoes Fiscalizacao[]
+  notificacoes  Notificacao[]
+
+  @@index([municipio_id, status])
+  @@map("processo")
+}
+
+// IMUTÁVEL – trigger no banco bloqueia UPDATE/DELETE (ver migração)
+model Tramitacao {
+  id              String          @id @default(uuid()) @db.Uuid
+  processo_id     String          @db.Uuid
+  acao            String
+  de_status       StatusProcesso?
+  para_status     StatusProcesso
+  de_usuario_id   String?         @db.Uuid
+  para_usuario_id String?         @db.Uuid
+  despacho        String?
+  publico         Boolean         @default(true) // aparece na linha do tempo pública (sem despacho)
+  created_at      DateTime        @default(now())
+
+  processo Processo @relation(fields: [processo_id], references: [id])
+
+  @@index([processo_id, created_at])
+  @@map("tramitacao")
+}
+
+model Anexo {
+  id              String   @id @default(uuid()) @db.Uuid
+  processo_id     String?  @db.Uuid
+  fiscalizacao_id String?  @db.Uuid
+  pendencia_id    String?  @db.Uuid
+  documento_exigido_id String? @db.Uuid
+  tipo            String // DOCUMENTO_EXIGIDO | RESPOSTA_PENDENCIA | FOTO | OUTRO
+  nome_arquivo    String
+  storage_key     String
+  mime            String
+  tamanho         Int
+  sha256          String
+  latitude        Decimal? @db.Decimal(9, 6)
+  longitude       Decimal? @db.Decimal(9, 6)
+  enviado_por     String?  @db.Uuid
+  created_at      DateTime @default(now())
+
+  processo     Processo?     @relation(fields: [processo_id], references: [id])
+  fiscalizacao Fiscalizacao? @relation(fields: [fiscalizacao_id], references: [id])
+  pendencia    Pendencia?    @relation(fields: [pendencia_id], references: [id])
+
+  @@map("anexo")
+}
+
+model Pendencia {
+  id            String          @id @default(uuid()) @db.Uuid
+  processo_id   String          @db.Uuid
+  tipo          String          @default("DOCUMENTAL") // DOCUMENTAL | TECNICA
+  descricao     String
+  prazo_dias    Int
+  prazo_ate     DateTime
+  status        StatusPendencia @default(ABERTA)
+  resposta      String?
+  respondida_em DateTime?
+  created_at    DateTime        @default(now())
+  updated_at    DateTime        @updatedAt
+  created_by    String?         @db.Uuid
+
+  processo Processo @relation(fields: [processo_id], references: [id])
+  anexos   Anexo[]
+
+  @@map("pendencia")
+}
+
+model ChecklistPreenchido {
+  id                  String   @id @default(uuid()) @db.Uuid
+  processo_id         String   @db.Uuid
+  checklist_modelo_id String   @db.Uuid
+  respostas           Json // {itemId: valor}
+  preenchido_por      String   @db.Uuid
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+  created_by          String?  @db.Uuid
+
+  processo         Processo        @relation(fields: [processo_id], references: [id])
+  checklist_modelo ChecklistModelo @relation(fields: [checklist_modelo_id], references: [id])
+
+  @@map("checklist_preenchido")
+}
+
+model Parecer {
+  id           String           @id @default(uuid()) @db.Uuid
+  processo_id  String           @db.Uuid
+  numero       String
+  conclusao    ConclusaoParecer
+  texto_html   String
+  autor_id     String           @db.Uuid
+  documento_id String?          @db.Uuid
+  created_at   DateTime         @default(now())
+  updated_at   DateTime         @updatedAt
+  created_by   String?          @db.Uuid
+
+  processo Processo @relation(fields: [processo_id], references: [id])
+
+  @@map("parecer")
+}
+
+model Condicionante {
+  id            String              @id @default(uuid()) @db.Uuid
+  processo_id   String              @db.Uuid
+  documento_id  String?             @db.Uuid
+  descricao     String
+  periodicidade String?
+  prazo_ate     DateTime?
+  status        StatusCondicionante @default(PENDENTE)
+  created_at    DateTime            @default(now())
+  updated_at    DateTime            @updatedAt
+  created_by    String?             @db.Uuid
+
+  processo Processo @relation(fields: [processo_id], references: [id])
+
+  @@map("condicionante")
+}
+
+// ───────────────────────── 5.4 Documentos oficiais ─────────────────────────
+
+model DocumentoOficial {
+  id                  String          @id @default(uuid()) @db.Uuid
+  municipio_id        String          @db.Uuid
+  processo_id         String?         @db.Uuid
+  fiscalizacao_id     String?         @db.Uuid
+  tipo                TipoDocumento
+  sigla_ato           String? // LO, LP... quando licença
+  numero              String
+  ano                 Int
+  codigo_verificador  String          @unique // 7KQ2-M9XA-D3PL
+  titular_id          String?         @db.Uuid // pessoa
+  sha256_pdf          String
+  storage_key         String
+  validade_ate        DateTime?
+  emitido_por         String          @db.Uuid
+  emitido_por_nome    String
+  emitido_por_cargo   String?
+  emitido_em          DateTime        @default(now())
+  status              StatusDocumento @default(VALIDO)
+  motivo_cancelamento String?
+  cancelado_em        DateTime?
+  substituto_id       String?         @db.Uuid
+  dados               Json? // snapshot dos dados usados na renderização
+  created_at          DateTime        @default(now())
+  updated_at          DateTime        @updatedAt
+
+  municipio    Municipio     @relation(fields: [municipio_id], references: [id])
+  processo     Processo?     @relation(fields: [processo_id], references: [id])
+  fiscalizacao Fiscalizacao? @relation(fields: [fiscalizacao_id], references: [id])
+
+  @@unique([municipio_id, tipo, numero])
+  @@map("documento_oficial")
+}
+
+// ───────────────────────── 5.5 Fiscalização ─────────────────────────
+
+model Denuncia {
+  id               String         @id @default(uuid()) @db.Uuid
+  organizacao_id   String         @db.Uuid
+  municipio_id     String         @db.Uuid
+  protocolo        String         @unique
+  canal            CanalDenuncia
+  anonima          Boolean        @default(true)
+  denunciante_nome String?
+  contato          String? // cifrado
+  descricao        String
+  latitude         Decimal?       @db.Decimal(9, 6)
+  longitude        Decimal?       @db.Decimal(9, 6)
+  endereco         String?
+  status           StatusDenuncia @default(NOVA)
+  created_at       DateTime       @default(now())
+  updated_at       DateTime       @updatedAt
+  created_by       String?        @db.Uuid
+
+  municipio     Municipio      @relation(fields: [municipio_id], references: [id])
+  fiscalizacoes Fiscalizacao[]
+
+  @@map("denuncia")
+}
+
+model Fiscalizacao {
+  id                String             @id @default(uuid()) @db.Uuid
+  organizacao_id    String             @db.Uuid
+  municipio_id      String             @db.Uuid
+  origem            OrigemFiscalizacao
+  denuncia_id       String?            @db.Uuid
+  processo_id       String?            @db.Uuid
+  empreendimento_id String?            @db.Uuid
+  data_hora         DateTime
+  latitude          Decimal?           @db.Decimal(9, 6)
+  longitude         Decimal?           @db.Decimal(9, 6)
+  precisao_m        Decimal?           @db.Decimal(10, 2)
+  equipe            Json? // [{usuario_id, nome}]
+  relato            String?
+  constatacao       Constatacao?
+  status            StatusFiscalizacao @default(REALIZADA)
+  created_at        DateTime           @default(now())
+  updated_at        DateTime           @updatedAt
+  created_by        String?            @db.Uuid
+
+  municipio      Municipio          @relation(fields: [municipio_id], references: [id])
+  denuncia       Denuncia?          @relation(fields: [denuncia_id], references: [id])
+  processo       Processo?          @relation(fields: [processo_id], references: [id])
+  empreendimento Empreendimento?    @relation(fields: [empreendimento_id], references: [id])
+  anexos         Anexo[]
+  autos          AutoInfracao[]
+  notificacoes   Notificacao[]
+  documentos     DocumentoOficial[]
+
+  @@map("fiscalizacao")
+}
+
+model AutoInfracao {
+  id                 String     @id @default(uuid()) @db.Uuid
+  municipio_id       String     @db.Uuid
+  fiscalizacao_id    String     @db.Uuid
+  numero             String
+  autuado_id         String     @db.Uuid
+  enquadramento_legal String
+  descricao_infracao String
+  penalidade         Penalidade
+  valor_multa        Decimal?   @db.Decimal(14, 2)
+  prazo_defesa_dias  Int        @default(20)
+  status             StatusAuto @default(LAVRADO)
+  documento_id       String?    @db.Uuid
+  created_at         DateTime   @default(now())
+  updated_at         DateTime   @updatedAt
+  created_by         String?    @db.Uuid
+
+  fiscalizacao Fiscalizacao @relation(fields: [fiscalizacao_id], references: [id])
+  autuado      Pessoa       @relation(fields: [autuado_id], references: [id])
+
+  @@map("auto_infracao")
+}
+
+model Notificacao {
+  id              String            @id @default(uuid()) @db.Uuid
+  municipio_id    String            @db.Uuid
+  fiscalizacao_id String?           @db.Uuid
+  processo_id     String?           @db.Uuid
+  numero          String
+  notificado_id   String            @db.Uuid
+  exigencia       String
+  prazo_dias      Int
+  prazo_ate       DateTime
+  status          StatusNotificacao @default(EMITIDA)
+  documento_id    String?           @db.Uuid
+  created_at      DateTime          @default(now())
+  updated_at      DateTime          @updatedAt
+  created_by      String?           @db.Uuid
+
+  fiscalizacao Fiscalizacao? @relation(fields: [fiscalizacao_id], references: [id])
+  processo     Processo?     @relation(fields: [processo_id], references: [id])
+  notificado   Pessoa        @relation(fields: [notificado_id], references: [id])
+
+  @@map("notificacao")
+}
+
+// ───────────────────────── 5.6 Conselhos (P1) ─────────────────────────
+
+model Conselho {
+  id           String   @id @default(uuid()) @db.Uuid
+  municipio_id String   @db.Uuid
+  nome         String
+  lei_criacao  String?
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+  created_by   String?  @db.Uuid
+
+  municipio Municipio         @relation(fields: [municipio_id], references: [id])
+  reunioes  ReuniaoConselho[]
+
+  @@map("conselho")
+}
+
+model ReuniaoConselho {
+  id           String      @id @default(uuid()) @db.Uuid
+  conselho_id  String      @db.Uuid
+  data         DateTime
+  tipo         TipoReuniao
+  pauta        String
+  ata_pdf_key  String?
+  deliberacoes Json?
+  created_at   DateTime    @default(now())
+  updated_at   DateTime    @updatedAt
+  created_by   String?     @db.Uuid
+
+  conselho Conselho @relation(fields: [conselho_id], references: [id])
+
+  @@map("reuniao_conselho")
+}
+
+// ───────────────────────── 5.7 Transversais ─────────────────────────
+
+model Alerta {
+  id              String    @id @default(uuid()) @db.Uuid
+  usuario_id      String?   @db.Uuid
+  municipio_id    String    @db.Uuid
+  tipo            String // PRAZO_VENCENDO | PRAZO_VENCIDO | PENDENCIA_VENCENDO | PENDENCIA_VENCIDA | LICENCA_RENOVACAO | CONDICIONANTE | NOTIFICACAO
+  referencia_tipo String // PROCESSO | PENDENCIA | DOCUMENTO | CONDICIONANTE | NOTIFICACAO
+  referencia_id   String    @db.Uuid
+  chave           String    @unique // idempotência: tipo+ref+usuario+marco
+  mensagem        String
+  vence_em        DateTime?
+  lido            Boolean   @default(false)
+  enviado_email   Boolean   @default(false)
+  created_at      DateTime  @default(now())
+
+  usuario   Usuario?  @relation(fields: [usuario_id], references: [id])
+  municipio Municipio @relation(fields: [municipio_id], references: [id])
+
+  @@index([usuario_id, lido])
+  @@map("alerta")
+}
+
+model EmailEnviado {
+  id         String   @id @default(uuid()) @db.Uuid
+  para       String
+  assunto    String
+  corpo      String
+  enviado    Boolean  @default(false)
+  erro       String?
+  created_at DateTime @default(now())
+
+  @@map("email_enviado") // caixa de teste / trilha de e-mails (T3)
+}
+
+model LogAuditoria {
+  id          String   @id @default(uuid()) @db.Uuid
+  usuario_id  String?  @db.Uuid
+  acao        String
+  entidade    String
+  entidade_id String?
+  antes       Json?
+  depois      Json?
+  ip          String?
+  user_agent  String?
+  created_at  DateTime @default(now())
+
+  usuario Usuario? @relation(fields: [usuario_id], references: [id])
+
+  @@index([entidade, entidade_id])
+  @@index([created_at])
+  @@map("log_auditoria")
+}
+
+model Exportacao {
+  id             String           @id @default(uuid()) @db.Uuid
+  solicitada_por String           @db.Uuid
+  escopo         String
+  status         StatusExportacao @default(PENDENTE)
+  storage_key    String?
+  tamanho        Int?
+  erro           String?
+  created_at     DateTime         @default(now())
+  concluida_em   DateTime?
+
+  @@map("exportacao")
+}
+
+model BackupRegistro {
+  id          String   @id @default(uuid()) @db.Uuid
+  tipo        String // BACKUP | RESTORE_TESTE
+  executado_em DateTime @default(now())
+  tamanho     BigInt?
+  destino     String?
+  sucesso     Boolean  @default(true)
+  observacao  String?
+  created_by  String?  @db.Uuid
+
+  @@map("backup_registro")
+}
+
+model ChamadoSuporte {
+  id                   String     @id @default(uuid()) @db.Uuid
+  municipio_id         String     @db.Uuid
+  aberto_por           String     @db.Uuid
+  severidade           Severidade
+  descricao            String
+  status               String     @default("ABERTO")
+  aberto_em            DateTime   @default(now())
+  primeira_resposta_em DateTime?
+  resolvido_em         DateTime?
+
+  municipio Municipio @relation(fields: [municipio_id], references: [id])
+
+  @@map("chamado_suporte")
+}
