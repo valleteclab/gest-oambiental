@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Papel } from "@prisma/client";
-import { can, escopoMunicipios, isInterno, isSomenteLeitura, podeVerMunicipio, UUID_NENHUM, whereMunicipio, whereProcessoEscopo, type Acao, type Recurso, type UsuarioSessao } from "@/lib/rbac";
+import { can, escopoMunicipios, isInterno, isSomenteLeitura, podeProtocolarNoBalcao, podeVerMunicipio, UUID_NENHUM, whereMunicipio, whereProcessoEscopo, type Acao, type Recurso, type UsuarioSessao } from "@/lib/rbac";
 import { whereEmpreendimentoEscopo, wherePessoaEscopo } from "@/lib/cadastros/escopo";
 
 // Matriz de permissões e regras de escopo (SPEC 4 / T7).
@@ -146,6 +146,36 @@ describe("REQUERENTE – apenas os próprios registros", () => {
     expect(can(requerente, "ver", "fiscalizacao")).toBe(false);
     expect(can(requerente, "ver", "dashboard")).toBe(false);
     expect(can(requerente, "ver", "admin")).toBe(false);
+  });
+});
+
+describe("protocolo no balcão (/processos/novo) – quem pode abrir processo em nome do requerente", () => {
+  it("técnicos, gestor e admin podem, no(s) município(s) do papel", () => {
+    expect(podeProtocolarNoBalcao(admin, LOR)).toBe(true);
+    expect(podeProtocolarNoBalcao(tecConsorcio, LOR)).toBe(true);
+    expect(podeProtocolarNoBalcao(tecConsorcio, SSR)).toBe(true);
+    expect(podeProtocolarNoBalcao(tecCse, CSE)).toBe(true);
+    expect(podeProtocolarNoBalcao(gestorLor, LOR)).toBe(true);
+    expect(podeProtocolarNoBalcao(tecCse)).toBe(true); // em algum município (exibe o botão)
+  });
+  it("papéis municipais não protocolam fora do seu município", () => {
+    expect(podeProtocolarNoBalcao(tecCse, LOR)).toBe(false);
+    expect(podeProtocolarNoBalcao(gestorLor, SSR)).toBe(false);
+    expect(podeProtocolarNoBalcao(multi, SSR)).toBe(false); // em SSR é só FISCAL
+    expect(podeProtocolarNoBalcao(multi, CSE)).toBe(true);
+  });
+  it("FISCAL, SEMA_INEMA (somente leitura), REQUERENTE e visitante nunca", () => {
+    for (const u of [fiscalLor, sema, requerente, requerenteSemPessoa]) {
+      expect(podeProtocolarNoBalcao(u)).toBe(false);
+      expect(podeProtocolarNoBalcao(u, LOR)).toBe(false);
+    }
+    expect(podeProtocolarNoBalcao(null)).toBe(false);
+  });
+  it("papel REQUERENTE não empresta escopo a um papel interno de outro município", () => {
+    const tecCseRequerente = usuario([["TEC_MUNICIPAL", CSE], ["REQUERENTE", null]], PESSOA);
+    expect(can(tecCseRequerente, "criar", "processo", LOR)).toBe(true); // via REQUERENTE (titularidade)
+    expect(podeProtocolarNoBalcao(tecCseRequerente, LOR)).toBe(false);
+    expect(podeProtocolarNoBalcao(tecCseRequerente, CSE)).toBe(true);
   });
 });
 

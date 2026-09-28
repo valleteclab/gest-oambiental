@@ -38,7 +38,8 @@ function Prazo({ p, diasAlerta }: { p: LinhaProcesso; diasAlerta: number }) {
   );
 }
 
-export function TabelaProcessos({ itens, vazio = "Nenhum processo encontrado.", alertas = {} }: { itens: LinhaProcesso[]; vazio?: string; alertas?: Record<string, number> }) {
+/** `continuar`: rascunhos que o usuário pode retomar no balcão (id → URL do wizard). */
+export function TabelaProcessos({ itens, vazio = "Nenhum processo encontrado.", alertas = {}, continuar = {} }: { itens: LinhaProcesso[]; vazio?: string; alertas?: Record<string, number>; continuar?: Record<string, string> }) {
   if (!itens.length) return <Vazio>{vazio}</Vazio>;
   return (
     <div className="overflow-x-auto">
@@ -53,6 +54,7 @@ export function TabelaProcessos({ itens, vazio = "Nenhum processo encontrado.", 
               <td className="whitespace-nowrap">
                 <Link href={`/processos/${p.id}`} className="font-medium text-primaria-700 hover:underline">{p.numero ?? "Rascunho"}</Link>
                 <div className="text-xs text-slate-500">{fmtData(p.data_protocolo)}</div>
+                {continuar[p.id] && <Link href={continuar[p.id]} className="btn-secundario btn-sm mt-1" aria-label={`Continuar rascunho de ${p.empreendimento.nome}`}>Continuar</Link>}
               </td>
               <td>{p.empreendimento.nome}<div className="text-xs text-slate-500">{p.requerente.nome}</div></td>
               <td title={p.tipo_ato.nome}>{p.tipo_ato.sigla}</td>

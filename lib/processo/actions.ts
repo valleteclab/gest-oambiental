@@ -1,5 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { ZodError } from "zod";
 import { getUsuario } from "../auth";
 import { ErroApi } from "../http";
@@ -11,13 +12,19 @@ import { removerAnexoRascunho } from "./anexos";
 import { obterProcessoAutorizado } from "./consultas";
 import { emitirPdfParecer, emitirRecibo, tentarEmitir } from "./documentos";
 import { ROTULO_ACAO, normalizarAcao } from "./maquina";
+import { podeProtocolarNoBalcao } from "../rbac";
+import { criarPessoa } from "../cadastros/pessoas";
+import { formParaObjeto } from "../cadastros/validacao";
 
 // Server Actions do módulo de processo (interno e requerente). Sempre revalidam a permissão no servidor.
 
 export type EstadoAcao = { ok?: boolean; mensagem?: string; avisos?: string[]; erro?: string; campos?: Record<string, string>; id?: string } | undefined;
 
 function traduzirErro(e: unknown): EstadoAcao {
-  if (e instanceof ErroApi) return { erro: e.message };
+  if (e instanceof ErroApi) {
+    const campo = (e.details as { campo?: unknown } | undefined)?.campo;
+    return typeof campo === "string" ? { erro: e.message, campos: { [campo]: e.message } } : { erro: e.message };
+  }
   if (e instanceof ZodError) {
     const campos: Record<string, string> = {};
     for (const i of e.issues) campos[i.path.join(".") || "_"] ??= i.message;
@@ -123,4 +130,26 @@ export async function gerarPdfParecerAcao(processoId: string, parecerId: string)
   } catch (e) {
     return traduzirErro(e);
   }
+}
+
+/**
+ * Balcão (/processos/novo, passo 0): cadastro rápido do requerente (PF/PJ) pelo serviço de pessoas
+ * (validação, cifragem, auditoria). A pessoa fica vinculada ao município do processo.
+ */
+export async function cadastrarRequerenteBalcaoAcao(_prev: unknown, form: FormData): Promise<{ erro?: string; campos?: Record<string, string>; extra?: Record<string, string> }> {
+  const u = await getUsuario();
+  if (!u) return { erro: "Sessão expirada. Entre novamente." };
+  const dados = formParaObjeto(form);
+  const municipio = String(dados.municipio_id ?? "");
+  if (!municipio || !podeProtocolarNoBalcao(u, municipio)) return { erro: "Sem permissão para protocolar processos neste município." };
+  let id: string;
+  try {
+    id = (await criarPessoa(u, dados)).id;
+  } catch (e) {
+    const det = (e as { details?: { pessoa_id?: string | null } }).details;
+    const est = traduzirErro(e) ?? {};
+    return det?.pessoa_id ? { ...est, extra: { existente: det.pessoa_id } } : est;
+  }
+  revalidatePath("/pessoas");
+  redirect(`/processos/novo?municipio=${municipio}&requerente=${id}`);
 }

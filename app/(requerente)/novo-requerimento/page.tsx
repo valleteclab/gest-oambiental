@@ -6,7 +6,7 @@ import { Aviso, CabecalhoPagina } from "@/components/ui";
 import { documentosExigidos, UUID_RE } from "@/lib/processo/consultas";
 import { ehTitular } from "@/lib/processo/maquina";
 import { Proibido } from "../../(interno)/processos/_componentes/proibido";
-import { Wizard, type DadosWizard } from "./wizard";
+import { WizardRequerimento, type DadosWizard } from "@/components/processo/wizard-requerimento";
 
 export const metadata = { title: "Novo requerimento" };
 
@@ -62,6 +62,7 @@ export default async function NovoRequerimento({ searchParams }: { searchParams:
   ]);
 
   const dados: DadosWizard = {
+    modo: "requerente",
     municipioPadrao: orgao && municipios.some((m) => m.id === orgao.id) ? orgao.id : null,
     municipios: municipios.map((m) => ({ id: m.id, nome: m.nome, lat: m.latitude ? Number(m.latitude) : null, lng: m.longitude ? Number(m.longitude) : null })),
     tipologias: tipologias.map((t) => ({ ...t, faixas_porte: t.faixas_porte as unknown })),
@@ -74,7 +75,7 @@ export default async function NovoRequerimento({ searchParams }: { searchParams:
   return (
     <>
       <CabecalhoPagina titulo={rascunho ? "Continuar requerimento" : "Novo requerimento"} subtitulo="Preencha as etapas abaixo. O rascunho fica salvo a partir da etapa 3." />
-      <Wizard dados={dados} passoInicial={rascunho ? passoInicial : Math.min(passoInicial, 3)} />
+      <WizardRequerimento dados={dados} passoInicial={rascunho ? passoInicial : Math.min(passoInicial, 3)} />
     </>
   );
 }

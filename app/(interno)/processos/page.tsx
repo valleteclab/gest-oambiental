@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { StatusProcesso } from "@prisma/client";
 import { exigirUsuario, getOrgaoAtivo } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { can, escopoMunicipios, filtroMunicipioPadrao, isSomenteLeitura } from "@/lib/rbac";
+import { can, escopoMunicipios, filtroMunicipioPadrao, isSomenteLeitura, podeProtocolarNoBalcao } from "@/lib/rbac";
 import { CabecalhoPagina, Card, Paginacao, ROTULO_STATUS } from "@/components/ui";
 import { listarProcessos, mapaDiasAlerta } from "@/lib/processo/consultas";
 import { TabelaProcessos } from "./_componentes/tabela-processos";
@@ -17,7 +17,8 @@ export default async function PaginaProcessos({ searchParams }: { searchParams: 
   if (!can(u, "ver", "processo")) return <Proibido voltar="/dashboard" mensagem="Seu perfil não tem acesso a processos." />;
   const bruto = await searchParams;
   // Sem ?municipio= na URL: padrão = órgão ativo (escopo amplo); "Todos" (municipio=) continua disponível.
-  const sp: Busca = { ...bruto, municipio: filtroMunicipioPadrao(u, bruto.municipio, (await getOrgaoAtivo())?.id) };
+  const orgao = await getOrgaoAtivo();
+  const sp: Busca = { ...bruto, municipio: filtroMunicipioPadrao(u, bruto.municipio, orgao?.id) };
   const page = Math.max(1, Number(sp.page ?? 1) || 1);
   const size = 20;
   const status = sp.status && sp.status in ROTULO_STATUS ? (sp.status as StatusProcesso) : null;
@@ -39,7 +40,11 @@ export default async function PaginaProcessos({ searchParams }: { searchParams: 
   };
   return (
     <>
-      <CabecalhoPagina titulo="Processos" subtitulo={`${total} processo(s) no seu escopo${isSomenteLeitura(u) ? " · acesso somente leitura" : ""}`} />
+      <CabecalhoPagina
+        titulo="Processos"
+        subtitulo={`${total} processo(s) no seu escopo${isSomenteLeitura(u) ? " · acesso somente leitura" : ""}`}
+        acoes={podeProtocolarNoBalcao(u, orgao?.id) ? <Link href="/processos/novo" className="btn-primario">Novo processo (balcão)</Link> : null}
+      />
       <Card className="mb-4">
         <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6" role="search" aria-label="Filtrar processos">
           <div className="lg:col-span-2">
@@ -82,7 +87,7 @@ export default async function PaginaProcessos({ searchParams }: { searchParams: 
         </form>
       </Card>
       <Card>
-        <TabelaProcessos itens={itens} alertas={alertas} />
+        <TabelaProcessos itens={itens} alertas={alertas} continuar={Object.fromEntries(itens.filter((p) => p.status === "RASCUNHO" && podeProtocolarNoBalcao(u, p.municipio.id)).map((p) => [p.id, `/processos/novo?rascunho=${p.id}`]))} />
         <Paginacao page={page} size={size} total={total} href={href} />
       </Card>
     </>

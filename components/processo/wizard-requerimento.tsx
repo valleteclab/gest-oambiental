@@ -1,15 +1,35 @@
 "use client";
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { Mapa } from "@/components/mapa";
 import { calcularPorte, ROTULO_PORTE } from "@/lib/cadastros/porte";
 import { removerAnexoAcao, salvarRascunhoAcao } from "@/lib/processo/actions";
 import { formatarTamanho } from "@/lib/processo/upload-cliente";
-import { FormAcao } from "../../(interno)/processos/_componentes/acoes-processo";
-import { UploadAnexo } from "../../(interno)/processos/_componentes/formularios";
+import { FormAcao } from "@/app/(interno)/processos/_componentes/acoes-processo";
+import { UploadAnexo } from "@/app/(interno)/processos/_componentes/formularios";
+
+// Wizard de requerimento compartilhado (SPEC 10):
+// - modo "requerente": /novo-requerimento – o próprio requerente (passos 1–5);
+// - modo "balcao": /processos/novo – servidor interno protocola em nome do requerente (passo 0 "Requerente" + 1–5).
+// Mesmos serviços nos dois modos: salvarRascunhoAcao → anexos → transicionar("protocolar").
+
+export type ModoWizard = "requerente" | "balcao";
+
+/** Dados do passo 0 no modo balcão (requerente já escolhido na tela de busca/cadastro). */
+export type DadosBalcao = {
+  requerente: { id: string; nome: string; tipo: "PF" | "PJ"; documento: string; tem_login: boolean };
+  municipio: { id: string; nome: string };
+  rts: { id: string; nome: string; registro: string }[];
+  rt_id: string | null;
+  /** Link para trocar o requerente/município (null quando o rascunho já existe). */
+  trocarHref: string | null;
+};
 
 export type DadosWizard = {
+  modo?: ModoWizard;
+  balcao?: DadosBalcao;
   /** Município padrão de um novo empreendimento (órgão ativo da sessão). */
   municipioPadrao?: string | null;
   municipios: { id: string; nome: string; lat: number | null; lng: number | null }[];
@@ -28,12 +48,55 @@ export type DadosWizard = {
   } | null;
 };
 
-const PASSOS = ["Empreendimento", "Tipologia e porte", "Tipo de ato", "Documentos", "Revisão e protocolo"];
+/** Nomes dos passos (índice = nº do passo). O passo 0 só existe no balcão. */
+export const PASSOS = ["Requerente", "Empreendimento", "Tipologia e porte", "Tipo de ato", "Documentos", "Revisão e protocolo"];
 
-export function Wizard({ dados, passoInicial }: { dados: DadosWizard; passoInicial: number }) {
+/** URL do rascunho / da conclusão conforme o modo. */
+export function urlRascunho(modo: ModoWizard, id: string, passo?: number) {
+  const base = modo === "balcao" ? `/processos/novo?rascunho=${id}` : `/novo-requerimento?id=${id}`;
+  return passo ? `${base}&passo=${passo}` : base;
+}
+
+/**
+ * Barra de etapas. `liberado` = maior passo acessível. Sem `onIr` (ex.: tela de busca do requerente,
+ * renderizada no servidor) os itens não são clicáveis.
+ */
+export function NavEtapas({ modo, atual, liberado, onIr }: { modo: ModoWizard; atual: number; liberado: number; onIr?: (n: number) => void }) {
+  const primeiro = modo === "balcao" ? 0 : 1;
+  const passos = PASSOS.slice(primeiro);
+  return (
+    <nav aria-label="Etapas do requerimento">
+      <ol className={clsx("grid gap-1 text-center text-xs sm:text-sm", passos.length === 6 ? "grid-cols-6" : "grid-cols-5")}>
+        {passos.map((nome, i) => {
+          const n = i + primeiro;
+          const acessivel = !!onIr && n <= liberado;
+          return (
+            <li key={nome}>
+              <button
+                type="button"
+                disabled={!acessivel}
+                onClick={() => acessivel && onIr?.(n)}
+                aria-current={atual === n ? "step" : undefined}
+                className={clsx("w-full rounded-md border px-1 py-2", atual === n ? "border-primaria-700 bg-primaria-700 text-white" : n < atual ? "border-primaria-100 bg-primaria-50 text-primaria-800" : "border-slate-200 bg-white text-slate-600", !acessivel && atual !== n && "opacity-50")}
+              >
+                <span className="block font-bold">{i + 1}</span>
+                <span className="hidden sm:block">{nome}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+}
+
+export function WizardRequerimento({ dados, passoInicial }: { dados: DadosWizard; passoInicial: number }) {
   const router = useRouter();
+  const modoWizard: ModoWizard = dados.modo ?? "requerente";
+  const balcao = modoWizard === "balcao" ? dados.balcao : undefined;
   const r = dados.rascunho;
   const [passo, setPasso] = useState(passoInicial);
+  const [rtId, setRtId] = useState(balcao?.rt_id ?? "");
   const [modo, setModo] = useState<"existente" | "novo">(r || dados.empreendimentos.length ? "existente" : "novo");
   const [empId, setEmpId] = useState(r?.empreendimento_id ?? dados.empreendimentos[0]?.id ?? "");
   const [novo, setNovo] = useState({ nome: "", municipio_id: dados.municipioPadrao ?? "", logradouro: "", numero: "", bairro: "", cep: "", area_m2: "", numero_car: "" });
@@ -91,6 +154,7 @@ export function Wizard({ dados, passoInicial }: { dados: DadosWizard; passoInici
     iniciar(async () => {
       const res = await salvarRascunhoAcao({
         processo_id: r?.id ?? null,
+        ...(balcao ? { requerente_id: balcao.requerente.id, rt_id: rtId || null } : {}),
         empreendimento_id: modo === "existente" ? empId : null,
         empreendimento:
           modo === "novo"
@@ -105,7 +169,7 @@ export function Wizard({ dados, passoInicial }: { dados: DadosWizard; passoInici
         setErro(res?.erro ?? "Não foi possível salvar o rascunho.");
         return;
       }
-      router.replace(`/novo-requerimento?id=${res.id}&passo=4`);
+      router.replace(urlRascunho(modoWizard, res.id, 4));
       router.refresh();
       setPasso(4);
     });
@@ -115,31 +179,32 @@ export function Wizard({ dados, passoInicial }: { dados: DadosWizard; passoInici
 
   return (
     <div className="space-y-5">
-      <nav aria-label="Etapas do requerimento">
-        <ol className="grid grid-cols-5 gap-1 text-center text-xs sm:text-sm">
-          {PASSOS.map((nome, i) => {
-            const n = i + 1;
-            const acessivel = n <= 3 || !!r;
-            return (
-              <li key={nome}>
-                <button
-                  type="button"
-                  disabled={!acessivel}
-                  onClick={() => acessivel && setPasso(n)}
-                  aria-current={passo === n ? "step" : undefined}
-                  className={clsx("w-full rounded-md border px-1 py-2", passo === n ? "border-primaria-700 bg-primaria-700 text-white" : n < passo ? "border-primaria-100 bg-primaria-50 text-primaria-800" : "border-slate-200 bg-white text-slate-600", !acessivel && "opacity-50")}
-                >
-                  <span className="block font-bold">{n}</span>
-                  <span className="hidden sm:block">{nome}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-      </nav>
+      <NavEtapas modo={modoWizard} atual={passo} liberado={r ? 5 : 3} onIr={(n) => { setErro(null); setPasso(n); }} />
 
       <section className="card p-4 sm:p-6" aria-labelledby="titulo-passo">
-        <h2 id="titulo-passo" className="mb-4 text-lg font-semibold">{passo}. {PASSOS[passo - 1]}</h2>
+        <h2 id="titulo-passo" className="mb-4 text-lg font-semibold">{balcao ? passo + 1 : passo}. {PASSOS[passo]}</h2>
+
+        {passo === 0 && balcao && (
+          <div className="space-y-4" data-testid="passo-requerente">
+            <dl className="grid gap-2 rounded-md bg-slate-50 p-3 text-sm sm:grid-cols-[12rem_1fr]">
+              <dt className="text-slate-500">Requerente</dt>
+              <dd data-testid="requerente-escolhido"><strong>{balcao.requerente.nome}</strong> · {balcao.requerente.tipo === "PF" ? "CPF" : "CNPJ"} {balcao.requerente.documento}</dd>
+              <dt className="text-slate-500">Acesso online</dt>
+              <dd>{balcao.requerente.tem_login ? "Possui login – acompanhará o processo em “Meus processos”." : "Sem login – entregue o recibo impresso ao requerente."}</dd>
+              <dt className="text-slate-500">Município do processo</dt>
+              <dd>{balcao.municipio.nome}</dd>
+            </dl>
+            {balcao.trocarHref && <Link href={balcao.trocarHref} className="btn-secundario btn-sm">Trocar requerente ou município</Link>}
+            <div>
+              <label htmlFor="w-rt" className="label">Responsável técnico (opcional)</label>
+              <select id="w-rt" className="input" value={rtId} onChange={(e) => setRtId(e.target.value)}>
+                <option value="">RT vigente do empreendimento (se houver)</option>
+                {balcao.rts.map((t) => <option key={t.id} value={t.id}>{t.nome} – {t.registro}</option>)}
+              </select>
+              <p className="mt-1 text-xs text-slate-500">Aplicado ao salvar o rascunho (etapa “Tipo de ato”).</p>
+            </div>
+          </div>
+        )}
 
         {passo === 1 && (
           <div className="space-y-4">
@@ -301,6 +366,7 @@ export function Wizard({ dados, passoInicial }: { dados: DadosWizard; passoInici
         {passo === 5 && r && (
           <div className="space-y-4">
             <dl className="grid gap-2 text-sm sm:grid-cols-[12rem_1fr]">
+              {balcao && <><dt className="text-slate-500">Requerente</dt><dd>{balcao.requerente.nome}</dd></>}
               <dt className="text-slate-500">Empreendimento</dt><dd>{dados.empreendimentos.find((e) => e.id === r.empreendimento_id)?.nome ?? "—"} ({dados.empreendimentos.find((e) => e.id === r.empreendimento_id)?.municipio})</dd>
               <dt className="text-slate-500">Tipologia</dt><dd>{tipologia ? `${tipologia.codigo} – ${tipologia.descricao}` : "—"}</dd>
               <dt className="text-slate-500">Grandeza / porte</dt><dd>{grandeza} {tipologia?.unidade_porte} · {porte ? ROTULO_PORTE[porte] : "—"}</dd>
@@ -312,16 +378,16 @@ export function Wizard({ dados, passoInicial }: { dados: DadosWizard; passoInici
                 Faltam documentos obrigatórios: {faltando.map((d) => d.nome).join("; ")}. <button type="button" className="underline" onClick={() => setPasso(4)}>Anexar agora</button>
               </p>
             ) : (
-              <p className="text-sm text-slate-700">Ao protocolar, você declara que as informações são verdadeiras. Será gerado o número do processo e o recibo de protocolo em PDF.</p>
+              <p className="text-sm text-slate-700">{balcao ? `Protocolo no balcão em nome de ${balcao.requerente.nome}: confira os dados com o requerente. Será gerado o número do processo e o recibo de protocolo em PDF.` : "Ao protocolar, você declara que as informações são verdadeiras. Será gerado o número do processo e o recibo de protocolo em PDF."}</p>
             )}
-            <FormAcao processoId={r.id} acao="protocolar" payload={{}} rotuloBotao="Protocolar requerimento" desabilitado={faltando.length > 0} onConcluido={() => router.push(`/meus-processos/${r.id}?protocolado=1`)} />
+            <FormAcao processoId={r.id} acao="protocolar" payload={{}} rotuloBotao="Protocolar requerimento" desabilitado={faltando.length > 0} onConcluido={() => router.push(balcao ? urlRascunho(modoWizard, r.id) : `/meus-processos/${r.id}?protocolado=1`)} />
           </div>
         )}
 
         {erro && <p role="alert" className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">{erro}</p>}
 
         <div className="mt-6 flex flex-wrap justify-between gap-2 border-t border-slate-100 pt-4">
-          <button type="button" className="btn-secundario" onClick={() => { setErro(null); setPasso(Math.max(1, passo - 1)); }} disabled={passo === 1}>Voltar</button>
+          <button type="button" className="btn-secundario" onClick={() => { setErro(null); setPasso(Math.max(balcao ? 0 : 1, passo - 1)); }} disabled={passo === (balcao ? 0 : 1)}>Voltar</button>
           {passo < 3 && <button type="button" className="btn-primario" onClick={avancar}>Continuar</button>}
           {passo === 3 && <button type="button" className="btn-primario" onClick={salvar} disabled={salvando}>{salvando ? "Salvando…" : "Salvar rascunho e continuar"}</button>}
           {passo === 4 && <button type="button" className="btn-primario" onClick={() => setPasso(5)}>Revisar</button>}

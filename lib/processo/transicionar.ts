@@ -10,7 +10,7 @@ import { somarDias } from "../dias";
 import { esc } from "../pdf";
 import { enviarEmail } from "../email";
 import type { UsuarioSessao } from "../rbac";
-import { destino, ROTULO_STATUS_PROCESSO, itensChecklistPendentes, lerItensChecklist, normalizarAcao, permitido, proximoDoRodizio, ROTULO_ACAO, type AcaoProcesso } from "./maquina";
+import { destino, ehTitular, ROTULO_STATUS_PROCESSO, itensChecklistPendentes, lerItensChecklist, normalizarAcao, permitido, proximoDoRodizio, ROTULO_ACAO, type AcaoProcesso } from "./maquina";
 import { podeVerProcesso, tecnicosElegiveis, UUID_RE } from "./consultas";
 import { emitirDocumentoDecisao, emitirPdfParecer, emitirRecibo, tentarEmitir, tipoDocumentoDoAto } from "./documentos";
 
@@ -163,14 +163,17 @@ async function montarPassos(tx: Tx, p: ProcessoTx, acao: AcaoProcesso, payload: 
       const numero = await numeroProcesso(tx, p.municipio);
       const prazo = await calcularPrazo(tx, { ...base, etapa: "TRIAGEM" });
       pos.recibo = true;
+      // Balcão: servidor protocola em nome do requerente (o requerente continua sendo requerente_id).
+      const balcao = !ehTitular(u, { requerente_id: p.requerente_id, rt_pessoa_id: p.rt?.pessoa_id });
+      const texto = `Requerimento de ${p.tipo_ato.nome} protocolado sob o nº ${numero}.`;
       const passos: Passo[] = [
         {
           acao: "protocolar",
           para: "PROTOCOLADO",
           data: { numero, data_protocolo: agora, etapa_atual: "TRIAGEM", prazo_etapa_ate: prazo.ate, prazo_pausado: false, prazo_saldo_dias: null },
-          despacho: pl.despacho || `Requerimento de ${p.tipo_ato.nome} protocolado sob o nº ${numero}.`,
+          despacho: balcao ? [`Protocolado no balcão por ${u.nome}.`, pl.despacho || texto].join(" ") : pl.despacho || texto,
           publico: true,
-          extra: { numero },
+          extra: balcao ? { numero, balcao: true, protocolado_por: u.nome } : { numero },
         },
       ];
       if (p.municipio.distribuicao_auto) {

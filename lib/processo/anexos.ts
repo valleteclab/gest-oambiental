@@ -6,7 +6,7 @@ import { prisma } from "../db";
 import { auditar } from "../audit";
 import { sha256 } from "../crypto";
 import { invalido, naoEncontrado, proibido } from "../http";
-import { can, isInterno, isSomenteLeitura, podeVerMunicipio, type UsuarioSessao } from "../rbac";
+import { can, isInterno, isSomenteLeitura, podeProtocolarNoBalcao, podeVerMunicipio, type UsuarioSessao } from "../rbac";
 import { lerArquivo, nomeSeguro, removerArquivo, salvarArquivo, urlUploadPreAssinada, validarUpload } from "../storage";
 import { ehTitular, STATUS_FINAIS } from "./maquina";
 import { obterProcessoAutorizado, podeVerProcesso, UUID_RE, type ProcessoCompleto } from "./consultas";
@@ -38,12 +38,14 @@ export function chaveAnexo(siglaMunicipio: string, processoId: string, nome: str
   return `${siglaMunicipio}/processos/${processoId}/${randomUUID()}-${nomeSeguro(nome)}`;
 }
 
-/** Pode anexar? Requerente titular: rascunho ou pendência aberta. Interno: editar processo no município, fora de estado final. */
+/** Pode anexar? Requerente titular: rascunho ou pendência aberta. Interno: editar processo no município, fora de estado final;
+ * no RASCUNHO também quem protocola no balcão (podeProtocolarNoBalcao – ex.: gestor). */
 export function podeAnexar(u: UsuarioSessao, p: Pick<ProcessoCompleto, "status" | "municipio_id" | "requerente_id"> & { rt?: { pessoa_id: string } | null }): boolean {
   if (isSomenteLeitura(u)) return false;
   if (STATUS_FINAIS.includes(p.status)) return false;
   if (ehTitular(u, { requerente_id: p.requerente_id, rt_pessoa_id: p.rt?.pessoa_id }) && (p.status === "RASCUNHO" || p.status === "AGUARDANDO_REQUERENTE")) return true;
-  return isInterno(u) && can(u, "editar", "processo", p.municipio_id);
+  if (!isInterno(u)) return false;
+  return can(u, "editar", "processo", p.municipio_id) || (p.status === "RASCUNHO" && podeProtocolarNoBalcao(u, p.municipio_id));
 }
 
 async function validarMeta(p: ProcessoCompleto, meta: MetaAnexo, nome: string) {

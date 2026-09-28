@@ -80,9 +80,10 @@ const MATRIZ: Record<Papel, Partial<Record<Recurso, Acao[]>>> = {
     dashboard: ["ver"],
   },
   GESTOR_MUNICIPAL: {
-    processo: ["ver", "triar", "decidir", "emitir_documento"],
+    // "criar" processo/pessoa: protocolo no balcão (podeProtocolarNoBalcao)
+    processo: ["ver", "criar", "triar", "decidir", "emitir_documento"],
     empreendimento: ["ver"],
-    pessoa: ["ver"],
+    pessoa: ["ver", "criar"],
     fiscalizacao: ["ver", "emitir_documento"],
     denuncia: ["ver"],
     documento: ["ver", "emitir_documento", "cancelar_documento"],
@@ -147,6 +148,17 @@ export function can(u: UsuarioSessao | null, acao: Acao, recurso: Recurso, munic
     if (p.papel === "REQUERENTE") return true; // requerente é filtrado por titularidade, não por município
     return p.municipio_id === municipioId;
   });
+}
+
+/**
+ * Protocolo no BALCÃO: servidor interno cria/protocola processo em nome de um requerente (/processos/novo).
+ * ADMIN, TEC_CONSORCIO, TEC_MUNICIPAL e GESTOR_MUNICIPAL (no município do papel); nunca FISCAL, SEMA_INEMA
+ * (somente leitura) nem o papel REQUERENTE (que só requer para si). Sem `municipioId`: em algum município.
+ */
+export function podeProtocolarNoBalcao(u: UsuarioSessao | null, municipioId?: string | null): boolean {
+  if (!u || isSomenteLeitura(u)) return false;
+  const interno: UsuarioSessao = { ...u, papeis: u.papeis.filter((p) => p.papel !== "REQUERENTE") };
+  return can(interno, "criar", "processo", municipioId);
 }
 
 /**
