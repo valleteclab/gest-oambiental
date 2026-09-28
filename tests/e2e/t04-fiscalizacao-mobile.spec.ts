@@ -96,6 +96,8 @@ test("T4 – fiscal no celular registra vistoria de denúncia com GPS e 2 fotos,
   let achou = false;
   for (let i = 0; i < n && !achou; i++) {
     await marcadores.nth(i).dispatchEvent("click");
+    // o popup anterior pode ficar no DOM por um instante enquanto o Leaflet o fecha
+    await expect(mapa.locator(".leaflet-popup")).toHaveCount(1);
     const link = mapa.locator(".leaflet-popup").getByRole("link", { name: "Abrir ficha" });
     await expect(link).toBeVisible();
     achou = (await link.getAttribute("href")) === `/fiscalizacao/${fiscalizacaoId}`;
