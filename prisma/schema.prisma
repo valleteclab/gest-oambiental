@@ -109,6 +109,40 @@ enum CanalDenuncia {
   PRESENCIAL
   TELEFONE
   OUTRO
+  WHATSAPP
+  CHAT_SITE
+  EMAIL
+}
+
+// Agente de denúncias (docs/agente-denuncias.md)
+enum TipoCanal {
+  WHATSAPP_ZAPI
+  WHATSAPP_EVOLUTION
+  WHATSAPP_CHATWOOT
+  WEBCHAT
+  EMAIL
+}
+
+enum EstadoConversa {
+  INICIO
+  AGUARDANDO_LGPD
+  COLETANDO
+  CONFIRMANDO
+  REGISTRADA
+  HUMANO
+  ENCERRADA
+}
+
+enum DirecaoMensagem {
+  IN
+  OUT
+}
+
+enum AutorMensagem {
+  CIDADAO
+  IA
+  ATENDENTE
+  SISTEMA
 }
 
 enum StatusDenuncia {
@@ -197,6 +231,7 @@ model Organizacao {
   checklists    ChecklistModelo[]
   modelos       ModeloDocumento[]
   exportacoes   Exportacao[]
+  canais        CanalAtendimento[]
 
   @@map("organizacao")
 }
@@ -234,6 +269,8 @@ model Municipio {
   prazos_config  PrazoConfig[]
   conselhos      Conselho[]
   chamados       ChamadoSuporte[]
+  canais         CanalAtendimento[]
+  conversas      Conversa[]
 
   @@map("municipio")
 }
@@ -598,6 +635,7 @@ model Anexo {
   fiscalizacao_id String?  @db.Uuid
   pendencia_id    String?  @db.Uuid
   documento_exigido_id String? @db.Uuid
+  denuncia_id     String?  @db.Uuid // fotos enviadas pelo cidadão no canal de atendimento
   tipo            String // DOCUMENTO_EXIGIDO | RESPOSTA_PENDENCIA | FOTO | OUTRO
   nome_arquivo    String
   storage_key     String
@@ -612,7 +650,9 @@ model Anexo {
   processo     Processo?     @relation(fields: [processo_id], references: [id])
   fiscalizacao Fiscalizacao? @relation(fields: [fiscalizacao_id], references: [id])
   pendencia    Pendencia?    @relation(fields: [pendencia_id], references: [id])
+  denuncia     Denuncia?     @relation(fields: [denuncia_id], references: [id])
 
+  @@index([denuncia_id])
   @@map("anexo")
 }
 
@@ -741,10 +781,15 @@ model Denuncia {
   created_at       DateTime       @default(now())
   updated_at       DateTime       @updatedAt
   created_by       String?        @db.Uuid
+  contato_hash     String? // HMAC do telefone/e-mail do denunciante (acompanhamento; irreversível)
+  conversa_id      String?        @unique @db.Uuid // conversa (WhatsApp/chat/e-mail) de origem
 
   municipio     Municipio      @relation(fields: [municipio_id], references: [id])
   fiscalizacoes Fiscalizacao[]
+  anexos        Anexo[]
+  conversa      Conversa?      @relation(fields: [conversa_id], references: [id], onDelete: SetNull)
 
+  @@index([contato_hash])
   @@map("denuncia")
 }
 
@@ -958,4 +1003,138 @@ model ChamadoSuporte {
   municipio Municipio @relation(fields: [municipio_id], references: [id])
 
   @@map("chamado_suporte")
+}
+
+// ───────────────────────── Agente de denúncias (canais de atendimento) ─────────────────────────
+
+/// Canal de atendimento (WhatsApp Z-API/Evolution/Chatwoot, chat do site, e-mail) de um município (ou da organização).
+model CanalAtendimento {
+  id               String    @id @default(uuid()) @db.Uuid
+  organizacao_id   String    @db.Uuid
+  /// NULL = canal da organização (consórcio): o agente pergunta o município
+  municipio_id     String?   @db.Uuid
+  tipo             TipoCanal
+  nome             String
+  /// Configuração do provedor; credenciais ficam em `segredos` cifrado (lib/crypto cifrar)
+  config           Json      @default("{}")
+  /// Segredo do webhook (cifrado)
+  webhook_secret   String
+  ativo            Boolean   @default(true)
+  status_conexao   String?
+  ultimo_evento_em DateTime?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+  created_by       String?   @db.Uuid
+
+  organizacao Organizacao        @relation(fields: [organizacao_id], references: [id])
+  municipio   Municipio?         @relation(fields: [municipio_id], references: [id])
+  conversas   Conversa[]
+  mensagens   MensagemConversa[]
+  eventos     EventoWebhook[]
+
+  @@index([organizacao_id])
+  @@map("canal_atendimento")
+}
+
+model Conversa {
+  id                    String         @id @default(uuid()) @db.Uuid
+  canal_id              String         @db.Uuid
+  organizacao_id        String         @db.Uuid
+  municipio_id          String?        @db.Uuid
+  /// HMAC do identificador do chat no provedor (JID, conversa Chatwoot, e-mail+assunto, sessão web) – busca
+  chat_hash             String
+  /// Destino de resposta no provedor (cifrado)
+  destino_cifrado       String
+  /// HMAC do telefone (E.164) ou e-mail do cidadão
+  contato_hash          String?
+  contato_cifrado       String?
+  nome                  String?
+  estado                EstadoConversa @default(INICIO)
+  dados_coletados       Json           @default("{}")
+  denuncia_id           String?        @db.Uuid
+  ia_pausada_ate        DateTime?
+  atendente_id          String?        @db.Uuid
+  lgpd_consentimento_em DateTime?
+  ultima_msg_em         DateTime       @default(now())
+  /// Última mensagem do cidadão (janela de 24 h da API oficial do WhatsApp)
+  ultima_msg_cidadao_em DateTime?
+  created_at            DateTime       @default(now())
+  updated_at            DateTime       @updatedAt
+
+  canal     CanalAtendimento   @relation(fields: [canal_id], references: [id])
+  municipio Municipio?         @relation(fields: [municipio_id], references: [id])
+  mensagens MensagemConversa[]
+  denuncia  Denuncia?
+
+  @@index([canal_id, chat_hash])
+  @@index([organizacao_id, estado, ultima_msg_em])
+  @@index([contato_hash])
+  @@map("conversa")
+}
+
+model MensagemConversa {
+  id                  String          @id @default(uuid()) @db.Uuid
+  conversa_id         String          @db.Uuid
+  canal_id            String          @db.Uuid
+  direcao             DirecaoMensagem
+  autor               AutorMensagem
+  autor_usuario_id    String?         @db.Uuid
+  provider_message_id String?
+  /// TEXTO | IMAGEM | AUDIO | DOCUMENTO | LOCALIZACAO | BOTAO | OUTRO
+  tipo                String          @default("TEXTO")
+  texto               String?
+  /// Botões de resposta rápida oferecidos (OUT): [{id, rotulo}]
+  botoes              Json?
+  midia_key           String?
+  midia_mime          String?
+  latitude            Decimal?        @db.Decimal(9, 6)
+  longitude           Decimal?        @db.Decimal(9, 6)
+  /// OUT: PENDENTE | ENVIADA | SIMULADA | ERRO | IGNORADA
+  status_envio        String?
+  erro                String?
+  created_at          DateTime        @default(now())
+
+  conversa Conversa         @relation(fields: [conversa_id], references: [id], onDelete: Cascade)
+  canal    CanalAtendimento @relation(fields: [canal_id], references: [id])
+
+  @@unique([canal_id, provider_message_id])
+  @@index([conversa_id, created_at])
+  @@map("mensagem_conversa")
+}
+
+/// Caixa de entrada bruta dos webhooks (replay/depuração). Retenção: CANAIS_RETENCAO_EVENTOS_DIAS.
+model EventoWebhook {
+  id            String    @id @default(uuid()) @db.Uuid
+  canal_id      String    @db.Uuid
+  /// PENDENTE | PROCESSANDO | PROCESSADO | IGNORADO | ERRO
+  status        String    @default("PENDENTE")
+  content_type  String?
+  corpo         String
+  erro          String?
+  tentativas    Int       @default(0)
+  recebido_em   DateTime  @default(now())
+  processado_em DateTime?
+
+  canal CanalAtendimento @relation(fields: [canal_id], references: [id], onDelete: Cascade)
+
+  @@index([status, recebido_em])
+  @@index([recebido_em])
+  @@map("evento_webhook")
+}
+
+/// Consumo de IA por organização (custo estimado em US$).
+model UsoIa {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizacao_id String   @db.Uuid
+  conversa_id    String?  @db.Uuid
+  modelo         String
+  /// ENTENDER | RESPONDER | TRANSCREVER
+  finalidade     String
+  tokens_in      Int      @default(0)
+  tokens_out     Int      @default(0)
+  custo_estimado Decimal  @default(0) @db.Decimal(12, 6)
+  created_at     DateTime @default(now())
+
+  @@index([organizacao_id, created_at])
+  @@map("uso_ia")
 }

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { test, expect } from "@playwright/test";
-import { PROJETO_DESKTOP, apenasNoProjeto, estadoDeT1, login, logout } from "./helpers";
+import { DADOS, PROJETO_DESKTOP, apenasNoProjeto, estadoDeT1, login, logout } from "./helpers";
 
 // T5 – Autenticidade [PoC-5] (SPEC 13). Usa a LO emitida em T1 (test-results/poc-estado.json).
 // /validar/{codigo} (destino do QR Code) mostra VÁLIDO com os dados; o PDF baixado confere com o hash
@@ -34,8 +34,8 @@ test("T5 – validação pública da LO de T1: VÁLIDO, PDF íntegro e, após ca
   const dados = page.getByRole("region", { name: "Dados do documento" });
   await expect(dados).toContainText(numeroLo);
   await expect(dados).toContainText("Licença de Operação");
-  await expect(dados).toContainText("Laticínio Boa Vista Ltda");
-  await expect(dados).toContainText("Laticínio Boa Vista – Lagoa do Orvalho");
+  await expect(dados).toContainText(DADOS.cenarios.t1.requerente);
+  await expect(dados).toContainText(DADOS.cenarios.t1.empreendimento);
   await expect(dados.getByRole("link", { name: numeroProcesso })).toBeVisible();
   await expect(dados).toContainText(codigo);
   const hash = (await page.getByTestId("hash-documento").innerText()).trim();
@@ -52,7 +52,7 @@ test("T5 – validação pública da LO de T1: VÁLIDO, PDF íntegro e, após ca
   await expect(page.getByTestId("resultado-hash")).toContainText("Arquivo íntegro");
 
   // ── Gestor cancela o documento ──
-  await login(page, "gestorLor");
+  await login(page, "gestorPrincipal");
   await page.goto(`/documentos/${docId}`);
   await page.getByLabel("Motivo do cancelamento (obrigatório)").fill(MOTIVO);
   page.once("dialog", (d) => d.accept());

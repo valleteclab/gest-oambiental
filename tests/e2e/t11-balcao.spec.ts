@@ -1,15 +1,15 @@
 import { test, expect, type Page } from "@playwright/test";
-import { PDF_EXEMPLO, PROJETO_DESKTOP, apenasNoProjeto, entrarComo, login } from "./helpers";
+import { DADOS, PDF_EXEMPLO, PROJETO_DESKTOP, apenasNoProjeto, entrarComo, login, reProcesso } from "./helpers";
 
 // T11 – Novo processo (balcão): servidor protocola em nome do requerente que compareceu ao órgão.
-// Técnico de Lagoa do Orvalho: (a) requerente existente SEM login (Clínica Sorriso) e (b) PF recém-cadastrada
-// (rascunho retomado pela lista "Rascunho" → Continuar). Nº LOR-2026-xxxxxx + recibo PDF; tramitação registra
+// Técnico do município principal do dataset: (a) requerente existente SEM login (Clínica Sorriso) e (b) PF recém-cadastrada
+// (rascunho retomado pela lista "Rascunho" → Continuar). Nº SIG-AAAA-xxxxxx + recibo PDF; tramitação registra
 // o servidor ("Protocolado no balcão por …"). SEMA (somente leitura) e fiscal: sem botão e 403.
 // Altera dados: roda só no projeto desktop.
 
-const TECNICO_LOR = "Técnico(a) de Lagoa do Orvalho";
-const CLINICA = "Clínica Odontológica Sorriso Ltda";
-const EMP_CLINICA = "Clínica Odontológica Sorriso – Lagoa do Orvalho";
+const P = DADOS.principal;
+const TECNICO = DADOS.nomes.tecnicoPrincipal;
+const { requerente: CLINICA, busca: BUSCA_CLINICA, empreendimento: EMP_CLINICA, novoLat: NOVO_LAT, novoLng: NOVO_LNG } = DADOS.cenarios.t11;
 
 /** CPF válido (dígitos verificadores) a partir de 9 dígitos aleatórios. */
 function cpfAleatorio(): string {
@@ -54,7 +54,7 @@ async function protocolar(page: Page, processoId: string) {
   await expect(page.getByTestId("balcao-concluido")).toBeVisible({ timeout: 30_000 });
   expect(new URL(page.url()).searchParams.get("rascunho")).toBe(processoId);
   const numero = (await page.getByTestId("numero-protocolado").innerText()).trim();
-  expect(numero).toMatch(/^LOR-2026-\d{6}$/);
+  expect(numero).toMatch(reProcesso(P.sigla));
 
   const imprimir = page.getByRole("link", { name: "Imprimir recibo" });
   await expect(imprimir).toBeVisible();
@@ -66,21 +66,21 @@ async function protocolar(page: Page, processoId: string) {
   // Tramitação: autor = servidor do balcão; requerente permanece o titular
   await page.goto(`/processos/${processoId}?aba=tramitacao`);
   await expect(page.getByTestId("numero-processo")).toHaveText(numero);
-  await expect(page.getByTestId("linha-do-tempo").getByText(`Protocolado no balcão por ${TECNICO_LOR}.`)).toBeVisible();
+  await expect(page.getByTestId("linha-do-tempo").getByText(`Protocolado no balcão por ${TECNICO}.`)).toBeVisible();
   return numero;
 }
 
 test("T11a – técnico protocola no balcão: requerente existente sem login e PF recém-cadastrada", async ({ page }) => {
   apenasNoProjeto(PROJETO_DESKTOP);
   test.setTimeout(240_000);
-  await login(page, "tecnicoLor");
+  await login(page, "tecnicoPrincipal");
 
   // ── (a) Requerente existente, sem login ──
   await page.goto("/processos");
   await page.getByRole("link", { name: "Novo processo (balcão)" }).click();
   await expect(page).toHaveURL(/\/processos\/novo$/);
-  await expect(page.getByLabel("Município do processo").locator("option:checked")).toHaveText("Lagoa do Orvalho");
-  await page.getByLabel("Nome, razão social ou CPF/CNPJ completo").fill("Sorriso");
+  await expect(page.getByLabel("Município do processo").locator("option:checked")).toHaveText(P.nome);
+  await page.getByLabel("Nome, razão social ou CPF/CNPJ completo").fill(BUSCA_CLINICA);
   await page.getByRole("button", { name: "Buscar" }).click();
   const resultado = page.getByTestId("resultado-requerentes").locator("li", { hasText: CLINICA });
   await expect(resultado).toContainText("sem login");
@@ -96,7 +96,7 @@ test("T11a – técnico protocola no balcão: requerente existente sem login e P
   const selEmp = page.getByLabel("Empreendimento", { exact: true });
   // Apenas os empreendimentos do requerente escolhido
   await expect(selEmp.locator("option")).toHaveCount(2);
-  await selEmp.selectOption({ label: `${EMP_CLINICA} – Lagoa do Orvalho` });
+  await selEmp.selectOption({ label: `${EMP_CLINICA} – ${P.nome}` });
   await page.getByRole("button", { name: "Continuar" }).click();
 
   await expect(page.getByRole("heading", { name: /3\. Tipologia e porte/ })).toBeVisible();
@@ -133,8 +133,8 @@ test("T11a – técnico protocola no balcão: requerente existente sem login e P
   await expect(page.getByRole("radio", { name: "Novo empreendimento" })).toBeChecked();
   const empNome = `Lava-Jato ${nome}`;
   await page.getByLabel("Nome do empreendimento *").fill(empNome);
-  await page.getByLabel("Latitude").fill("-12.4031");
-  await page.getByLabel("Longitude").fill("-40.1162");
+  await page.getByLabel("Latitude").fill(NOVO_LAT);
+  await page.getByLabel("Longitude").fill(NOVO_LNG);
   await page.getByRole("button", { name: "Continuar" }).click();
 
   await expect(page.getByRole("heading", { name: /3\. Tipologia e porte/ })).toBeVisible();
@@ -162,8 +162,8 @@ test("T11a – técnico protocola no balcão: requerente existente sem login e P
   await anexarObrigatorios(page);
   await protocolar(page, idB);
 
-  // Escopo: técnico de Campo das Seriemas não retoma/abre o balcão de um processo de Lagoa do Orvalho
-  await entrarComo(page, "tecnicoCse");
+  // Escopo: técnico do outro município não retoma/abre o balcão de um processo do município principal
+  await entrarComo(page, "tecnicoOutro");
   const r = await page.goto(`/processos/novo?rascunho=${idA}`);
   expect(r?.status()).toBe(403);
   await expect(page.getByTestId("acesso-negado")).toBeVisible();
@@ -171,7 +171,7 @@ test("T11a – técnico protocola no balcão: requerente existente sem login e P
 
 test("T11b – SEMA (somente leitura) e fiscal não protocolam no balcão (sem botão, 403)", async ({ page }) => {
   apenasNoProjeto(PROJETO_DESKTOP);
-  for (const perfil of ["sema", "fiscalLor"] as const) {
+  for (const perfil of ["sema", "fiscalPrincipal"] as const) {
     await login(page, perfil);
     const lista = await page.goto("/processos");
     expect(lista?.status()).toBe(200);

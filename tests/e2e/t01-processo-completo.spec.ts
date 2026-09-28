@@ -1,14 +1,17 @@
 import { test, expect, type Page } from "@playwright/test";
-import { PDF_EXEMPLO, PROJETO_DESKTOP, apenasNoProjeto, entrarComo, login, salvarEstado } from "./helpers";
+import { ANO, DADOS, PDF_EXEMPLO, PROJETO_DESKTOP, apenasNoProjeto, entrarComo, login, reProcesso, salvarEstado } from "./helpers";
 
 // T1 – Processo completo [PoC-1] (SPEC 13).
-// Requerente cria LO pelo wizard → protocolo LOR-2026-xxxxxx + recibo PDF → gestor distribui ao técnico →
+// Requerente cria LO pelo wizard → protocolo SIG-AAAA-xxxxxx (município principal do dataset) + recibo PDF → gestor distribui ao técnico →
 // técnico abre pendência → requerente responde → técnico aceita, preenche checklist e emite parecer
 // favorável com condicionantes → gestor defere → LO emitida → linha do tempo completa.
 // Altera dados: roda só no projeto desktop. Grava nº do processo e código da LO para T5/T8 (helpers.salvarEstado).
 
-const EMPREENDIMENTO = "Laticínio Boa Vista – Lagoa do Orvalho";
-const TECNICO = "Técnico(a) de Lagoa do Orvalho"; // tecnico.lor
+const P = DADOS.principal.sigla;
+const EMPREENDIMENTO = DADOS.cenarios.t1.empreendimento;
+const REQUERENTE = DADOS.cenarios.t1.requerente;
+const TECNICO = DADOS.nomes.tecnicoPrincipal;
+const GESTOR = DADOS.nomes.gestorPrincipal;
 const DESPACHO_DISTRIBUIR = "Distribuído para análise da LO do laticínio (T1).";
 const PENDENCIA = "Apresentar laudo de análise do efluente tratado da ETE (DBO, DQO, óleos e graxas).";
 const RESPOSTA = "Segue laudo do laboratório credenciado com os parâmetros solicitados.";
@@ -73,14 +76,14 @@ test("T1 – processo completo de LO: requerimento, pendência, checklist, parec
   }
   expect(obrigatorios).toBeGreaterThan(0);
 
-  // ── 3. Revisão e protocolo → nº LOR-2026-xxxxxx + recibo PDF ──
+  // ── 3. Revisão e protocolo → nº SIG-AAAA-xxxxxx + recibo PDF ──
   await page.getByRole("button", { name: "Revisar" }).click();
   await expect(page.getByRole("heading", { name: /5\. Revisão e protocolo/ })).toBeVisible();
   await expect(page.getByText("Faltam documentos obrigatórios")).toHaveCount(0);
   await page.getByRole("button", { name: "Protocolar requerimento" }).click();
   await page.waitForURL(new RegExp(`/meus-processos/${processoId}`), { timeout: 30_000 });
   const numero = (await page.getByTestId("numero-processo").innerText()).replace("Processo ", "").trim();
-  expect(numero).toMatch(/^LOR-2026-\d{6}$/);
+  expect(numero).toMatch(reProcesso(P));
   await expect(page.getByText(`Requerimento protocolado com sucesso sob o nº ${numero}`)).toBeVisible();
   salvarEstado({ processo_id: processoId, processo_numero: numero });
 
@@ -92,8 +95,8 @@ test("T1 – processo completo de LO: requerimento, pendência, checklist, parec
   expect(recibo.headers()["content-type"]).toContain("application/pdf");
   expect((await recibo.body()).subarray(0, 5).toString()).toBe("%PDF-");
 
-  // ── 4. Gestor distribui ao técnico de Lagoa do Orvalho ──
-  await entrarComo(page, "gestorLor");
+  // ── 4. Gestor distribui ao técnico do município principal ──
+  await entrarComo(page, "gestorPrincipal");
   await abrirProcesso(page, processoId);
   await expect(page.getByTestId("numero-processo")).toHaveText(numero);
   await executarAcao(page, "Distribuir", async (painel) => {
@@ -104,7 +107,7 @@ test("T1 – processo completo de LO: requerimento, pendência, checklist, parec
   await expect(page.getByTestId("status-processo")).toContainText("Em triagem");
 
   // ── 5. Técnico abre pendência ──
-  await entrarComo(page, "tecnicoLor");
+  await entrarComo(page, "tecnicoPrincipal");
   await abrirProcesso(page, processoId);
   await executarAcao(page, "Abrir pendência", async (painel) => {
     await painel.getByLabel("Pendência 1").fill(PENDENCIA);
@@ -125,7 +128,7 @@ test("T1 – processo completo de LO: requerimento, pendência, checklist, parec
   await expect(page.getByText(RESPOSTA)).toBeVisible();
 
   // ── 7. Técnico aceita, preenche o checklist e emite parecer favorável com condicionantes ──
-  await entrarComo(page, "tecnicoLor");
+  await entrarComo(page, "tecnicoPrincipal");
   await abrirProcesso(page, processoId);
   await expect(page.getByTestId("status-processo")).toContainText("Em triagem");
   await executarAcao(page, /^Aceitar/, async (painel) => {
@@ -159,7 +162,7 @@ test("T1 – processo completo de LO: requerimento, pendência, checklist, parec
   await expect(page.getByTestId("status-processo")).toContainText("Aguardando decisão", { timeout: 30_000 });
 
   // ── 8. Gestor defere → LO emitida ──
-  await entrarComo(page, "gestorLor");
+  await entrarComo(page, "gestorPrincipal");
   await abrirProcesso(page, processoId);
   await executarAcao(page, "Deferir", async (painel) => {
     await painel.getByLabel("Despacho de deferimento (opcional)").fill(DESPACHO_DEFERIR);
@@ -170,11 +173,11 @@ test("T1 – processo completo de LO: requerimento, pendência, checklist, parec
   await expect(page.getByTestId("status-processo")).toContainText("Concluído", { timeout: 30_000 });
 
   await abrirProcesso(page, processoId, "emitidos");
-  const linhaLo = page.locator("tr", { hasText: "Licença" }).filter({ hasText: /LO-LOR-/ });
+  const linhaLo = page.locator("tr", { hasText: "Licença" }).filter({ hasText: new RegExp(`LO-${P}-`) });
   await expect(linhaLo).toHaveCount(1);
   await expect(linhaLo.getByText("valido")).toBeVisible();
   const loNumero = (await linhaLo.locator("td").nth(1).innerText()).trim();
-  expect(loNumero).toMatch(/^LO-LOR-\d+\/2026$/);
+  expect(loNumero).toMatch(new RegExp(`^LO-${P}-\\d+/${ANO}$`));
   const loCodigo = (await linhaLo.locator('a[href^="/validar/"]').innerText()).trim();
   const loDocId = (await linhaLo.getByRole("link", { name: "PDF" }).getAttribute("href"))!.split("/")[4];
   const pdfLo = await page.request.get(`/api/v1/documentos/${loDocId}/pdf`);
@@ -186,14 +189,14 @@ test("T1 – processo completo de LO: requerimento, pendência, checklist, parec
   await abrirProcesso(page, processoId, "tramitacao");
   const tl = page.getByTestId("linha-do-tempo");
   const etapas: [RegExp, string, string | RegExp][] = [
-    [/^Protocolar$/, "Laticínio Boa Vista Ltda", `protocolado sob o nº ${numero}`],
-    [/^Distribuir$/, "Gestor(a) de Lagoa do Orvalho", DESPACHO_DISTRIBUIR],
+    [/^Protocolar$/, REQUERENTE, `protocolado sob o nº ${numero}`],
+    [/^Distribuir$/, GESTOR, DESPACHO_DISTRIBUIR],
     [/^Abrir pendência$/, TECNICO, PENDENCIA],
-    [/^Responder pendência$/, "Laticínio Boa Vista Ltda", /Pendência\(s\) respondida\(s\) pelo requerente/],
+    [/^Responder pendência$/, REQUERENTE, /Pendência\(s\) respondida\(s\) pelo requerente/],
     [/^Aceitar/, TECNICO, DESPACHO_ACEITAR],
     [/^Emitir parecer$/, TECNICO, /favorável com condicionantes/],
-    [/^Deferir$/, "Gestor(a) de Lagoa do Orvalho", DESPACHO_DEFERIR],
-    [/^Emitir documento$/, "Gestor(a) de Lagoa do Orvalho", `${loNumero} emitido`],
+    [/^Deferir$/, GESTOR, DESPACHO_DEFERIR],
+    [/^Emitir documento$/, GESTOR, `${loNumero} emitido`],
   ];
   for (const [rotulo, usuario, despacho] of etapas) {
     const item = tl.locator(":scope > li").filter({ has: page.locator("span.font-semibold", { hasText: rotulo }) }).first();

@@ -1,9 +1,10 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import type { Prisma, StatusDenuncia } from "@prisma/client";
+import type { CanalDenuncia, Prisma, StatusDenuncia } from "@prisma/client";
 import { prisma } from "../db";
 import { auditar } from "../audit";
 import { cifrar, decifrar, formatarCpfCnpj, hashBusca, mascararCpfCnpj, sha256, somenteDigitos } from "../crypto";
+import { hashContato } from "../canais/contato";
 import { numeroDocumento } from "../numeracao";
 import { nomeSeguro, removerArquivo, salvarArquivo, validarUpload } from "../storage";
 import { emitirDocumento } from "../documentos";
@@ -37,6 +38,7 @@ export async function criarDenunciaPublica(d: DenunciaPublicaInput) {
       data: {
         organizacao_id: mun.organizacao_id, municipio_id: mun.id, protocolo, canal: "PORTAL", status: "NOVA",
         anonima: d.anonima, denunciante_nome: d.anonima ? null : d.denunciante_nome, contato: !d.anonima && d.contato ? cifrar(d.contato) : null,
+        contato_hash: !d.anonima ? hashContato(d.contato) : null,
         descricao: d.descricao, endereco: d.endereco, latitude: d.latitude ?? null, longitude: d.longitude ?? null,
       },
     });
@@ -55,6 +57,7 @@ export async function criarDenunciaInterna(u: UsuarioSessao, d: z.infer<typeof D
       data: {
         organizacao_id: mun.organizacao_id, municipio_id: mun.id, protocolo, canal: d.canal, status: "NOVA", created_by: u.id,
         anonima: d.anonima, denunciante_nome: d.anonima ? null : d.denunciante_nome, contato: !d.anonima && d.contato ? cifrar(d.contato) : null,
+        contato_hash: !d.anonima ? hashContato(d.contato) : null,
         descricao: d.descricao, endereco: d.endereco ?? null, latitude: d.latitude ?? null, longitude: d.longitude ?? null,
       },
     });
@@ -63,10 +66,61 @@ export async function criarDenunciaInterna(u: UsuarioSessao, d: z.infer<typeof D
   });
 }
 
+export type DenunciaCanalInput = {
+  municipio_id: string;
+  canal: Extract<CanalDenuncia, "WHATSAPP" | "CHAT_SITE" | "EMAIL">;
+  descricao: string;
+  endereco: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  anonima: boolean;
+  denunciante_nome: string | null;
+  /** Telefone/e-mail do cidadão: cifrado na denúncia só se identificada; o HASH sempre (acompanhamento pelo próprio contato). */
+  contato: string | null;
+  contato_hash: string | null;
+  conversa_id: string;
+  fotos: { storage_key: string; nome: string; mime: string; tamanho: number; sha256: string }[];
+};
+
+/**
+ * Denúncia registrada pelo agente de atendimento (WhatsApp, chat do site, e-mail): mesmo protocolo DEN-{SIGLA}-{000}/{ANO},
+ * status NOVA, fotos da conversa como anexos da denúncia. Auditoria DENUNCIA_CANAL (usuário nulo – cidadão).
+ */
+export async function criarDenunciaCanal(d: DenunciaCanalInput) {
+  const mun = await municipioOu404(d.municipio_id);
+  return prisma.$transaction(async (tx) => {
+    const protocolo = await numeroDocumento(tx, mun, "DEN");
+    const den = await tx.denuncia.create({
+      data: {
+        organizacao_id: mun.organizacao_id, municipio_id: mun.id, protocolo, canal: d.canal, status: "NOVA",
+        anonima: d.anonima, denunciante_nome: d.anonima ? null : d.denunciante_nome, contato: !d.anonima && d.contato ? cifrar(d.contato) : null,
+        contato_hash: d.contato_hash, conversa_id: d.conversa_id,
+        descricao: d.descricao.slice(0, 5000), endereco: d.endereco?.slice(0, 300) ?? null, latitude: d.latitude, longitude: d.longitude,
+      },
+    });
+    if (d.fotos.length) {
+      await tx.anexo.createMany({
+        data: d.fotos.map((f) => ({ denuncia_id: den.id, tipo: "FOTO", nome_arquivo: f.nome, storage_key: f.storage_key, mime: f.mime, tamanho: f.tamanho, sha256: f.sha256, latitude: d.latitude, longitude: d.longitude })),
+      });
+    }
+    await auditar({ usuario_id: null, acao: "DENUNCIA_CANAL", entidade: "denuncia", entidade_id: den.id, depois: { protocolo, municipio_id: mun.id, anonima: d.anonima, canal: d.canal, conversa_id: d.conversa_id, fotos: d.fotos.map((f) => f.sha256) } }, tx);
+    return { id: den.id, protocolo, municipio: mun };
+  });
+}
+
+/** Avisa o cidadão (canal da conversa de origem) sobre mudança de situação – sem bloquear nem falhar a operação. */
+function avisarCidadao(denunciaId: string, status: StatusDenuncia) {
+  void import("../agente/notificar").then((m) => m.notificarStatusDenuncia(denunciaId, status)).catch((e) => console.error("[denuncia] notificar", e));
+}
+
 export async function obterDenuncia(u: UsuarioSessao, id: string) {
   const d = await prisma.denuncia.findUnique({
     where: { id },
-    include: { municipio: { select: { nome: true, sigla: true } }, fiscalizacoes: { orderBy: { data_hora: "desc" }, select: { id: true, data_hora: true, constatacao: true, status: true } } },
+    include: {
+      municipio: { select: { nome: true, sigla: true } },
+      fiscalizacoes: { orderBy: { data_hora: "desc" }, select: { id: true, data_hora: true, constatacao: true, status: true } },
+      anexos: { where: { tipo: "FOTO" }, orderBy: { created_at: "asc" }, select: { id: true, nome_arquivo: true, tamanho: true, sha256: true } },
+    },
   });
   if (!d) throw naoEncontrado("Denúncia não encontrada.");
   if (!podeVerMunicipio(u, d.municipio_id)) throw proibido();
@@ -89,11 +143,13 @@ export async function alterarStatusDenuncia(u: UsuarioSessao, id: string, status
   if (!d) throw naoEncontrado("Denúncia não encontrada.");
   if (!podeVerMunicipio(u, d.municipio_id) || !podeEditarDenuncia(u, d.municipio_id)) throw proibido();
   if (!podeTransicionarDenuncia(d.status, status)) throw invalido(`Não é possível mudar de ${d.status} para ${status}.`);
-  return prisma.$transaction(async (tx) => {
+  const r = await prisma.$transaction(async (tx) => {
     const r = await tx.denuncia.update({ where: { id }, data: { status } });
     await auditar({ usuario_id: u.id, acao: "ALTERAR_STATUS_DENUNCIA", entidade: "denuncia", entidade_id: id, antes: { status: d.status }, depois: { status, despacho } }, tx);
     return r;
   });
+  if (d.conversa_id) avisarCidadao(id, status);
+  return r;
 }
 
 export type FiltroDenuncias = { municipio_id?: string | null; status?: StatusDenuncia | null; q?: string | null };
@@ -161,7 +217,7 @@ async function gravarFotos(sigla: string, fiscalizacaoId: string, fotos: ReturnT
  */
 export async function criarFiscalizacao(u: UsuarioSessao, d: FiscalizacaoInput, fotosEntrada: FotoUpload[] = []) {
   const [den, proc, emp] = await Promise.all([
-    d.denuncia_id ? prisma.denuncia.findUnique({ where: { id: d.denuncia_id }, select: { id: true, municipio_id: true, status: true } }) : null,
+    d.denuncia_id ? prisma.denuncia.findUnique({ where: { id: d.denuncia_id }, select: { id: true, municipio_id: true, status: true, conversa_id: true } }) : null,
     d.processo_id ? prisma.processo.findUnique({ where: { id: d.processo_id }, select: { id: true, municipio_id: true, empreendimento_id: true, status: true } }) : null,
     d.empreendimento_id ? prisma.empreendimento.findUnique({ where: { id: d.empreendimento_id }, select: { id: true, municipio_id: true } }) : null,
   ]);
@@ -181,7 +237,7 @@ export async function criarFiscalizacao(u: UsuarioSessao, d: FiscalizacaoInput, 
 
   const equipe = [{ usuario_id: u.id, nome: u.nome }, ...d.equipe.filter((m) => m.usuario_id !== u.id)];
   try {
-    return await prisma.$transaction(async (tx) => {
+    const criada = await prisma.$transaction(async (tx) => {
       const f = await tx.fiscalizacao.create({
         data: {
           id, organizacao_id: mun.organizacao_id, municipio_id: mun.id, origem: origemFiscalizacao(d),
@@ -202,6 +258,8 @@ export async function criarFiscalizacao(u: UsuarioSessao, d: FiscalizacaoInput, 
       }
       return f;
     });
+    if (den && den.status === "NOVA" && den.conversa_id) avisarCidadao(den.id, "EM_APURACAO");
+    return criada;
   } catch (e) {
     await Promise.all(gravadas.map((g) => removerArquivo(g.storage_key)));
     throw e;

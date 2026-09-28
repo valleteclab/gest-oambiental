@@ -15,6 +15,7 @@ export const ITENS_MENU: Item[] = [
   { href: "/fiscalizacao", rotulo: "Fiscalização", visivel: (u) => can(u, "ver", "fiscalizacao") },
   { href: "/fiscalizacao/denuncias", rotulo: "Denúncias", visivel: (u) => can(u, "ver", "denuncia") },
   { href: "/fiscalizacao/mapa", rotulo: "Mapa", visivel: (u) => can(u, "ver", "fiscalizacao") },
+  { href: "/atendimento", rotulo: "Atendimento", visivel: (u) => can(u, "ver", "denuncia") },
   { href: "/documentos", rotulo: "Documentos emitidos", visivel: (u) => can(u, "ver", "documento") },
   { href: "/relatorios", rotulo: "Relatórios", visivel: (u) => can(u, "ver", "relatorio") },
   { href: "/admin", rotulo: "Administração", visivel: (u) => can(u, "ver", "admin") || can(u, "exportar", "exportacao") },

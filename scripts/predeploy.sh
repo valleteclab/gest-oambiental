@@ -7,6 +7,9 @@
 #   SEED_ONBOARDING=<cliente> → npm run onboard -- <cliente> [--demo se DEMO_MODE=true]
 #                               (arquivo prisma/seed/clientes/<cliente>.json; idempotente; vários: separe por vírgula)
 #   SEED_RIACHAO_DEMO=true   → npm run seed:riachao-demo (dados fictícios de Riachão das Neves; exige o onboarding)
+#   SEED_CDS_POC=true        → SOMENTE no ambiente da PoC (CDS Piemonte – docs/poc-cds.md): onboarding
+#                               cds-piemonte --demo (senha = ONBOARD_SENHA) + npm run seed:cds-poc. Recusa rodar com
+#                               DEMO_MODE=true ou SEED_DEMO=true (a demonstração pública nunca recebe esses dados).
 # Senhas: no onboarding sem --demo cada usuário novo recebe senha temporária impressa UMA vez no log do deploy
 # (troca obrigatória); ONBOARD_SENHA fixa a senha. Com DEMO_MODE=true: senha demo, sem troca obrigatória.
 set -eu
@@ -40,6 +43,24 @@ fi
 if sim "${SEED_RIACHAO_DEMO:-}"; then
   log "SEED_RIACHAO_DEMO=true – dados de demonstração de Riachão das Neves"
   npm run seed:riachao-demo
+fi
+
+# ── Ambiente da PoC – CDS Piemonte do Paraguaçu (Pregão SRP 005/2026) – ver docs/poc-cds.md ──
+if sim "${SEED_CDS_POC:-}"; then
+  if sim "${DEMO_MODE:-}" || sim "${SEED_DEMO:-}"; then
+    log "ERRO: SEED_CDS_POC=true não pode ser usado com DEMO_MODE=true/SEED_DEMO=true (demonstração pública). Abortado."
+    exit 1
+  fi
+  case ",${SEED_ONBOARDING:-}," in
+    *,cds-piemonte,*)
+      log "ERRO: com SEED_CDS_POC=true, retire cds-piemonte de SEED_ONBOARDING (este bloco já faz o onboarding com --demo;"
+      log "      sem --demo os usuários ficam com senha temporária e troca obrigatória, e os E2E da PoC não entram). Abortado."
+      exit 1 ;;
+  esac
+  [ -n "${ONBOARD_SENHA:-}" ] || log "AVISO: ONBOARD_SENHA vazia – usuários de ensaio com a senha demo padrão (trocar antes da sessão oficial)."
+  log "SEED_CDS_POC=true – onboarding cds-piemonte (--demo) + dados de ensaio da PoC"
+  npm run onboard -- cds-piemonte --demo
+  npm run seed:cds-poc
 fi
 
 log "concluído"

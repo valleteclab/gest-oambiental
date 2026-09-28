@@ -14,6 +14,8 @@
     "seed:base": "tsx prisma/seed/base.ts",
     "seed:demo": "tsx prisma/seed/base.ts && tsx --conditions=react-server prisma/seed/demo.ts",
     "jobs": "tsx jobs/worker.ts",
+    "backup": "tsx scripts/backup/executar.ts backup",
+    "backup:restore-test": "tsx scripts/backup/executar.ts restore-test",
     "test:e2e:smoke": "playwright test tests/e2e/smoke.spec.ts",
     "test:e2e:poc": "playwright test \"tests/e2e/t(0[1-9]|10)-\"",
     "start:standalone": "node .next/standalone/server.js",
@@ -21,7 +23,9 @@
     "docker:up": "docker compose up -d --build",
     "openapi:export": "tsx -e \"import {documentoOpenApi} from './lib/openapi'; console.log(JSON.stringify(documentoOpenApi(), null, 2))\"",
     "onboard": "tsx prisma/seed/onboarding.ts",
-    "seed:riachao-demo": "tsx --conditions=react-server prisma/seed/clientes/riachao-demo.ts"
+    "seed:riachao-demo": "tsx --conditions=react-server prisma/seed/clientes/riachao-demo.ts",
+    "seed:cds-poc": "tsx --conditions=react-server prisma/seed/clientes/cds-poc-demo.ts",
+    "test:e2e:poc-cds": "E2E_DATASET=poc-cds playwright test"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1141.0",

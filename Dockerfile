@@ -12,11 +12,24 @@ FROM ${NODE_IMAGE} AS base
 ENV DEBIAN_FRONTEND=noninteractive \
     NEXT_TELEMETRY_DISABLED=1 \
     TZ=America/Bahia
+# postgresql-client do repositório oficial (apt.postgresql.org): pg_dump/pg_restore precisam ser da mesma
+# versão major do servidor ou mais novos (Railway: ghcr.io/railwayapp-templates/postgres-ssl:18 → cliente 18).
+# Usado pelo backup real (lib/backup/executar.ts) no worker e no botão "Executar backup agora" do web.
+ARG PG_CLIENT_VERSION=18
 RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl \
+ && install -d /usr/share/postgresql-common/pgdg \
+ && curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+ && . /etc/os-release \
+ && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+ && apt-get update \
  && apt-get install -y --no-install-recommends \
-      openssl ca-certificates tini tzdata \
+      openssl tini tzdata \
+      postgresql-client-${PG_CLIENT_VERSION} \
       chromium fonts-liberation fonts-dejavu-core fonts-noto-core fonts-noto-color-emoji \
- && rm -rf /var/lib/apt/lists/*
+ && apt-get purge -y --auto-remove curl \
+ && rm -rf /var/lib/apt/lists/* \
+ && pg_dump --version
 ENV CHROMIUM_PATH=/usr/bin/chromium \
     PUPPETEER_SKIP_DOWNLOAD=1
 WORKDIR /app

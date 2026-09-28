@@ -2,7 +2,7 @@
 // NUNCA rodar em produção de cliente após a implantação.
 //
 // Os dados são criados pelos serviços reais da aplicação (cadastros, rascunho, anexos, transicionar,
-// emissão de documentos, fiscalização, alertas, backup), então numeração, tramitação, prazos, auditoria,
+// emissão de documentos, fiscalização, alertas), então numeração, tramitação, prazos, auditoria,
 // e-mails e PDFs (com QR Code) são genuínos. Depois das transições, apenas campos de DATA são ajustados
 // para espalhar os dados ao longo de 2026 (created_at / data_protocolo / data_conclusao de processo e
 // created_at de denúncia) – tramitacao e log_auditoria (imutáveis) não são tocados.
@@ -12,7 +12,8 @@
 //   T2 – "Posto Estrela – Serra Serena" com LP, LI e LO concluídas e licenças emitidas; RT com registro no CREA.
 //   T3 – tecnico.lor tem exatamente 2 processos com prazo correndo: um vence em 3 dias e outro vencido.
 //   T6/T7 – dados em todos os municípios (Lagoa do Orvalho, Campo das Seriemas, Serra Serena…).
-//   T10 – backup nas últimas 24 h e teste de restauração no último mês.
+//   T10 – sem registros de backup fabricados: o backup e o teste de restauração são executados de verdade
+//         (worker ou botões em /admin/backup; o spec T10 os dispara).
 //
 // Os módulos de lib/ importam "server-only": rodar com `tsx --conditions=react-server` (ver package.json).
 import path from "node:path";
@@ -280,7 +281,6 @@ async function main() {
   const fisc = await import("../../lib/fiscalizacao/servico");
   const { FiscalizacaoSchema, AutoInfracaoSchema, NotificacaoSchema, DenunciaInternaSchema, DenunciaPublicaSchema } = await import("../../lib/fiscalizacao/schemas");
   const { gerarAlertas } = await import("../../lib/alertas/gerar");
-  const { registrarBackup, registrarTesteRestauracao } = await import("../../lib/backup/registrar");
   const { sessaoPorEmail } = await import("../../lib/sessao");
   type UsuarioSessao = import("../../lib/rbac").UsuarioSessao;
 
@@ -583,14 +583,8 @@ async function main() {
   }
   log(`${autos.length} autos de infração e ${notificacoes.length} notificações emitidos (PDF).`);
 
-  // ── Backup (T10) ──
-  const tamanhoBase = 48_000_000;
-  for (let i = 6; i >= 1; i--) {
-    await registrarBackup({ tipo: "BACKUP", executado_em: diasAtras(i, 3, 15), tamanho: tamanhoBase + (6 - i) * 850_000, destino: "s3://licenciagov-backup-sa-east-1 (réplica: gcs://licenciagov-dr-us-east1)", observacao: "pg_dump diário (cron 03:15) – criptografado (AES-256)." });
-  }
-  await registrarBackup({ tipo: "BACKUP", executado_em: new Date(Date.now() - 3 * 3600000), tamanho: tamanhoBase + 6 * 850_000, destino: "s3://licenciagov-backup-sa-east-1 (réplica: gcs://licenciagov-dr-us-east1)", observacao: "pg_dump diário – criptografado (AES-256). Anexos: versionamento do bucket + replicação diária." });
-  await registrarTesteRestauracao({ executado_em: diasAtras(12, 14, 30), tamanho: tamanhoBase + 850_000, destino: "Ambiente de homologação (restore-test)", observacao: "Teste mensal de restauração conforme docs/restore.md: dump restaurado, contagens conferidas e login validado em 38 min.", usuario_id: admin.id });
-  log("Registros de backup e teste de restauração criados.");
+  // Backup (T10): NENHUM registro é fabricado aqui. /admin/backup mostra apenas execuções reais do job
+  // `backup` do worker (lib/backup/executar.ts) ou do botão "Executar backup agora".
 
   // ── Alertas (T3) ──
   const alertas = await gerarAlertas(new Date(), { organizacao_id: orgDemo.id });

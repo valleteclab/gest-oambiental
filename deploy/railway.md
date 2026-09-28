@@ -28,6 +28,23 @@ Topologia: 1 projeto com **Postgres** (plugin), serviço **app** (Next.js) e ser
 | `TZ` | `America/Bahia` |
 | `PORT` | `3000` (app) |
 
+### Backup real (worker + botão em /admin/backup – `docs/backup.md`)
+Defina no **app e no worker** (o botão "Executar backup agora" roda no app; o agendamento, no worker). As imagens já trazem `postgresql-client-18` (compatível com o Postgres 18 do template `postgres-ssl:18`) e `openssl`.
+
+| Variável | Valor |
+|---|---|
+| `BACKUP_PASSPHRASE` | `openssl rand -base64 48` – senha da criptografia AES-256 dos dumps. **Guarde no cofre fora do Railway** (sem ela o backup é irrecuperável). Sem ela, a chave é derivada da `DATA_KEY` (aviso em /admin/backup). |
+| `BACKUP_S3_ENDPOINT` | bucket em **outro provedor**: Cloudflare R2 `https://<conta>.r2.cloudflarestorage.com` ou Backblaze B2 `https://s3.<região>.backblazeb2.com` |
+| `BACKUP_S3_BUCKET` / `BACKUP_S3_REGION` | ex.: `licenciagov-dr` / `auto` (R2) ou `us-west-004` (B2) |
+| `BACKUP_S3_ACCESS_KEY_ID` / `BACKUP_S3_SECRET_ACCESS_KEY` | credencial restrita a esse bucket (ler, gravar, listar, apagar) |
+| `BACKUP_S3_PREFIX` | opcional, padrão `pg/` · `BACKUP_S3_FORCE_PATH_STYLE=true` só para MinIO |
+| `BACKUP_ALERTA_EMAIL` | e-mail(s) da operação (vírgula) avisados em **falha** do backup/teste (além do aviso diário aos ADMIN do `backup-check`) |
+| `BACKUP_RETENCAO_DIAS` | opcional, padrão `30` |
+| `BACKUP_CRON` / `BACKUP_RESTORE_CRON` | opcionais, padrão `15 3 * * *` (diário 03:15) e `45 4 1 * *` (dia 1, 04:45), fuso `JOBS_TZ` (America/Bahia) |
+| `BACKUP_RESTORE_DATABASE_URL` | opcional: banco descartável para o teste de restauração. Sem ela o teste cria e apaga `licenciagov_restore_test` no mesmo Postgres (o usuário `postgres` do Railway pode criar bancos; exige espaço livre no volume ≈ 2× o banco). |
+
+Sem as variáveis `BACKUP_S3_*`, os dumps vão para o storage da própria aplicação (`backups/` no `S3_BUCKET`) e /admin/backup mostra "cópia fora do provedor não configurada".
+
 ## 3. Pré-deploy do worker: migrações, seeds e onboarding de clientes
 `scripts/predeploy.sh` roda, nesta ordem, conforme as variáveis do serviço **worker**:
 
@@ -38,6 +55,7 @@ Topologia: 1 projeto com **Postgres** (plugin), serviço **app** (Next.js) e ser
 | `SEED_DEMO=true` | `npm run seed:demo` – consórcio fictício CID-DEMO (idempotente). Só homologação. |
 | `SEED_ONBOARDING=riachao-das-neves` | `npm run onboard -- riachao-das-neves` (arquivo `prisma/seed/clientes/<cliente>.json`; vários clientes separados por vírgula). Com `DEMO_MODE=true` roda com `--demo` (senha demo `Demo@2026licencia`, sem troca obrigatória). Idempotente: cria só o que falta. |
 | `SEED_RIACHAO_DEMO=true` | `npm run seed:riachao-demo` – empreendimentos, processos, licenças, denúncias e vistorias **fictícios** de Riachão das Neves (exige o onboarding acima; idempotente). |
+| `SEED_CDS_POC=true` | **Somente no projeto da PoC** (`licenciagov-poc`, `DEMO_MODE=false`): onboarding `cds-piemonte --demo` (senha = `ONBOARD_SENHA`) + `npm run seed:cds-poc` (CDS Piemonte do Paraguaçu, 8 municípios reais, cenários T1–T10). Aborta com `DEMO_MODE=true`/`SEED_DEMO=true` ou com `cds-piemonte` em `SEED_ONBOARDING`. Ver `docs/poc-cds.md`. |
 | `ONBOARD_SENHA` | (opcional) senha fixa dos usuários criados pelo onboarding. Sem ela e sem `--demo`, cada usuário novo recebe uma senha temporária **impressa uma única vez no log do pré-deploy** (troca obrigatória no 1º acesso). |
 
 Ambiente de apresentação para Riachão das Neves (exemplo): `DEMO_MODE=true`, `SEED_DEMO=true`, `SEED_ONBOARDING=riachao-das-neves`, `SEED_RIACHAO_DEMO=true`.
@@ -51,4 +69,4 @@ Manual: `railway run --service worker npm run onboard -- <cliente> [--demo] [--a
 Crie dois *Environments* no projeto (`homolog`, `production`) – cada um tem seu próprio Postgres, bucket e domínio. Região: o Railway não tem região no Brasil; se a exigência de hospedagem no Brasil (SPEC §3) for contratual, use AWS sa-east-1 (`deploy/README.md`).
 
 ## 5. Monitoramento
-Uptime monitor externo (Better Stack/UptimeRobot) em `https://<domínio>/api/health` a cada 1 min. Backups: habilite backups do Postgres no Railway e agende `scripts/backup/pg_dump.sh` (ver `docs/backup.md`).
+Uptime monitor externo (Better Stack/UptimeRobot) em `https://<domínio>/api/health` a cada 1 min. Backups: habilite também os backups nativos do volume do Postgres no Railway (*Postgres → Backups*, camada 1) – o dump lógico diário cifrado e o teste de restauração mensal rodam sozinhos no **worker** (filas `backup` e `restore-test`); confira em `/admin/backup` (ver `docs/backup.md`).

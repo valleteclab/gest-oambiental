@@ -59,13 +59,14 @@ Rollback: voltar o serviço ECS para a revisão anterior da task definition. Mig
 |---|---|---|
 | `npm run seed:base` | organização, municípios, tipologias, tipos de ato, prazos, usuários iniciais | todos os ambientes (idempotente) |
 | `npm run seed:demo` | base + ~40 processos, empreendimentos, licenças, denúncias, vistorias (SPEC 14) | dev, CI, homolog e **apenas** a carga da PoC em prod |
+| `npm run onboard -- cds-piemonte --demo` + `npm run seed:cds-poc` | CDS Piemonte do Paraguaçu (8 municípios reais) + cenários da PoC (SPEC 13/14) | **somente** o ambiente da PoC (`docs/poc-cds.md`) – nunca na demonstração pública |
 
 > **`seed:demo` NUNCA deve rodar em produção de cliente após a implantação.** Após a PoC, desativar os usuários `@licenciagov.demo`
 > (senha pública) e trocar a senha do admin. Usuários demo usam a senha `Demo@2026licencia`.
 
 ## 5. Worker de jobs
 - Processo separado: `npm run jobs` (`jobs/worker.ts`, pg-boss usando o mesmo Postgres). Em ECS: serviço `worker` com 1 task.
-- Funções: alertas de prazo (sino + e-mail), vencimento de pendências/condicionantes/licenças, exportação completa (ZIP), verificação de backup.
+- Funções: alertas de prazo (sino + e-mail), vencimento de pendências/condicionantes/licenças, exportação completa (ZIP), backup diário real (fila `backup`), teste de restauração mensal (fila `restore-test`) e verificação de backup (`backup-check`).
 - Saúde: ver logs (`/ecs/licenciagov-<amb>`, stream `worker`); fila no schema `pgboss` (`select name, state, count(*) from pgboss.job group by 1,2`).
 - Reinício é seguro (jobs idempotentes; pg-boss retoma o que ficou pendente). Não rodar mais de 1 réplica sem revisar agendamentos.
 

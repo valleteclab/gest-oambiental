@@ -140,11 +140,20 @@ export function filtroTabela(modelo: string, e: EscopoExportacao): Record<string
     case "Parecer":
     case "Condicionante":
       return proc;
-    case "Anexo": return { OR: [proc, { fiscalizacao: mun }] };
+    case "Anexo": return { OR: [proc, { fiscalizacao: mun }, { denuncia: mun }] };
     case "ReuniaoConselho": return { conselho: mun };
     case "EmailEnviado": return { para: { in: e.emails } };
     case "LogAuditoria": return { usuario_id: { in: e.usuarios } };
     case "BackupRegistro": return {}; // registros de infraestrutura da plataforma (sem dados de negócio)
+    // Agente de denúncias: canais (credenciais seguem CIFRADAS), conversas/mensagens e consumo de IA da organização.
+    case "CanalAtendimento":
+    case "Conversa":
+    case "UsoIa":
+      return { organizacao_id: e.organizacao.id };
+    case "MensagemConversa": return { conversa: { organizacao_id: e.organizacao.id } };
+    // Caixa bruta de webhooks: transitória (retenção CANAIS_RETENCAO_EVENTOS_DIAS), payloads de provedor com dados pessoais –
+    // fora da exportação por organização (o conteúdo útil já está em mensagem_conversa).
+    case "EventoWebhook": return { id: "00000000-0000-0000-0000-000000000000" };
     default:
       throw new Error(`Tabela ${modelo} sem regra de escopo na exportação por organização (lib/export/exportar.ts filtroTabela).`);
   }

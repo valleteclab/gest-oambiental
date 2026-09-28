@@ -3,6 +3,7 @@
 //   backup-check   – diário 07:10 (America/Bahia): avisa ADMIN por e-mail se o último backup tem > 24 h
 //                    ou o último teste de restauração tem > 31 dias (SPEC 9.2)
 //   exportacao     – fila das exportações completas (SPEC 9.2); a varredura a cada 10 s enfileira as PENDENTES
+//   canal-mensagem / canais-manutencao – agente de denúncias (WhatsApp, chat do site, e-mail)
 //
 // O web detecta o worker pelo application_name das conexões (pg_stat_activity) e, sem worker,
 // processa a exportação em segundo plano no próprio processo Next.
@@ -68,6 +69,56 @@ async function main() {
     }
   });
 
+  // ── Backup REAL (lib/backup/executar.ts – docs/backup.md) ──
+  //   backup        diário (BACKUP_CRON, padrão 03:15): pg_dump -Fc | openssl AES-256 → bucket fora do provedor + retenção
+  //   restore-test  mensal (BACKUP_RESTORE_CRON, padrão dia 1 às 04:45): restaura o último dump num banco descartável
+  // Falhas são registradas em backup_registro e alertadas (BACKUP_ALERTA_EMAIL); sem retry automático.
+  {
+    const { executarBackup, executarTesteRestauracao } = await import("../lib/backup/executar");
+    const { lerConfig } = await import("../lib/backup/nucleo");
+    const cfgBackup = lerConfig();
+    for (const q of ["backup", "restore-test"]) await boss.createQueue(q, { expireInSeconds: 6 * 3600, retryLimit: 0 }).catch(() => {});
+    await boss.schedule("backup", cfgBackup.cronBackup, null, { tz });
+    await boss.schedule("restore-test", cfgBackup.cronRestore, null, { tz });
+    await boss.work("backup", async () => {
+      const r = await executarBackup({ origem: "agendado (worker)" });
+      log("backup", JSON.stringify(r));
+      return r;
+    });
+    await boss.work("restore-test", async () => {
+      const r = await executarTesteRestauracao({ origem: "agendado (worker)" });
+      log("restore-test", JSON.stringify(r));
+      return r;
+    });
+    log(`backup agendado: "${cfgBackup.cronBackup}", teste de restauração: "${cfgBackup.cronRestore}" (${tz}).`);
+  }
+
+  // ── Agente de denúncias (lib/agente – docs/agente-denuncias.md) ──
+  //   canal-mensagem     – eventos de webhook (WhatsApp/e-mail) gravados pelo web; a varredura a cada 2 s enfileira os PENDENTES
+  //   canais-manutencao  – a cada 15 min: reativa a IA após a pausa do atendente, encerra conversas inativas, retenção de eventos
+  const agente = await (async () => {
+    const { processarEvento, eventosPendentes } = await import("../lib/agente/ingestao");
+    const { manutencaoCanais } = await import("../lib/agente/manutencao");
+    for (const q of ["canal-mensagem", "canais-manutencao"]) await boss.createQueue(q).catch(() => {});
+    await boss.schedule("canais-manutencao", process.env.JOBS_CRON_CANAIS ?? "*/15 * * * *", null, { tz });
+    await boss.work<{ id: string }>("canal-mensagem", { batchSize: 5 }, async (jobs) => {
+      await Promise.all(jobs.map((j) => processarEvento(j.data.id)));
+    });
+    await boss.work("canais-manutencao", async () => {
+      const r = await manutencaoCanais();
+      log("canais-manutencao", JSON.stringify(r));
+      return r;
+    });
+    const varrerCanais = async () => {
+      try {
+        for (const id of await eventosPendentes()) await boss.send("canal-mensagem", { id }, { singletonKey: id, retryLimit: 2 });
+      } catch (e) {
+        console.error("[jobs] varredura canal-mensagem", e);
+      }
+    };
+    return setInterval(varrerCanais, Number(process.env.JOBS_VARREDURA_CANAIS_MS ?? 2000));
+  })();
+
   // Varredura: exportações PENDENTES (solicitadas pelo web) → fila `exportacao`
   const varrer = async () => {
     try {
@@ -87,6 +138,7 @@ async function main() {
   const parar = async () => {
     log("encerrando…");
     clearInterval(timer);
+    clearInterval(agente);
     await boss.stop({ graceful: true, timeout: 30000 }).catch(() => {});
     await prisma.$disconnect();
     process.exit(0);

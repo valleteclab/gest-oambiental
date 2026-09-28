@@ -5,7 +5,7 @@ import { can, isSomenteLeitura, type UsuarioSessao } from "../rbac";
 
 // ───────────── Rótulos e cores ─────────────
 export const ROTULO_STATUS_DENUNCIA: Record<StatusDenuncia, string> = { NOVA: "Nova", EM_APURACAO: "Em apuração", CONCLUIDA: "Concluída", ARQUIVADA: "Arquivada" };
-export const ROTULO_CANAL: Record<CanalDenuncia, string> = { PORTAL: "Portal", PRESENCIAL: "Presencial", TELEFONE: "Telefone", OUTRO: "Outro" };
+export const ROTULO_CANAL: Record<CanalDenuncia, string> = { PORTAL: "Portal", PRESENCIAL: "Presencial", TELEFONE: "Telefone", OUTRO: "Outro", WHATSAPP: "WhatsApp", CHAT_SITE: "Chat do site", EMAIL: "E-mail" };
 export const ROTULO_CONSTATACAO: Record<Constatacao, string> = { IRREGULAR: "Irregular", REGULAR: "Regular", INCONCLUSIVA: "Inconclusiva" };
 export const ROTULO_ORIGEM: Record<OrigemFiscalizacao, string> = { DENUNCIA: "Denúncia", PROCESSO: "Processo", ROTINA: "Rotina" };
 export const ROTULO_PENALIDADE: Record<Penalidade, string> = { ADVERTENCIA: "Advertência", MULTA: "Multa", EMBARGO: "Embargo", INTERDICAO: "Interdição", OUTRA: "Outra" };

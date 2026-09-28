@@ -18,6 +18,7 @@ const SECOES = [
   { href: "/admin/modelos", titulo: "Modelos de documento", desc: "Modelos HTML de licença, certidão, auto, notificação – com versões." },
   { href: "/admin/auditoria", titulo: "Log de auditoria", desc: "Quem fez o quê e quando, com dados antes/depois." },
   { href: "/admin/emails", titulo: "Caixa de e-mails", desc: "E-mails enviados pelo sistema (caixa de teste)." },
+  { href: "/admin/canais", titulo: "Canais de atendimento", desc: "WhatsApp, chat do site e e-mail do assistente de denúncias; webhooks, QR Code e consumo de IA." },
   { href: "/admin/backup", titulo: "Backup", desc: "Último backup e último teste de restauração." },
 ];
 

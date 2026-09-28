@@ -1,7 +1,7 @@
 import "server-only";
-import { mkdir, readFile, writeFile, stat, unlink } from "node:fs/promises";
+import { mkdir, readFile, writeFile, stat, unlink, readdir } from "node:fs/promises";
 import path from "node:path";
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadBucketCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadBucketCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // Storage S3-compatível (AWS S3 / R2 / MinIO) ou disco local em dev. Chave: {municipio}/{contexto}/{id}/{arquivo}
@@ -58,6 +58,26 @@ export async function removerArquivo(key: string) {
   if (driver() === "s3") await cliente().send(new DeleteObjectCommand({ Bucket: bucket(), Key: key }));
   else await unlink(caminhoSeguro(key)).catch(() => {});
 }
+
+/** Chaves sob um prefixo de "diretório" (ex.: "backups/"). Não recursivo no modo local. */
+export async function listarArquivos(prefixo: string): Promise<string[]> {
+  if (driver() === "s3") {
+    const chaves: string[] = [];
+    let token: string | undefined;
+    do {
+      const r = await cliente().send(new ListObjectsV2Command({ Bucket: bucket(), Prefix: prefixo, ContinuationToken: token }));
+      for (const o of r.Contents ?? []) if (o.Key) chaves.push(o.Key);
+      token = r.IsTruncated ? r.NextContinuationToken : undefined;
+    } while (token);
+    return chaves;
+  }
+  const dir = caminhoSeguro(prefixo.replace(/\/+$/, ""));
+  const nomes = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  return nomes.filter((n) => n.isFile()).map((n) => `${prefixo.replace(/\/+$/, "")}/${n.name}`);
+}
+
+/** Driver de storage em uso ("local" | "s3"). */
+export const driverStorage = () => driver();
 
 /** URL pré-assinada de upload (S3). Em modo local retorna null e o upload vai pela rota multipart. */
 export async function urlUploadPreAssinada(key: string, mime: string): Promise<string | null> {

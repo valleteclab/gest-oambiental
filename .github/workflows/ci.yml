@@ -116,6 +116,70 @@ jobs:
             test-results
           retention-days: 14
 
+  # Opcional (manual: Actions → CI → Run workflow): suíte E2E contra o conjunto da PoC (CDS Piemonte do Paraguaçu –
+  # docs/poc-cds.md). Base própria, SEM a demonstração fictícia: onboarding cds-piemonte --demo + seed:cds-poc.
+  e2e-poc-cds:
+    name: E2E (Playwright) – dataset PoC CDS
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    needs: check
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: licenciagov
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      E2E_BASE_URL: http://localhost:3000
+      E2E_DATASET: poc-cds
+      DEMO_MODE: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Migrações + onboarding CDS Piemonte + dados de ensaio da PoC
+        run: |
+          npx prisma migrate deploy
+          npm run onboard -- cds-piemonte --demo
+          npm run seed:cds-poc
+      - name: Playwright (Chromium)
+        run: npx playwright install --with-deps chromium
+      - name: Build
+        run: npm run build
+      - name: Iniciar servidor (standalone)
+        run: |
+          cp -r public .next/standalone/ 2>/dev/null || true
+          cp -r .next/static .next/standalone/.next/
+          export CHROMIUM_PATH="$(node -e "console.log(require('playwright-core').chromium.executablePath())")"
+          echo "CHROMIUM_PATH=$CHROMIUM_PATH" >> "$GITHUB_ENV"
+          PORT=3000 HOSTNAME=127.0.0.1 nohup node .next/standalone/server.js > server.log 2>&1 &
+          npx --yes wait-on -t 120000 http-get://127.0.0.1:3000/api/health
+      - name: Testes E2E (E2E_DATASET=poc-cds)
+        run: npm run test:e2e:poc-cds
+      - name: Log do servidor
+        if: failure()
+        run: tail -n 200 server.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-poc-cds
+          path: |
+            playwright-report
+            test-results
+          retention-days: 14
+
   docker:
     name: Docker build
     runs-on: ubuntu-latest

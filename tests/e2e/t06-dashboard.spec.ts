@@ -1,8 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
-import { login, numeroBr } from "./helpers";
+import { DADOS, login, numeroBr } from "./helpers";
 
 // T6 – Dashboard [PoC-6] (SPEC 13). Somente leitura: roda nos dois projetos.
-// Filtro "Lagoa do Orvalho" e depois "Todos": cards, gráficos e tabela por município mudam coerentemente.
+// Filtro pelo município principal do dataset (demo: Lagoa do Orvalho; PoC: Itaberaba) e depois "Todos": cards, gráficos e tabela por município mudam coerentemente.
 
 const KPIS = ["kpi-protocolados", "kpi-em-andamento", "kpi-concluidos", "kpi-prazo-vencido", "kpi-prazo-vencendo", "kpi-licencas", "kpi-licencas-vencendo", "kpi-fiscalizacoes", "kpi-autos", "kpi-notificacoes"] as const;
 // KPI → coluna da tabela por município (mesma métrica)
@@ -48,14 +48,16 @@ async function lerVisao(page: Page): Promise<Visao> {
 }
 
 const soma = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+const { sigla: P, nome: NOME_P } = DADOS.principal;
+const N_MUNICIPIOS = DADOS.municipios.length;
 
-test("T6 – painel filtrado por Lagoa do Orvalho e por Todos muda cards, gráficos e tabela coerentemente", async ({ page }) => {
-  await login(page, "admin"); // órgão escolhido no login: Lagoa do Orvalho
+test(`T6 – painel filtrado por ${NOME_P} e por Todos muda cards, gráficos e tabela coerentemente`, async ({ page }) => {
+  await login(page, "admin"); // órgão escolhido no login: município principal
   await page.goto("/dashboard");
   const filtro = page.getByTestId("filtro-municipio");
   // Sem filtro na URL, o painel abre no órgão ativo (admin tem escopo amplo); "Todos" continua disponível
-  await expect(page.getByTestId("dashboard-escopo")).toContainText("Lagoa do Orvalho");
-  await expect(filtro.locator("option:checked")).toHaveText("Lagoa do Orvalho");
+  await expect(page.getByTestId("dashboard-escopo")).toContainText(NOME_P);
+  await expect(filtro.locator("option:checked")).toHaveText(NOME_P);
   await filtro.selectOption({ label: "Todos" });
   await expect(page).toHaveURL(/municipio=(&|$)/);
   await expect(filtro).toHaveValue("");
@@ -63,8 +65,8 @@ test("T6 – painel filtrado por Lagoa do Orvalho e por Todos muda cards, gráfi
   await expect(page.getByTestId("grafico-status").locator(".recharts-bar-rectangle").first()).toBeVisible();
   const todos = await lerVisao(page);
 
-  // Todos: 6 municípios na tabela; cards = linha Total = soma das linhas; gráficos somam o card
-  expect(Object.keys(todos.linhas)).toHaveLength(6);
+  // Todos: todos os municípios do dataset na tabela; cards = linha Total = soma das linhas; gráficos somam o card
+  expect(Object.keys(todos.linhas)).toHaveLength(N_MUNICIPIOS);
   for (const k of KPIS) {
     expect(todos.total[COLUNA[k]], k).toBe(todos.kpis[k]);
     expect(soma(Object.values(todos.linhas).map((l) => l[COLUNA[k]] ?? 0)), k).toBe(todos.kpis[k]);
@@ -73,32 +75,32 @@ test("T6 – painel filtrado por Lagoa do Orvalho e por Todos muda cards, gráfi
   expect(soma(todos.tipos)).toBe(todos.kpis["kpi-protocolados"]);
   expect(todos.barrasStatus).toBe(todos.status.length);
 
-  // ── Lagoa do Orvalho ──
-  const lor = todos.linhas["LOR"];
-  expect(lor, "linha de Lagoa do Orvalho no painel Todos").toBeTruthy();
-  await filtro.selectOption({ label: "Lagoa do Orvalho" });
+  // ── Município principal ──
+  const linhaP = todos.linhas[P];
+  expect(linhaP, `linha de ${NOME_P} no painel Todos`).toBeTruthy();
+  await filtro.selectOption({ label: NOME_P });
   await expect(page).toHaveURL(/municipio=[0-9a-f-]{36}/);
-  await expect(page.getByTestId("dashboard-escopo")).toContainText("Lagoa do Orvalho");
+  await expect(page.getByTestId("dashboard-escopo")).toContainText(NOME_P);
   await expect(page.getByTestId("tabela-municipios").locator("tbody tr")).toHaveCount(1);
-  const vLor = await lerVisao(page);
-  expect(Object.keys(vLor.linhas)).toEqual(["LOR"]);
-  // A linha de Lagoa do Orvalho é idêntica nas duas visões e os cards batem com ela
-  expect(vLor.linhas["LOR"]).toEqual(lor);
+  const vPrincipal = await lerVisao(page);
+  expect(Object.keys(vPrincipal.linhas)).toEqual([P]);
+  // A linha do município é idêntica nas duas visões e os cards batem com ela
+  expect(vPrincipal.linhas[P]).toEqual(linhaP);
   for (const k of KPIS) {
-    expect(vLor.kpis[k], k).toBe(lor[COLUNA[k]]);
-    expect(vLor.kpis[k], k).toBeLessThanOrEqual(todos.kpis[k]);
+    expect(vPrincipal.kpis[k], k).toBe(linhaP[COLUNA[k]]);
+    expect(vPrincipal.kpis[k], k).toBeLessThanOrEqual(todos.kpis[k]);
   }
-  expect(vLor.kpis["kpi-protocolados"]).toBeLessThan(todos.kpis["kpi-protocolados"]);
+  expect(vPrincipal.kpis["kpi-protocolados"]).toBeLessThan(todos.kpis["kpi-protocolados"]);
   // Gráficos acompanham o filtro
-  expect(soma(vLor.status)).toBe(vLor.kpis["kpi-protocolados"]);
-  expect(soma(vLor.tipos)).toBe(vLor.kpis["kpi-protocolados"]);
-  expect(vLor.barrasStatus).toBe(vLor.status.length);
-  expect(soma(vLor.status)).toBeLessThan(soma(todos.status));
+  expect(soma(vPrincipal.status)).toBe(vPrincipal.kpis["kpi-protocolados"]);
+  expect(soma(vPrincipal.tipos)).toBe(vPrincipal.kpis["kpi-protocolados"]);
+  expect(vPrincipal.barrasStatus).toBe(vPrincipal.status.length);
+  expect(soma(vPrincipal.status)).toBeLessThan(soma(todos.status));
 
   // ── De volta a Todos: mesmos números do início ──
   await page.getByTestId("filtro-municipio").selectOption({ label: "Todos" });
   await expect(page.getByTestId("dashboard-escopo")).toContainText("Todos");
-  await expect(page.getByTestId("tabela-municipios").locator("tbody tr")).toHaveCount(6);
+  await expect(page.getByTestId("tabela-municipios").locator("tbody tr")).toHaveCount(N_MUNICIPIOS);
   const denovo = await lerVisao(page);
   expect(denovo.kpis).toEqual(todos.kpis);
   expect(denovo.linhas).toEqual(todos.linhas);

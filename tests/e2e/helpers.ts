@@ -1,47 +1,26 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import { test, expect, type Page, type APIRequestContext, type TestInfo } from "@playwright/test";
+import { DADOS, REQUERENTES, type ChaveUsuario } from "./dados";
 
-// Usuários de demonstração – ver prisma/seed/base.ts (SENHA_DEMO). NUNCA existem em produção de cliente
-// após a implantação; para rodar em prod na PoC, sobrescreva com E2E_SENHA se necessário.
+export { ANO, DADOS, re, reProcesso } from "./dados";
+
+// Usuários do conjunto de dados ativo (E2E_DATASET – ver tests/e2e/dados.ts). Senha: a do seed/onboarding --demo;
+// no ambiente da PoC, após a troca de senhas, informe E2E_SENHA.
 export const SENHA_DEMO = process.env.E2E_SENHA || "Demo@2026licencia";
 
-export const USUARIOS = {
-  admin: "admin@licenciagov.demo",
-  tecConsorcio1: "tec.consorcio1@licenciagov.demo",
-  tecConsorcio2: "tec.consorcio2@licenciagov.demo",
-  sema: "sema@licenciagov.demo",
-  tecnicoLor: "tecnico.lor@licenciagov.demo",
-  gestorLor: "gestor.lor@licenciagov.demo",
-  fiscalLor: "fiscal.lor@licenciagov.demo",
-  tecnicoSsr: "tecnico.ssr@licenciagov.demo",
-  gestorSsr: "gestor.ssr@licenciagov.demo",
-  fiscalSsr: "fiscal.ssr@licenciagov.demo",
-  tecnicoCse: "tecnico.cse@licenciagov.demo",
-  gestorCse: "gestor.cse@licenciagov.demo",
-  fiscalCse: "fiscal.cse@licenciagov.demo",
-  // requerentes
-  laticinio: "laticinio@licenciagov.demo",
-  posto: "posto@licenciagov.demo",
-  joao: "joao@licenciagov.demo",
-  maria: "maria@licenciagov.demo",
-  ceramica: "ceramica@licenciagov.demo",
-} as const;
+export const USUARIOS = DADOS.usuarios;
 
-export type UsuarioDemo = keyof typeof USUARIOS;
+export type UsuarioDemo = ChaveUsuario;
 
-const REQUERENTES: UsuarioDemo[] = ["laticinio", "posto", "joao", "maria", "ceramica"];
 export const ehRequerente = (u: UsuarioDemo) => REQUERENTES.includes(u);
 
 /** Município principal de teste (órgão usado por padrão pelos usuários de escopo organização). */
-export const ORGAO_PRINCIPAL = "LOR";
+export const ORGAO_PRINCIPAL = DADOS.principal.sigla;
 
-/** Órgão padrão de cada usuário demo no login: o município do papel/cadastro; escopo organização → ORGAO_PRINCIPAL. */
+/** Órgão padrão de cada usuário no login: o município do papel/cadastro; escopo organização → ORGAO_PRINCIPAL. */
 export function orgaoPadrao(usuario: UsuarioDemo | string): string {
-  const m = /^[a-z]+(Lor|Ssr|Cse)$/.exec(usuario);
-  if (m) return m[1].toUpperCase();
-  const req: Partial<Record<UsuarioDemo, string>> = { laticinio: "LOR", posto: "SSR", joao: "CSE", maria: "LOR", ceramica: "PCA" };
-  return req[usuario as UsuarioDemo] ?? ORGAO_PRINCIPAL;
+  return DADOS.orgaoDoUsuario[usuario as UsuarioDemo] ?? ORGAO_PRINCIPAL;
 }
 
 /** Login pela UI (/login: "Órgão", "E-mail" e "Senha"). Aguarda sair da tela de login. */

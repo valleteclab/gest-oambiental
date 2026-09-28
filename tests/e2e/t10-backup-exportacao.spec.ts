@@ -4,9 +4,10 @@ import JSZip from "jszip";
 import { test, expect } from "@playwright/test";
 import { PROJETO_DESKTOP, apenasNoProjeto, login } from "./helpers";
 
-// T10 – Backup e portabilidade [PoC-10] (SPEC 13). /admin/backup mostra o último backup (≤ 24 h) e a última
-// restauração testada; a exportação completa gera ZIP com CSV + JSON por tabela, anexos/ e manifest.json.
-// Cria uma exportação: roda só no desktop.
+// T10 – Backup e portabilidade [PoC-10] (SPEC 13). Executa um backup REAL e um teste de restauração REAL
+// pelos botões de /admin/backup e confere o último backup (≤ 24 h, sha256) e a última restauração testada;
+// a exportação completa gera ZIP com CSV + JSON por tabela, anexos/ e manifest.json.
+// Cria backup e exportação: roda só no desktop. O servidor precisa de pg_dump/pg_restore/psql e openssl.
 
 /** "dd/mm/aaaa[,] hh:mm" (horário da Bahia, UTC−3) → Date */
 function dataBahia(t: string): Date {
@@ -16,28 +17,59 @@ function dataBahia(t: string): Date {
   return new Date(`${a}-${mo}-${d}T${h}:${mi}:00-03:00`);
 }
 
-test("T10 – último backup ≤ 24 h, restauração testada e exportação completa em ZIP", async ({ page }) => {
+test("T10 – backup real ≤ 24 h, restauração testada e exportação completa em ZIP", async ({ page }) => {
   apenasNoProjeto(PROJETO_DESKTOP);
-  test.setTimeout(300_000);
+  test.setTimeout(900_000);
   await login(page, "admin");
 
-  // ── Tela de backup ──
+  // ── Backup REAL (nada é fabricado pelo seed) ──
+  // Executa um backup de verdade pelo botão (pg_dump -Fc | openssl AES-256 → bucket; lib/backup/executar.ts)
+  // e espera o registro aparecer; depois executa o teste de restauração real (banco descartável).
   await page.goto("/admin/backup");
+  const t0 = Date.now() - 120_000; // folga para diferença de relógio entre o runner e o servidor
+  const novoRegistro = async (testid: string) => {
+    const el = page.getByTestId(testid);
+    if (!(await el.count())) return 0;
+    return new Date((await el.getAttribute("data-executado-em")) ?? 0).getTime();
+  };
+
+  await page.getByTestId("executar-backup-agora").click();
+  await expect(page.getByText(/Backup iniciado|Concluído/)).toBeVisible({ timeout: 30_000 });
+  await expect
+    .poll(async () => {
+      await page.reload();
+      return novoRegistro("ultimo-backup");
+    }, { timeout: 240_000, intervals: [2_000, 3_000, 5_000] })
+    .toBeGreaterThan(t0);
+  await expect(page.getByTestId("ultima-falha-backup")).toHaveCount(0);
+
   const backup = page.getByTestId("ultimo-backup");
   await expect(backup).toBeVisible();
   await expect(backup).toHaveAttribute("data-atrasado", "0");
   await expect(backup).toContainText("dentro das 24 h");
   const quando = dataBahia(await page.getByTestId("ultimo-backup-data").innerText());
   const horas = (Date.now() - quando.getTime()) / 3_600_000;
-  expect(horas).toBeGreaterThanOrEqual(0);
+  expect(horas).toBeGreaterThanOrEqual(-0.1);
   expect(horas).toBeLessThanOrEqual(24);
   await expect(page.getByTestId("ultimo-backup-tamanho")).toHaveText(/\d/);
+  await expect(page.getByTestId("ultimo-backup-sha256")).toHaveText(/^[0-9a-f]{64}$/);
+  await expect(page.getByTestId("ultimo-backup-destino")).toContainText("licenciagov-");
 
+  await page.getByTestId("executar-restore-agora").click();
+  await expect(page.getByText(/Teste de restauração iniciado|Concluído/)).toBeVisible({ timeout: 30_000 });
+  await expect
+    .poll(async () => {
+      await page.reload();
+      return novoRegistro("ultimo-restore");
+    }, { timeout: 300_000, intervals: [2_000, 3_000, 5_000] })
+    .toBeGreaterThan(t0);
   const restore = page.getByTestId("ultimo-restore");
   await expect(restore).toBeVisible();
+  await expect(restore).toHaveAttribute("data-sucesso", "1");
   await expect(restore).toContainText("Sucesso");
+  await expect(restore).toContainText("sha256 conferido");
   const quandoRestore = dataBahia(await restore.locator("p").first().innerText());
-  expect(quandoRestore.getTime()).toBeLessThanOrEqual(Date.now());
+  expect(quandoRestore.getTime()).toBeLessThanOrEqual(Date.now() + 60_000);
 
   // ── Exportação completa ──
   await page.getByRole("link", { name: "Exportação completa" }).click();

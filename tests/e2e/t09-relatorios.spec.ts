@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import ExcelJS from "exceljs";
 import { test, expect, type Page } from "@playwright/test";
-import { login, numeroBr } from "./helpers";
+import { DADOS, login, numeroBr, re } from "./helpers";
 
 // T9 – Relatórios [PoC-9] (SPEC 13). Exporta "Indicadores por município" em PDF e XLSX (tela Relatórios):
 // arquivos baixam, PDF válido, XLSX com cabeçalho institucional e os mesmos números da tabela do painel.
@@ -30,7 +30,7 @@ test("T9 – Indicadores por município em PDF e XLSX com cabeçalho institucion
     const nome = (await tr.locator("td").first().innerText()).trim();
     tela.set(nome, await Promise.all(COLS.map(async (c) => numeroBr(await tr.locator(`td[data-col="${c}"]`).innerText()))));
   }
-  expect(tela.size).toBe(7); // 6 municípios + Total
+  expect(tela.size).toBe(DADOS.municipios.length + 1); // municípios do dataset + Total
 
   // Tela de relatórios → "Indicadores por município"
   await page.goto("/relatorios");
@@ -59,7 +59,7 @@ test("T9 – Indicadores por município em PDF e XLSX com cabeçalho institucion
   expect(cab[1]).toBe("Todos os municípios");
   expect(cab[2]).toBe("Indicadores por município");
   expect(cab[3]).toMatch(/Município: .*Período: \d{2}\/\d{2}\/\d{4} a \d{2}\/\d{2}\/\d{4}/);
-  expect(cab[4]).toMatch(/^Emitido em \d{2}\/\d{2}\/\d{4}.* por Ana Administradora – LicenciaGov$/);
+  expect(cab[4]).toMatch(new RegExp(`^Emitido em \\d{2}/\\d{2}/\\d{4}.* por ${re(DADOS.nomes.admin)} – LicenciaGov$`));
 
   // Tabela: cabeçalho "Município" + mesmas linhas e números da tela
   let hdr = 0;

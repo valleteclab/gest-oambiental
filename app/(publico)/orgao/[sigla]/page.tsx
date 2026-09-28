@@ -7,6 +7,8 @@ import { numerosTransparencia } from "@/lib/documentos/publico";
 import { fmtNumero } from "@/lib/format";
 import { Brasao, LogoOrganizacao, demoAtivo } from "@/components/orgao";
 import { logoProprio } from "@/lib/imagem";
+import { ChatDenuncia } from "@/components/chat-denuncia";
+import { chatDisponivel } from "@/lib/agente/webchat";
 
 // Portal público do órgão (município). Consulta o banco → dinâmico.
 export const dynamic = "force-dynamic";
@@ -17,7 +19,7 @@ async function carregar(sigla: string) {
   if (!/^[A-Za-z]{2,5}$/.test(sigla)) return null;
   return prisma.municipio.findFirst({
     where: { sigla: sigla.toUpperCase(), ativo: true },
-    select: { id: true, sigla: true, nome: true, orgao_ambiental_nome: true, brasao_url: true, endereco: true, email: true, telefone: true, organizacao: { select: { nome: true, logo_url: true } } },
+    select: { id: true, sigla: true, nome: true, latitude: true, longitude: true, orgao_ambiental_nome: true, brasao_url: true, endereco: true, email: true, telefone: true, organizacao: { select: { nome: true, logo_url: true } } },
   });
 }
 
@@ -29,13 +31,13 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 export default async function PortalOrgao({ params }: Params) {
   const m = await carregar((await params).sigla);
   if (!m) notFound();
-  const n = await numerosTransparencia(m.id);
+  const [n, chat] = await Promise.all([numerosTransparencia(m.id), chatDisponivel(m.id)]);
   const s = encodeURIComponent(m.sigla);
   const atalhos = [
     { href: `/consulta?orgao=${s}`, icone: Search, t: "Consultar processo", d: "Acompanhe pelo número do processo." },
     { href: `/licencas?municipio=${s}`, icone: FileCheck2, t: "Licenças emitidas", d: `Licenças, autorizações e certidões de ${m.nome}.` },
     { href: `/validar?orgao=${s}`, icone: BadgeCheck, t: "Validar documento", d: "Confira a autenticidade pelo código ou QR Code." },
-    { href: `/denuncia?municipio=${s}`, icone: Megaphone, t: "Fazer denúncia", d: "Informe uma irregularidade ambiental (pode ser anônima)." },
+    { href: `/denuncia?municipio=${s}`, icone: Megaphone, t: "Fazer denúncia", d: "Converse com o Assistente Ambiental ou use o formulário (pode ser anônima)." },
     { href: `/login?orgao=${s}`, icone: LogIn, t: "Entrar", d: "Área do requerente e da equipe do órgão." },
   ];
   const numeros = [
@@ -104,6 +106,7 @@ export default async function PortalOrgao({ params }: Params) {
           </section>
         )}
       </div>
+      {chat && <ChatDenuncia flutuante municipio={{ sigla: m.sigla, nome: m.nome, lat: m.latitude ? Number(m.latitude) : null, lng: m.longitude ? Number(m.longitude) : null }} />}
     </div>
   );
 }

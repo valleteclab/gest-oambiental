@@ -11,6 +11,8 @@ export const COLUNAS_CIFRADAS: Record<string, string[]> = {
   Usuario: ["cpf_cifrado"],
   Pessoa: ["cpf_cnpj_cifrado", "email (quando PF)", "telefone (quando PF)"],
   Denuncia: ["contato"],
+  CanalAtendimento: ["webhook_secret", "config (chave segredos)"],
+  Conversa: ["destino_cifrado", "contato_cifrado"],
 };
 
 export const DESCRICAO_TABELA: Record<string, string> = {
@@ -32,7 +34,7 @@ export const DESCRICAO_TABELA: Record<string, string> = {
   EmpreendimentoRt: "Vínculo histórico entre empreendimento e responsável técnico.",
   Processo: "Processos de licenciamento, status, etapa, prazos e responsáveis.",
   Tramitacao: "Linha do tempo imutável do processo (transições de status e despachos).",
-  Anexo: "Arquivos enviados (processo, pendência, fiscalização). Conteúdo em anexos/{storage_key}.",
+  Anexo: "Arquivos enviados (processo, pendência, fiscalização, fotos de denúncias pelo assistente). Conteúdo em anexos/{storage_key}.",
   Pendencia: "Pendências/exigências ao requerente e respostas.",
   ChecklistPreenchido: "Checklists de análise preenchidos.",
   Parecer: "Pareceres técnicos.",
@@ -50,6 +52,11 @@ export const DESCRICAO_TABELA: Record<string, string> = {
   Exportacao: "Solicitações de exportação completa (portabilidade).",
   BackupRegistro: "Registros de backups e testes de restauração.",
   ChamadoSuporte: "Chamados de suporte (SLA).",
+  CanalAtendimento: "Canais do assistente de denúncias (WhatsApp, chat do site, e-mail). Credenciais e segredo do webhook cifrados.",
+  Conversa: "Conversas do assistente de denúncias (máquina de estados, dados coletados, consentimento LGPD). Contato cifrado + hash.",
+  MensagemConversa: "Mensagens das conversas (cidadão, IA, atendente). Mídias em anexos/{midia_key} não são copiadas; as fotos da denúncia estão em anexo.",
+  EventoWebhook: "Caixa bruta de webhooks (transitória) – NÃO exportada por organização (somente cabeçalho).",
+  UsoIa: "Consumo de IA (tokens e custo estimado em US$) por organização.",
 };
 
 const DESCRICAO_COLUNA: Record<string, string> = {

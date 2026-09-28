@@ -13,7 +13,7 @@ import { FormStatusDenuncia } from "./status-form";
 
 export const metadata = { title: "Denúncia – LicenciaGov" };
 
-const ROTULO_ACAO: Record<string, string> = { CRIAR_DENUNCIA_PUBLICA: "Registrada pelo portal", CRIAR_DENUNCIA: "Registrada internamente", ALTERAR_STATUS_DENUNCIA: "Situação alterada" };
+const ROTULO_ACAO: Record<string, string> = { CRIAR_DENUNCIA_PUBLICA: "Registrada pelo portal", CRIAR_DENUNCIA: "Registrada internamente", ALTERAR_STATUS_DENUNCIA: "Situação alterada", DENUNCIA_CANAL: "Registrada pelo assistente (atendimento)", CRIAR_DENUNCIA_ATENDIMENTO: "Registrada pelo atendente" };
 
 export default async function DetalheDenuncia({ params }: { params: Promise<{ id: string }> }) {
   const u = await exigirUsuario({ interno: true });
@@ -46,7 +46,23 @@ export default async function DetalheDenuncia({ params }: { params: Promise<{ id
             <dt className="text-slate-500">Coordenadas</dt><dd className="font-mono">{temPonto ? `${d.latitude!.toFixed(6)}, ${d.longitude!.toFixed(6)}` : "—"}</dd>
             <dt className="text-slate-500">Denunciante</dt><dd>{d.anonima ? "Anônimo" : d.denunciante_nome ?? "—"}</dd>
             {!d.anonima && <><dt className="text-slate-500">Contato</dt><dd>{d.contato ?? "—"}</dd></>}
+            {d.conversa_id && <><dt className="text-slate-500">Atendimento</dt><dd><Link href={`/atendimento/${d.conversa_id}`} className="text-primaria-700 underline" data-testid="link-conversa">Ver conversa</Link></dd></>}
           </dl>
+          {d.anexos.length > 0 && (
+            <div className="mt-4" data-testid="fotos-denuncia">
+              <p className="mb-2 text-sm font-medium text-slate-700">Fotos enviadas pelo cidadão ({d.anexos.length})</p>
+              <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {d.anexos.map((a) => (
+                  <li key={a.id}>
+                    <a href={`/api/v1/denuncias/${d.id}/fotos/${a.id}`} target="_blank" rel="noreferrer" title={`${a.nome_arquivo} · sha256 ${a.sha256.slice(0, 12)}…`}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={`/api/v1/denuncias/${d.id}/fotos/${a.id}`} alt={a.nome_arquivo} className="aspect-square w-full rounded-md object-cover ring-1 ring-slate-200" />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </Card>
         <Card titulo="Local">
           {temPonto ? <Mapa centro={[d.latitude!, d.longitude!]} zoom={15} altura="300px" pontos={[{ id: d.id, lat: d.latitude!, lng: d.longitude!, titulo: d.protocolo, cor: COR_PIN_DENUNCIA[d.status] }]} /> : <Vazio>Local não marcado no mapa.</Vazio>}

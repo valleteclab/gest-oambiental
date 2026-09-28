@@ -6,46 +6,52 @@ Referência: SPEC §9.2 e teste de aceite **T10**. Checklist de restauração: [
 
 | Camada | O quê | Onde | Frequência | Retenção |
 |---|---|---|---|---|
-| 1. Backup gerenciado | Snapshot + PITR (WAL) do Postgres gerenciado (RDS/Cloud SQL/Azure/…) | Mesmo provedor, região primária | Contínuo + snapshot diário | 7–35 dias (config. do provedor) |
-| 2. Dump lógico cruzado | `scripts/backup/pg_dump.sh`: `pg_dump` → gzip → **criptografia** → bucket em **outra região ou outro provedor** | Ex.: primário AWS `sa-east-1`, cópia em Cloudflare R2/Backblaze B2 ou AWS `us-east-1` | Diário (02:15 America/Bahia) | **30 dias** (script + lifecycle rule) |
-| 3. Arquivos (anexos/PDFs) | Bucket de storage com **versionamento** ligado + **replicação** para bucket em outra região/provedor | S3/R2 | Contínuo (replicação) / diário (rclone sync) | Versões antigas 30 dias |
+| 1. Backup gerenciado | Backup nativo do volume do Postgres no Railway (*Postgres → Backups*) ou snapshot/PITR do provedor (RDS/Cloud SQL…) | Mesmo provedor | Diário/semanal (config. do provedor) | Config. do provedor |
+| 2. Dump lógico cruzado (**implementado e executado pelo sistema**) | Worker, fila `backup`: `pg_dump -Fc` → **AES-256** (openssl) → bucket S3-compatível em **outro provedor** (`BACKUP_S3_*`, ex.: Cloudflare R2 ou Backblaze B2) | Outro provedor/região | Diário 03:15 (America/Bahia) | **30 dias** (`BACKUP_RETENCAO_DIAS`) |
+| 3. Arquivos (anexos/PDFs) | Bucket de storage com **versionamento** + **replicação** para outro provedor | S3/R2 | Contínuo / diário (rclone sync) | Versões antigas 30 dias |
 | 4. Portabilidade | Exportação completa em `/admin/exportar` (CSV+JSON por tabela, dicionário, anexos, `manifest.json` com SHA-256) | Download pelo órgão | Sob demanda | Responsabilidade do órgão |
 
-Objetivos: **RPO ≤ 24 h** (≤ 5 min com PITR da camada 1) · **RTO ≤ 4 h**.
+Objetivos: **RPO ≤ 24 h** · **RTO ≤ 4 h**. Teste de restauração **automático mensal** (fila `restore-test`) – ver [`restore.md`](restore.md).
 
-## 2. Dump diário (`scripts/backup/pg_dump.sh`)
+Nada em `/admin/backup` é fabricado: o seed de demonstração **não** cria registros de backup; tudo o que aparece
+lá vem de execuções reais (worker, botão ou CLI).
 
-1. `pg_dump --no-owner --no-acl` (formato SQL) → `gzip -9` → criptografia **no pipe** (o dump nunca toca o disco em claro):
-   - `age -r $BACKUP_AGE_RECIPIENT` (preferido – chave privada fica fora do servidor), **ou**
-   - `openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -pass env:BACKUP_PASSPHRASE`.
-2. Gera `.sha256` ao lado do arquivo.
-3. `aws s3 cp` para `$BACKUP_BUCKET` (aceita `--endpoint-url` via `BACKUP_ENDPOINT_URL` → R2, B2, MinIO, Wasabi).
-4. Apaga dumps com mais de `BACKUP_RETENCAO_DIAS` (30) no bucket e no diretório local.
-5. Registra o resultado em `backup_registro` (tipo `BACKUP`, tamanho, destino, sha256) via `scripts/backup/registrar.ts` – é o que aparece em **/admin/backup**. Falhas também são registradas (`sucesso=false`).
+## 2. Dump diário (worker, fila `backup` – `lib/backup/executar.ts`)
 
-Variáveis (secret manager, nunca no repositório):
+Quando: `BACKUP_CRON` (padrão `15 3 * * *`, fuso `JOBS_TZ` = America/Bahia) no serviço **worker** (`npm run jobs`).
+Também sob demanda: botão **"Executar backup agora"** em `/admin/backup` (ADMIN, auditado como `BACKUP_SOLICITADO`)
+ou `./scripts/backup/pg_dump.sh` (= `npx tsx scripts/backup/executar.ts backup`). Um advisory lock no Postgres
+impede duas execuções simultâneas (worker × botão × réplicas).
 
-```
-DATABASE_URL=postgresql://backup_ro:…@db-prod:5432/licenciagov   # usuário somente leitura
-BACKUP_AGE_RECIPIENT=age1…            # ou BACKUP_PASSPHRASE=…
-BACKUP_BUCKET=s3://licenciagov-dr/pg
-BACKUP_ENDPOINT_URL=https://<conta>.r2.cloudflarestorage.com   # opcional
-AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (credencial só de escrita no bucket de DR)
-```
+1. `pg_dump --format=custom --compress=6 --no-owner --no-acl --schema=public` (senha via `PGPASSWORD`, fora da linha de comando).
+   - **Escopo: schema `public`** = todos os dados da aplicação, `_prisma_migrations` e os triggers de imutabilidade.
+     Ficam de fora o schema `pgboss` (fila de jobs, transitória – o worker a recria) e schemas de outros serviços
+     que eventualmente compartilhem o banco (ex.: `evolution` do gateway de WhatsApp, cujas sessões se refazem
+     pareando o aparelho de novo). `BACKUP_SCHEMAS` altera a lista.
+2. Saída do `pg_dump` vai **por pipe** para `openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:…` – o dump nunca é gravado em claro.
+   Senha: `BACKUP_PASSPHRASE` (cofre de segredos). Sem ela, é derivada da `DATA_KEY` (HMAC-SHA256 de `licenciagov-backup`) e /admin/backup exibe aviso.
+3. Nome `licenciagov-AAAAMMDDTHHMMSSZ.dump.enc` + `…dump.enc.sha256`; SHA-256 calculado do arquivo cifrado.
+4. Upload com `@aws-sdk/client-s3` para `s3://$BACKUP_S3_BUCKET/$BACKUP_S3_PREFIX` (padrão `pg/`) no endpoint `BACKUP_S3_ENDPOINT`.
+   **Sem `BACKUP_S3_*`**: fallback para o storage da própria aplicação em `backups/` (mesmo provedor) – o destino é
+   registrado como "cópia fora do provedor NÃO configurada" e /admin/backup mostra o aviso.
+5. Retenção: apaga do destino os dumps com mais de `BACKUP_RETENCAO_DIAS` (30) – **nunca** o mais recente.
+6. Registro em `backup_registro` (tipo `BACKUP`, tamanho, destino, sucesso, observação com `sha256=…`, versão do pg_dump,
+   duração, removidos, origem) + `log_auditoria`. **Falhas também são registradas** (`sucesso=false`) e disparam e-mail
+   para `BACKUP_ALERTA_EMAIL`.
 
-Agendamento (cron do host, job do Kubernetes ou GitHub Actions agendado):
+Requisitos da imagem: `postgresql-client-18` (do apt.postgresql.org – `pg_dump` precisa ser ≥ versão do servidor;
+Railway usa `postgres-ssl:18`) e `openssl` – instalados no estágio `base` de `Dockerfile` e `Dockerfile.worker`.
 
-```
-15 2 * * *  cd /srv/licenciagov && ./scripts/backup/pg_dump.sh >> /var/log/licenciagov-backup.log 2>&1
-```
+Variáveis: ver `deploy/railway.md` §2 ("Backup real") e `.env.example`.
 
 ## 3. Bucket de destino (DR)
 
-- Outra **região** (mínimo) ou outro **provedor** (recomendado) em relação ao banco primário.
-- **Versionamento** + **Object Lock** (modo governance, 30 dias) para proteger contra ransomware/remoção acidental.
-- **Lifecycle rule**: expirar objetos com prefixo `pg/` após 30 dias (redundante com o script).
-- Credencial do servidor de aplicação: somente `PutObject`/`ListBucket`; `DeleteObject` apenas para a rotina de retenção ou deixar a expiração para a lifecycle rule.
-- Criptografia no servidor (SSE) ligada **além** da criptografia do cliente.
+- **Outro provedor** em relação ao banco (Railway): Cloudflare R2 ou Backblaze B2 (ambos S3-compatíveis).
+  - R2: `BACKUP_S3_ENDPOINT=https://<conta>.r2.cloudflarestorage.com`, `BACKUP_S3_REGION=auto`; token de API R2 com permissão *Object Read & Write* só nesse bucket.
+  - B2: `BACKUP_S3_ENDPOINT=https://s3.<região>.backblazeb2.com`, `BACKUP_S3_REGION=<região>`; *Application Key* restrita ao bucket.
+- **Versionamento/Object Lock** (B2: *Object Lock* 30 dias; R2: *bucket lock rules*) contra ransomware/remoção acidental.
+- **Lifecycle rule** de 35 dias no prefixo `pg/` como segunda barreira (a rotina já apaga > 30 dias).
+- A credencial precisa de `PutObject`, `GetObject`, `ListBucket` e `DeleteObject` (retenção). Com Object Lock, a remoção só esconde versões.
 
 ## 4. Arquivos (anexos e documentos oficiais)
 
@@ -55,8 +61,11 @@ Agendamento (cron do host, job do Kubernetes ou GitHub Actions agendado):
 
 ## 5. Monitoramento
 
-- Worker (`npm run jobs`), fila `backup-check` diária às 07:10: se o último backup bem-sucedido tem **> 24 h**, se a última execução falhou ou se o último teste de restauração tem **> 31 dias**, envia e-mail aos ADMIN (registrado em `email_enviado`).
-- `/admin/backup` destaca em vermelho backup com mais de 24 h e em amarelo teste de restauração vencido.
+- `/admin/backup`: último backup (verde ≤ 24 h, vermelho se mais antigo), tamanho, destino, SHA-256, próxima execução
+  agendada, estado do worker, se a cópia fora do provedor está configurada, último teste de restauração com detalhes e histórico.
+- Falha de backup/teste → e-mail imediato para `BACKUP_ALERTA_EMAIL`.
+- Worker, fila `backup-check` diária às 07:10: se o último backup bem-sucedido tem **> 24 h**, se a última execução
+  falhou ou se o último teste de restauração tem **> 31 dias**, envia e-mail aos ADMIN (registrado em `email_enviado`).
 - Monitor externo em `/api/health` (SPEC 9.1).
 
 ## 6. Exportação completa (portabilidade)
