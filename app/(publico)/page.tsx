@@ -203,6 +203,38 @@ export default async function Inicio() {
         </ul>
       </section>
 
+      {/* ── Mapas, satélite e CAR ── */}
+      <section aria-labelledby="titulo-mapas" className="border-t border-slate-200 bg-white">
+        <div className="mx-auto max-w-6xl px-4 py-16 sm:py-20">
+          <p className="text-sm font-semibold uppercase tracking-wide text-primaria-700">Geoprocessamento integrado</p>
+          <h2 id="titulo-mapas" className="mt-2 max-w-3xl text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Imagem de satélite e bases oficiais do governo em cada processo</h2>
+          <p className="mt-3 max-w-3xl text-slate-600">
+            Imóveis rurais do CAR (SICAR), parcelas certificadas do SIGEF/INCRA, desmatamento PRODES e DETER do INPE, unidades de conservação e limites do IBGE
+            sobre imagem de satélite — direto na análise, na vistoria e no cadastro do empreendimento.
+          </p>
+          <div className="mt-10 grid gap-6 lg:grid-cols-3">
+            {[
+              { img: "/apresentacao/car-satelite.webp", titulo: "Imóvel do CAR em um clique", texto: "Clique no mapa e o sistema encontra o imóvel rural no CAR, preenche o número e usa o limite oficial como polígono do empreendimento, com a área calculada." },
+              { img: "/apresentacao/prodes-car.webp", titulo: "Desmatamento e limites sobrepostos", texto: "Camadas do INPE (PRODES/DETER Cerrado), CAR e SIGEF sobre o satélite; importe KML, KMZ, GeoJSON ou shapefile enviados pelo requerente." },
+              { img: "/apresentacao/antes-depois.webp", titulo: "Antes e depois na fiscalização", texto: "Compare imagens históricas e atuais lado a lado para comprovar supressão de vegetação, abertura de área ou obras sem licença." },
+            ].map((c) => (
+              <figure key={c.titulo} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={c.img} alt={`Captura de tela: ${c.titulo}`} loading="lazy" className="aspect-[16/9] w-full object-cover object-top" />
+                <figcaption className="p-5">
+                  <h3 className="font-semibold text-slate-900">{c.titulo}</h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{c.texto}</p>
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+          <p className="mt-6 text-xs text-slate-500">
+            Fontes: SICAR/Serviço Florestal Brasileiro, INCRA, INPE/TerraBrasilis, MMA/ICMBio e IBGE (dados públicos). Imagens de satélite © Esri, Maxar, Earthstar Geographics.
+            O CAR público não informa nome do imóvel nem proprietário; esses dados vêm do cadastro do próprio órgão.
+          </p>
+        </div>
+      </section>
+
       {/* ── Como funciona ── */}
       <section aria-labelledby="titulo-como" className="bg-slate-50">
         <div className="mx-auto max-w-6xl px-4 py-16 sm:py-20">
