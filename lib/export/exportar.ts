@@ -156,6 +156,13 @@ export function filtroTabela(modelo: string, e: EscopoExportacao): Record<string
     // Caixa bruta de webhooks: transitória (retenção CANAIS_RETENCAO_EVENTOS_DIAS), payloads de provedor com dados pessoais –
     // fora da exportação por organização (o conteúdo útil já está em mensagem_conversa).
     case "EventoWebhook": return { id: "00000000-0000-0000-0000-000000000000" };
+    // Cobrança de taxas (chave da API Asaas e token do webhook NÃO são exportados – COLUNAS_EXCLUIDAS)
+    case "ConfigCobranca":
+    case "Cobranca":
+      return mun;
+    case "TabelaTaxa": return { organizacao_id: e.organizacao.id };
+    // Certificados digitais: só metadados (arquivo .pfx e senha NÃO são exportados)
+    case "CertificadoDigital": return { organizacao_id: e.organizacao.id };
     default:
       throw new Error(`Tabela ${modelo} sem regra de escopo na exportação por organização (lib/export/exportar.ts filtroTabela).`);
   }

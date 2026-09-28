@@ -4,6 +4,8 @@ import { Prisma } from "@prisma/client";
 /** Colunas que NUNCA saem na exportação (segredos). */
 export const COLUNAS_EXCLUIDAS: Record<string, string[]> = {
   Usuario: ["senha_hash"],
+  ConfigCobranca: ["asaas_api_key_cifrada", "asaas_webhook_token"],
+  CertificadoDigital: ["pfx_cifrado", "senha_cifrada"],
 };
 
 /** Colunas exportadas CIFRADAS (AES-256-GCM, formato v1:iv:tag:dados). Decifrar exige a DATA_KEY do órgão. */
@@ -13,6 +15,7 @@ export const COLUNAS_CIFRADAS: Record<string, string[]> = {
   Denuncia: ["contato"],
   CanalAtendimento: ["webhook_secret", "config (chave segredos)"],
   Conversa: ["destino_cifrado", "contato_cifrado"],
+  CertificadoDigital: ["documento_titular"],
 };
 
 export const DESCRICAO_TABELA: Record<string, string> = {
@@ -59,6 +62,10 @@ export const DESCRICAO_TABELA: Record<string, string> = {
   UsoIa: "Consumo de IA (tokens e custo estimado em US$) por organização.",
   AlertaDesmatamento: "Alertas de desmatamento por satélite (INPE DETER/PRODES, MapBiomas) do município: polígono (GeoJSON WGS84), área, cruzamento com CAR e licenças locais, sugestão e situação do tratamento.",
   MonitoramentoSync: "Execuções da sincronização do monitoramento por satélite (origem, situação, resumo por fonte).",
+  ConfigCobranca: "Configuração de cobrança de taxas do município (gateway Asaas, vencimento, bloqueio de etapa). Chave da API e token do webhook NÃO são exportados.",
+  TabelaTaxa: "Tabela de taxas de licenciamento: tipo de ato × fase × porte × potencial poluidor → valor.",
+  Cobranca: "Cobranças (DAM) de taxas por processo e fase: Pix/boleto via Asaas ou baixa manual, situação e pagamento.",
+  CertificadoDigital: "Certificados digitais A1 (e-CNPJ do órgão / e-CPF do servidor) usados para assinar documentos: somente metadados; arquivo .pfx e senha NÃO são exportados.",
 };
 
 const DESCRICAO_COLUNA: Record<string, string> = {
