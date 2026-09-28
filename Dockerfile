@@ -44,7 +44,8 @@ RUN npx prisma generate && npm run build
 FROM base AS worker
 ENV NODE_ENV=production
 COPY --from=deps --chown=node:node /app/node_modules ./node_modules
-# Fontes completas (jobs/, lib/, prisma/, templates/…) – filtradas pelo .dockerignore
+# Fontes completas (jobs/, lib/, prisma/ + seeds/clientes, scripts/ (predeploy.sh), templates/, public/, tests/fixtures…)
+# – filtradas pelo .dockerignore. Pré-deploy no Railway: `sh scripts/predeploy.sh` (ver deploy/railway.md).
 COPY --chown=node:node . .
 RUN mkdir -p /app/storage && chown node:node /app/storage
 USER node

@@ -49,7 +49,7 @@ export default async function PaginaPrazos({ searchParams }: { searchParams: Pro
         tecnico: { select: { nome: true } },
       },
     }),
-    prisma.municipio.findMany({ where: { ativo: true, ...(escopoMunicipios(u) === "TODOS" ? {} : { id: { in: escopoMunicipios(u) as string[] } }) }, orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
+    prisma.municipio.findMany({ where: { ativo: true, id: { in: escopoMunicipios(u) } }, orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
     prisma.usuario.findMany({ where: { processos_tecnico: { some: whereMunicipio(u, municipio) } }, orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
   ]);
 

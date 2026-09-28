@@ -35,8 +35,8 @@ async function limpar() {
 async function main() {
   if (process.argv.includes("--limpar")) return limpar();
   const lor = await prisma.municipio.findUniqueOrThrow({ where: { sigla: "LOR" } });
-  const gestorU = await prisma.usuario.findUniqueOrThrow({ where: { email: "gestor.lor@licenciagov.demo" }, include: { papeis: true } });
-  const gestor = { id: gestorU.id, nome: gestorU.nome, email: gestorU.email, cargo: gestorU.cargo, pessoa_id: null, trocar_senha: false, papeis: gestorU.papeis.map((p) => ({ papel: p.papel, municipio_id: p.municipio_id })) };
+  const { sessaoPorEmail } = await import("../lib/sessao");
+  const gestor = await sessaoPorEmail("gestor.lor@licenciagov.demo");
   const tipologia = await prisma.tipologia.findFirstOrThrow();
   const lo = await prisma.tipoAto.findFirstOrThrow({ where: { sigla: "LO" } });
   const h = hashBusca(DOC);

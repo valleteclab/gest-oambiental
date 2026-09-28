@@ -7,6 +7,7 @@ import { hash, verify } from "@node-rs/argon2";
 import { prisma } from "./db";
 import { registrarAuditoria } from "./audit";
 import { isInterno, podeAcessarOrgao, type UsuarioSessao } from "./rbac";
+import { sessaoPorId } from "./sessao";
 
 // Sessão: JWT curto de acesso (15 min) + refresh (8 h), cookies Secure/HttpOnly/SameSite=Lax (SPEC 3 / 9.3).
 export const COOKIE_ACESSO = "lg_access";
@@ -90,11 +91,24 @@ export async function encerrarSessao() {
 
 // ───────────── Órgão (município) ativo ─────────────
 
-export type OrgaoResumo = { id: string; sigla: string; nome: string; orgao_ambiental_nome: string; brasao_url: string | null };
-const SELECT_ORGAO = { id: true, sigla: true, nome: true, orgao_ambiental_nome: true, brasao_url: true } as const;
+export type OrgaoResumo = {
+  id: string;
+  sigla: string;
+  nome: string;
+  orgao_ambiental_nome: string;
+  brasao_url: string | null;
+  organizacao: { id: string; nome: string; sigla: string; logo_url: string | null };
+};
+const SELECT_ORGAO = {
+  id: true, sigla: true, nome: true, orgao_ambiental_nome: true, brasao_url: true,
+  organizacao: { select: { id: true, nome: true, sigla: true, logo_url: true } },
+} as const;
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Órgãos (municípios ativos) disponíveis para escolha, em ordem alfabética. */
+/**
+ * Órgãos (municípios ativos) em ordem alfabética – de TODAS as organizações (lista pública: portal, login).
+ * Para o que o usuário pode escolher, filtre com orgaosPermitidos(usuario, …) (ver /trocar-orgao).
+ */
 export async function listarOrgaos(): Promise<OrgaoResumo[]> {
   return prisma.municipio.findMany({ where: { ativo: true }, select: SELECT_ORGAO, orderBy: { nome: "asc" } });
 }
@@ -120,7 +134,7 @@ export const getOrgaoAtivo = cache(async (): Promise<OrgaoResumo | null> => {
   const id = (await cookies()).get(COOKIE_ORGAO)?.value;
   if (!id || !RE_UUID.test(id)) return null;
   const u = await getUsuario();
-  if (!u || !podeAcessarOrgao(u.papeis, id)) return null;
+  if (!u || !podeAcessarOrgao(u, id)) return null;
   return prisma.municipio.findFirst({ where: { id, ativo: true }, select: SELECT_ORGAO });
 });
 
@@ -163,7 +177,7 @@ export async function autenticar(email: string, senha: string, orgao?: OrgaoResu
   }
   const usuario = await carregarUsuario(u.id);
   if (!usuario) return { ok: false, erro: "Usuário inválido." };
-  if (orgao && !podeAcessarOrgao(usuario.papeis, orgao.id)) {
+  if (orgao && !podeAcessarOrgao(usuario, orgao.id)) {
     await registrarAuditoria({ usuario_id: u.id, acao: "LOGIN_FALHA", entidade: "usuario", entidade_id: u.id, depois: { email, motivo: "orgao_sem_acesso", orgao: orgao.sigla }, ...ctx });
     return { ok: false, erro: ERRO_ORGAO_SEM_ACESSO, motivo: "orgao_sem_acesso" };
   }
@@ -172,18 +186,12 @@ export async function autenticar(email: string, senha: string, orgao?: OrgaoResu
   return { ok: true, usuario };
 }
 
+/**
+ * Sessão do usuário: papéis + organização (tenant) e os ids de TODOS os municípios dessa organização
+ * (`municipios_org`), para que lib/rbac.ts resolva o escopo de forma síncrona e nunca "vaze" para outra organização.
+ */
 export async function carregarUsuario(id: string): Promise<UsuarioSessao | null> {
-  const u = await prisma.usuario.findUnique({ where: { id }, include: { papeis: true } });
-  if (!u || !u.ativo) return null;
-  return {
-    id: u.id,
-    nome: u.nome,
-    email: u.email,
-    cargo: u.cargo,
-    pessoa_id: u.pessoa_id,
-    trocar_senha: u.trocar_senha,
-    papeis: u.papeis.map((p) => ({ papel: p.papel, municipio_id: p.municipio_id })),
-  };
+  return sessaoPorId(id);
 }
 
 /**

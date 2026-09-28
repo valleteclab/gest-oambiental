@@ -5,6 +5,8 @@ import { auditar } from "@/lib/audit";
 import { invalido } from "@/lib/http";
 import { acaoAdmin, bool, obrigatorio, txt, txtOuNulo } from "@/lib/admin/acao";
 import type { EstadoAcao } from "@/lib/admin/guard";
+import { organizacaoDoAdmin } from "@/lib/admin/escopo";
+import { naoEncontrado } from "@/lib/http";
 import { parseTipologiasCsv } from "@/lib/admin/tipologias-csv";
 import { textoParaFaixas } from "@/lib/cadastros/porte";
 
@@ -28,11 +30,12 @@ export async function salvarTipologia(_: EstadoAcao, f: FormData): Promise<Estad
       faixas_porte: faixas as unknown as Prisma.InputJsonValue,
       ativo: bool(f, "ativo"),
     };
-    const org = await prisma.organizacao.findFirstOrThrow();
+    const org = { id: organizacaoDoAdmin(u) };
     const dup = await prisma.tipologia.findFirst({ where: { organizacao_id: org.id, codigo: dados.codigo, ...(id ? { id: { not: id } } : {}) } });
     if (dup) throw invalido(`Já existe tipologia com o código ${dados.codigo}.`, { campo: "codigo" });
     if (id) {
-      const antes = await prisma.tipologia.findUniqueOrThrow({ where: { id } });
+      const antes = await prisma.tipologia.findFirst({ where: { id, organizacao_id: org.id } });
+      if (!antes) throw naoEncontrado("Tipologia não encontrada.");
       await prisma.$transaction(async (tx) => {
         const t = await tx.tipologia.update({ where: { id }, data: dados });
         await auditar({ usuario_id: u.id, acao: "EDITAR", entidade: "tipologia", entidade_id: id, antes, depois: t }, tx);
@@ -61,7 +64,7 @@ export async function importarTipologias(_: EstadoAcao, f: FormData): Promise<Es
     const { linhas, erros } = parseTipologiasCsv(texto);
     if (erros.length) throw invalido(`Nenhuma tipologia importada – corrija o arquivo: ${erros.slice(0, 10).map((e) => `linha ${e.linha}: ${e.mensagem}`).join(" · ")}${erros.length > 10 ? ` (+${erros.length - 10} erros)` : ""}`);
     if (!linhas.length) throw invalido("O arquivo não tem linhas de dados.");
-    const org = await prisma.organizacao.findFirstOrThrow();
+    const org = { id: organizacaoDoAdmin(u) };
     let criadas = 0;
     let atualizadas = 0;
     await prisma.$transaction(async (tx) => {

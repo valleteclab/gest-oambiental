@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { usuarioAdminPagina } from "@/lib/admin/guard";
+import { whereUsuariosAdmin } from "@/lib/admin/escopo";
 import { fmtDataHora } from "@/lib/format";
 import { AcessoNegado } from "@/components/acesso-negado";
 import { CabecalhoPagina, Card, Paginacao, Vazio } from "@/components/ui";
@@ -11,14 +12,17 @@ export const metadata = { title: "Log de auditoria – Administração" };
 const dataValida = (s?: string) => (s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null);
 
 export default async function Auditoria({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
-  const { ok } = await usuarioAdminPagina();
+  const { u: admin, ok } = await usuarioAdminPagina();
   if (!ok) return <AcessoNegado />;
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page ?? 1) || 1);
   const size = 50;
   const de = dataValida(sp.de);
   const ate = dataValida(sp.ate);
+  // Isolamento: só ações de usuários da organização do admin (ações anônimas/do sistema e de outros clientes não aparecem).
+  const daOrganizacao: Prisma.LogAuditoriaWhereInput = { usuario: whereUsuariosAdmin(admin) };
   const where: Prisma.LogAuditoriaWhereInput = {
+    ...daOrganizacao,
     ...(sp.usuario ? { usuario_id: sp.usuario } : {}),
     ...(sp.acao ? { acao: sp.acao } : {}),
     ...(sp.entidade ? { entidade: sp.entidade } : {}),
@@ -28,9 +32,9 @@ export default async function Auditoria({ searchParams }: { searchParams: Promis
   const [total, logs, acoes, entidades, usuarios] = await Promise.all([
     prisma.logAuditoria.count({ where }),
     prisma.logAuditoria.findMany({ where, include: { usuario: { select: { nome: true, email: true } } }, orderBy: { created_at: "desc" }, skip: (page - 1) * size, take: size }),
-    prisma.logAuditoria.findMany({ distinct: ["acao"], select: { acao: true }, orderBy: { acao: "asc" } }),
-    prisma.logAuditoria.findMany({ distinct: ["entidade"], select: { entidade: true }, orderBy: { entidade: "asc" } }),
-    prisma.usuario.findMany({ select: { id: true, nome: true }, orderBy: { nome: "asc" } }),
+    prisma.logAuditoria.findMany({ where: daOrganizacao, distinct: ["acao"], select: { acao: true }, orderBy: { acao: "asc" } }),
+    prisma.logAuditoria.findMany({ where: daOrganizacao, distinct: ["entidade"], select: { entidade: true }, orderBy: { entidade: "asc" } }),
+    prisma.usuario.findMany({ where: whereUsuariosAdmin(admin), select: { id: true, nome: true }, orderBy: { nome: "asc" } }),
   ]);
   const filtros = Object.fromEntries(Object.entries({ usuario: sp.usuario, acao: sp.acao, entidade: sp.entidade, entidade_id: sp.entidade_id, de, ate }).filter(([, v]) => v)) as Record<string, string>;
   return (

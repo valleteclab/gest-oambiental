@@ -2,6 +2,11 @@
 // ZIP: tabelas/{tabela}.csv + tabelas/{tabela}.json (todas as tabelas do Prisma, em lotes),
 //      dicionario_dados.md/.json, anexos/{storage_key} (anexos + PDFs oficiais + atas), manifest.json (sha256 de tudo), LEIA-ME.txt.
 // Segredos (usuario.senha_hash) nunca saem; colunas cifradas saem cifradas (ver dicionario.ts).
+//
+// ISOLAMENTO POR ORGANIZAÇÃO: a exportação solicitada por um usuário (exportacao.organizacao_id) contém SOMENTE
+// as linhas da organização dele – cada tabela tem uma regra em filtroTabela() (municípios da organização, processos
+// desses municípios, pessoas vinculadas, usuários da organização…) e os anexos/PDFs seguem as mesmas linhas.
+// Tabela nova sem regra → erro (nunca exporta "tudo" por omissão). Exportação sem organização (legado) = completa.
 import { createReadStream, createWriteStream, type WriteStream } from "node:fs";
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile, readdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
@@ -64,8 +69,89 @@ async function listarArquivos(dir: string, base = dir): Promise<string[]> {
 
 type Delegate = { findMany: (a: unknown) => Promise<Record<string, unknown>[]> };
 
+// ───────────────────────── Escopo (organização) ─────────────────────────
+
+export type EscopoExportacao = {
+  organizacao: { id: string; nome: string; sigla: string };
+  municipios: string[];
+  usuarios: string[];
+  emails: string[];
+};
+
+/** Pessoas da organização: cadastradas por ela ou vinculadas a registros dos seus municípios (= wherePessoaOrganizacao). */
+function wherePessoasOrg(e: EscopoExportacao) {
+  const m = { in: e.municipios };
+  return {
+    OR: [
+      { organizacao_id: e.organizacao.id },
+      { municipio_id: m },
+      { empreendimentos: { some: { municipio_id: m } } },
+      { processos: { some: { municipio_id: m } } },
+      { responsavel_tecnico: { processos: { some: { municipio_id: m } } } },
+      { responsavel_tecnico: { empreendimentos: { some: { empreendimento: { municipio_id: m } } } } },
+    ],
+  };
+}
+
+/** Carrega o escopo da organização (municípios, usuários internos + requerentes vinculados, e-mails). */
+export async function escopoDaOrganizacao(organizacaoId: string): Promise<EscopoExportacao> {
+  const org = await prisma.organizacao.findUniqueOrThrow({ where: { id: organizacaoId }, select: { id: true, nome: true, sigla: true, municipios: { select: { id: true } } } });
+  const base: EscopoExportacao = { organizacao: { id: org.id, nome: org.nome, sigla: org.sigla }, municipios: org.municipios.map((m) => m.id), usuarios: [], emails: [] };
+  const us = await prisma.usuario.findMany({ where: { OR: [{ organizacao_id: org.id }, { organizacao_id: null, pessoa: wherePessoasOrg(base) }] }, select: { id: true, email: true } });
+  return { ...base, usuarios: us.map((u) => u.id), emails: us.map((u) => u.email) };
+}
+
+/** Regra de escopo (where Prisma) de cada tabela na exportação de uma organização. */
+export function filtroTabela(modelo: string, e: EscopoExportacao): Record<string, unknown> {
+  const mun = { municipio_id: { in: e.municipios } };
+  const proc = { processo: mun };
+  switch (modelo) {
+    case "Organizacao": return { id: e.organizacao.id };
+    case "Municipio": return { organizacao_id: e.organizacao.id };
+    case "Usuario": return { id: { in: e.usuarios } };
+    case "UsuarioPapel": return { usuario_id: { in: e.usuarios } };
+    case "Tipologia":
+    case "TipoAto":
+    case "PrazoConfig":
+    case "ChecklistModelo":
+    case "Exportacao":
+      return { organizacao_id: e.organizacao.id };
+    case "ModeloDocumento": return { OR: [{ organizacao_id: e.organizacao.id }, { organizacao_id: null }] }; // próprios + globais da plataforma
+    case "DocumentoExigido": return { tipo_ato: { organizacao_id: e.organizacao.id } };
+    case "Feriado": return { OR: [{ municipio_id: null }, mun] }; // nacionais + dos municípios
+    case "Pessoa": return wherePessoasOrg(e);
+    case "ResponsavelTecnico": return { pessoa: wherePessoasOrg(e) };
+    case "Sequencia":
+    case "Empreendimento":
+    case "Processo":
+    case "DocumentoOficial":
+    case "Denuncia":
+    case "Fiscalizacao":
+    case "AutoInfracao":
+    case "Notificacao":
+    case "Conselho":
+    case "Alerta":
+    case "ChamadoSuporte":
+      return mun;
+    case "EmpreendimentoRt": return { empreendimento: mun };
+    case "Tramitacao":
+    case "Pendencia":
+    case "ChecklistPreenchido":
+    case "Parecer":
+    case "Condicionante":
+      return proc;
+    case "Anexo": return { OR: [proc, { fiscalizacao: mun }] };
+    case "ReuniaoConselho": return { conselho: mun };
+    case "EmailEnviado": return { para: { in: e.emails } };
+    case "LogAuditoria": return { usuario_id: { in: e.usuarios } };
+    case "BackupRegistro": return {}; // registros de infraestrutura da plataforma (sem dados de negócio)
+    default:
+      throw new Error(`Tabela ${modelo} sem regra de escopo na exportação por organização (lib/export/exportar.ts filtroTabela).`);
+  }
+}
+
 /** Exporta uma tabela em lotes (cursor por id) para CSV + JSON. Retorna nº de linhas. */
-async function exportarTabela(m: (typeof Prisma.dmmf.datamodel.models)[number], dir: string): Promise<{ linhas: number; colunas: string[] }> {
+async function exportarTabela(m: (typeof Prisma.dmmf.datamodel.models)[number], dir: string, escopo: EscopoExportacao | null = null): Promise<{ linhas: number; colunas: string[] }> {
   const campos = camposExportados(m);
   const nome = nomeTabela(m);
   const delegate = (prisma as unknown as Record<string, Delegate>)[m.name.charAt(0).toLowerCase() + m.name.slice(1)];
@@ -73,6 +159,7 @@ async function exportarTabela(m: (typeof Prisma.dmmf.datamodel.models)[number], 
   const idCampo = m.fields.find((f) => f.isId)?.name ?? "id";
   const select = Object.fromEntries(campos.map((f) => [f.name, true]));
   const colunas = campos.map((f) => f.dbName ?? f.name);
+  const where = escopo ? filtroTabela(m.name, escopo) : undefined;
 
   const csv = createWriteStream(path.join(dir, `${nome}.csv`), { encoding: "utf8" });
   const json = createWriteStream(path.join(dir, `${nome}.json`), { encoding: "utf8" });
@@ -82,6 +169,7 @@ async function exportarTabela(m: (typeof Prisma.dmmf.datamodel.models)[number], 
   let cursor: unknown = undefined;
   for (;;) {
     const lote: Record<string, unknown>[] = await delegate.findMany({
+      where,
       select,
       orderBy: { [idCampo]: "asc" },
       take: LOTE,
@@ -107,23 +195,23 @@ async function exportarTabela(m: (typeof Prisma.dmmf.datamodel.models)[number], 
 }
 
 /** Copia todos os arquivos referenciados no banco para anexos/{storage_key}. */
-async function exportarAnexos(dir: string): Promise<{ total: number; bytes: number; ausentes: { storage_key: string; origem: string; erro: string }[] }> {
+async function exportarAnexos(dir: string, escopo: EscopoExportacao | null = null): Promise<{ total: number; bytes: number; ausentes: { storage_key: string; origem: string; erro: string }[] }> {
   const chaves = new Map<string, string>();
   const add = (k: string | null | undefined, origem: string) => {
     if (k && !chaves.has(k)) chaves.set(k, origem);
   };
   // Em lotes para não carregar tudo de uma vez
   for (let skip = 0; ; skip += LOTE) {
-    const l = await prisma.anexo.findMany({ select: { storage_key: true }, orderBy: { id: "asc" }, skip, take: LOTE });
+    const l = await prisma.anexo.findMany({ where: escopo ? (filtroTabela("Anexo", escopo) as Prisma.AnexoWhereInput) : undefined, select: { storage_key: true }, orderBy: { id: "asc" }, skip, take: LOTE });
     l.forEach((x) => add(x.storage_key, "anexo"));
     if (l.length < LOTE) break;
   }
   for (let skip = 0; ; skip += LOTE) {
-    const l = await prisma.documentoOficial.findMany({ select: { storage_key: true }, orderBy: { id: "asc" }, skip, take: LOTE });
+    const l = await prisma.documentoOficial.findMany({ where: escopo ? (filtroTabela("DocumentoOficial", escopo) as Prisma.DocumentoOficialWhereInput) : undefined, select: { storage_key: true }, orderBy: { id: "asc" }, skip, take: LOTE });
     l.forEach((x) => add(x.storage_key, "documento_oficial"));
     if (l.length < LOTE) break;
   }
-  (await prisma.reuniaoConselho.findMany({ select: { ata_pdf_key: true }, where: { ata_pdf_key: { not: null } } })).forEach((x) => add(x.ata_pdf_key, "reuniao_conselho"));
+  (await prisma.reuniaoConselho.findMany({ select: { ata_pdf_key: true }, where: { ata_pdf_key: { not: null }, ...(escopo ? (filtroTabela("ReuniaoConselho", escopo) as Prisma.ReuniaoConselhoWhereInput) : {}) } })).forEach((x) => add(x.ata_pdf_key, "reuniao_conselho"));
 
   let total = 0;
   let bytes = 0;
@@ -165,7 +253,7 @@ async function zipar(dirOrigem: string, arquivoZip: string): Promise<void> {
 export type ResultadoExportacao = { storage_key: string; tamanho: number; tabelas: number; linhas: number; anexos: number };
 
 /** Gera o ZIP completo em disco temporário e grava no storage em exports/{id}.zip. */
-export async function gerarZipExportacao(id: string, meta: { solicitada_por?: string | null } = {}): Promise<ResultadoExportacao> {
+export async function gerarZipExportacao(id: string, meta: { solicitada_por?: string | null; organizacao_id?: string | null } = {}): Promise<ResultadoExportacao> {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "licenciagov-export-"));
   const raiz = path.join(tmp, "conteudo");
   const dirTabelas = path.join(raiz, "tabelas");
@@ -173,11 +261,12 @@ export async function gerarZipExportacao(id: string, meta: { solicitada_por?: st
   await mkdir(dirTabelas, { recursive: true });
   await mkdir(dirAnexos, { recursive: true });
   const geradoEm = new Date();
+  const escopo = meta.organizacao_id ? await escopoDaOrganizacao(meta.organizacao_id) : null;
   try {
     const tabelas: Record<string, { modelo: string; linhas: number; colunas: string[]; csv: string; json: string }> = {};
     let linhasTotal = 0;
     for (const m of modelos()) {
-      const r = await exportarTabela(m, dirTabelas);
+      const r = await exportarTabela(m, dirTabelas, escopo);
       const nome = nomeTabela(m);
       tabelas[nome] = { modelo: m.name, linhas: r.linhas, colunas: r.colunas, csv: `tabelas/${nome}.csv`, json: `tabelas/${nome}.json` };
       linhasTotal += r.linhas;
@@ -187,13 +276,14 @@ export async function gerarZipExportacao(id: string, meta: { solicitada_por?: st
     await writeFile(path.join(raiz, "dicionario_dados.json"), JSON.stringify({ gerado_em: geradoEm.toISOString(), ...dic }, null, 2));
     await writeFile(path.join(raiz, "dicionario_dados.md"), dicionarioMarkdown(dic, geradoEm));
 
-    const anexos = await exportarAnexos(dirAnexos);
+    const anexos = await exportarAnexos(dirAnexos, escopo);
 
     await writeFile(
       path.join(raiz, "LEIA-ME.txt"),
       [
         "LicenciaGov – Exportação completa de dados (portabilidade)",
         `Gerada em: ${geradoEm.toISOString()}  ·  Exportação: ${id}`,
+        escopo ? `Escopo: somente os dados da organização ${escopo.organizacao.nome} (${escopo.organizacao.sigla}) – ${escopo.municipios.length} município(s).` : "Escopo: base completa (todas as organizações).",
         "",
         "Conteúdo:",
         "  tabelas/<tabela>.csv   – UTF-8 com BOM, separador ';', aspas duplas, fim de linha CRLF (abre direto no Excel/LibreOffice)",
@@ -222,6 +312,7 @@ export async function gerarZipExportacao(id: string, meta: { solicitada_por?: st
       exportacao_id: id,
       generated_at: geradoEm.toISOString(),
       solicitada_por: meta.solicitada_por ?? null,
+      escopo: escopo ? { tipo: "ORGANIZACAO", organizacao: escopo.organizacao, municipios: escopo.municipios } : { tipo: "COMPLETA" },
       formato: { csv: { codificacao: "UTF-8 com BOM", separador: ";", aspas: '"', fim_de_linha: "CRLF" }, json: "array de objetos", datas: "ISO 8601 UTC" },
       contagens: { tabelas: Object.keys(tabelas).length, linhas: linhasTotal, anexos: anexos.total, anexos_bytes: anexos.bytes, anexos_ausentes: anexos.ausentes.length, arquivos: arquivos.length },
       tabelas,
@@ -251,7 +342,7 @@ export async function processarExportacao(id: string): Promise<void> {
   if (tomada.count === 0) return; // já processada por outro executor
   const exp = await prisma.exportacao.findUniqueOrThrow({ where: { id } });
   try {
-    const r = await gerarZipExportacao(id, { solicitada_por: exp.solicitada_por });
+    const r = await gerarZipExportacao(id, { solicitada_por: exp.solicitada_por, organizacao_id: exp.organizacao_id });
     await prisma.exportacao.update({ where: { id }, data: { status: "CONCLUIDA", storage_key: r.storage_key, tamanho: r.tamanho, concluida_em: new Date(), erro: null } });
     await registrarAuditoria({ usuario_id: exp.solicitada_por, acao: "EXPORTACAO", entidade: "exportacao", entidade_id: id, depois: { status: "CONCLUIDA", ...r } });
   } catch (e) {
@@ -276,8 +367,10 @@ export async function workerOnline(): Promise<boolean> {
  * Cria a solicitação (PENDENTE) e dispara o processamento: se o worker estiver no ar, ele pega a
  * exportação na varredura da fila `exportacao` (≤ 1 min); senão processa em segundo plano neste processo.
  */
-export async function solicitarExportacao(u: Pick<UsuarioSessao, "id">, escopo = "COMPLETA", ctx: { ip?: string | null; user_agent?: string | null } = {}) {
-  const exp = await prisma.exportacao.create({ data: { solicitada_por: u.id, escopo, status: "PENDENTE" } });
+export async function solicitarExportacao(u: Pick<UsuarioSessao, "id" | "organizacao_id">, escopo = "COMPLETA", ctx: { ip?: string | null; user_agent?: string | null } = {}) {
+  // Sempre restrita à organização de quem solicita (sem organização → recusada: nunca exporta outro cliente).
+  if (!u.organizacao_id) throw Object.assign(new Error("Usuário sem organização não pode exportar."), { status: 403, code: "PROIBIDO" });
+  const exp = await prisma.exportacao.create({ data: { solicitada_por: u.id, organizacao_id: u.organizacao_id, escopo, status: "PENDENTE" } });
   await registrarAuditoria({ usuario_id: u.id, acao: "EXPORTACAO_SOLICITADA", entidade: "exportacao", entidade_id: exp.id, depois: { escopo }, ip: ctx.ip ?? null, user_agent: ctx.user_agent ?? null });
   const viaWorker = process.env.EXPORTACAO_INLINE !== "true" && (await workerOnline());
   if (!viaWorker) {

@@ -6,12 +6,12 @@ import { criarUsuario, listarUsuarios } from "@/lib/admin/usuarios";
 
 // GET /api/v1/admin/usuarios?q=&papel=&municipio=&ativo=  ·  POST (retorna senha_temporaria uma única vez)
 export const GET = rota(async (req: Request) => {
-  await exigirAdmin();
+  const admin = await exigirAdmin();
   const url = new URL(req.url);
   const pg = paginacao(url);
   const s = url.searchParams;
   const ativo = s.get("ativo");
-  const r = await listarUsuarios({ q: s.get("q"), papel: s.get("papel"), municipio_id: s.get("municipio"), ativo: ativo === "true" ? true : ativo === "false" ? false : null, skip: pg.skip, take: pg.take });
+  const r = await listarUsuarios(admin, { q: s.get("q"), papel: s.get("papel"), municipio_id: s.get("municipio"), ativo: ativo === "true" ? true : ativo === "false" ? false : null, skip: pg.skip, take: pg.take });
   return NextResponse.json({ page: pg.page, size: pg.size, total: r.total, itens: r.itens });
 });
 

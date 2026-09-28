@@ -107,7 +107,7 @@ export function FormDenuncia({ municipios, municipioInicial = "" }: { municipios
           )}
         </div>
         {geo.erro && <div className="mb-2"><Aviso tipo="alerta">{geo.erro}</Aviso></div>}
-        <Mapa key={chaveMapa} centro={centro} zoom={ponto ? 16 : mun ? 13 : 8} altura="280px" selecionavel selecionado={ponto} onSelecionar={(lat, lng) => setPonto([lat, lng])} />
+        <Mapa key={chaveMapa} publico centro={centro} zoom={ponto ? 16 : mun ? 13 : 8} altura="280px" selecionavel selecionado={ponto} onSelecionar={(lat, lng) => setPonto([lat, lng])} />
       </fieldset>
 
       <fieldset className="space-y-3 rounded-md border border-slate-200 p-3">

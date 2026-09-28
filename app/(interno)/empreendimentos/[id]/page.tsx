@@ -90,7 +90,7 @@ export default async function FichaEmpreendimento({ params, searchParams }: { pa
               <div><dt className="text-slate-500">Grandeza</dt><dd>{e.grandeza_porte ? `${fmtNumero(e.grandeza_porte, 2)} ${e.tipologia.unidade_porte}` : "—"}</dd></div>
               <div><dt className="text-slate-500">Porte</dt><dd>{ROTULO_PORTE[e.porte]} {e.porte_justificativa && <Badge cor="amarelo">Ajustado pelo técnico</Badge>}</dd></div>
               <div><dt className="text-slate-500">Potencial poluidor</dt><dd>{ROTULO_PP[e.potencial_poluidor]}</dd></div>
-              <div><dt className="text-slate-500">Área</dt><dd>{e.area_m2 ? `${fmtNumero(e.area_m2, 2)} m²` : "—"}</dd></div>
+              <div><dt className="text-slate-500">Área</dt><dd>{e.area_m2 ? `${fmtNumero(e.area_m2, 2)} m² (${fmtNumero(Number(e.area_m2) / 10_000, 4)} ha)` : "—"}</dd></div>
               <div><dt className="text-slate-500">CAR</dt><dd>{e.numero_car ?? "—"}</dd></div>
               {e.porte_justificativa && <div className="sm:col-span-2"><dt className="text-slate-500">Justificativa do porte</dt><dd>{e.porte_justificativa}</dd></div>}
             </dl>
@@ -104,7 +104,7 @@ export default async function FichaEmpreendimento({ params, searchParams }: { pa
             <span data-testid="ficha-coordenadas" className="font-mono">{lat !== null && lng !== null ? `${lat.toFixed(6)}, ${lng.toFixed(6)}` : "não informadas"}</span>
           </p>
           {lat !== null && lng !== null ? (
-            <Mapa centro={[lat, lng]} zoom={14} altura="320px" pontos={[{ id: e.id, lat, lng, titulo: e.nome, descricao: e.municipio.nome }]} poligono={(e.poligono_geojson as GeoJSON.GeoJsonObject | null) ?? null} />
+            <Mapa centro={[lat, lng]} zoom={14} altura="360px" camadasIniciais={e.numero_car ? ["esri-rotulos", "car"] : ["esri-rotulos"]} pontos={[{ id: e.id, lat, lng, titulo: e.nome, descricao: e.municipio.nome }]} poligono={(e.poligono_geojson as GeoJSON.GeoJsonObject | null) ?? null} />
           ) : (
             <Vazio>Sem coordenadas cadastradas.</Vazio>
           )}

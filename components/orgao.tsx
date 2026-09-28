@@ -26,6 +26,14 @@ export function Brasao({ src, nome, className }: { src: string | null | undefine
   );
 }
 
+/** Logo horizontal da organização (cliente) – usado onde há espaço (portal do órgão, login); nos lugares pequenos, o brasão. */
+export function LogoOrganizacao({ src, nome, className }: { src: string; nome: string; className?: string }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt={`Logo – ${nome}`} className={clsx("shrink-0 object-contain", className ?? "h-12 w-auto max-w-[220px]")} />
+  );
+}
+
 /** Órgão ativo no cabeçalho das áreas logadas, com o link "Trocar órgão". */
 export function OrgaoAtivo({ orgao, tema = "claro" }: { orgao: OrgaoResumo | null; tema?: "claro" | "escuro" }) {
   const escuro = tema === "escuro";

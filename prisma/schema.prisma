@@ -193,6 +193,10 @@ model Organizacao {
   tipologias    Tipologia[]
   tipos_ato     TipoAto[]
   prazos_config PrazoConfig[]
+  usuarios      Usuario[]
+  checklists    ChecklistModelo[]
+  modelos       ModeloDocumento[]
+  exportacoes   Exportacao[]
 
   @@map("organizacao")
 }
@@ -248,18 +252,23 @@ model Usuario {
   bloqueado_ate       DateTime?
   ultimo_login        DateTime?
   pessoa_id           String?   @db.Uuid // vínculo do REQUERENTE/RT com cadastro de pessoa
+  // Organização (cliente/tenant) do usuário interno; NULL = requerente (atua em qualquer órgão).
+  // Papéis de organização (ADMIN, TEC_CONSORCIO, SEMA_INEMA) enxergam só os municípios desta organização.
+  organizacao_id      String?   @db.Uuid
   created_at          DateTime  @default(now())
   updated_at          DateTime  @updatedAt
   created_by          String?   @db.Uuid
 
-  pessoa  Pessoa?        @relation(fields: [pessoa_id], references: [id])
-  papeis  UsuarioPapel[]
+  pessoa      Pessoa?        @relation(fields: [pessoa_id], references: [id])
+  organizacao Organizacao?   @relation(fields: [organizacao_id], references: [id])
+  papeis      UsuarioPapel[]
   alertas Alerta[]
   logs    LogAuditoria[]
 
   processos_tecnico Processo[] @relation("processo_tecnico")
   processos_gestor  Processo[] @relation("processo_gestor")
 
+  @@index([organizacao_id])
   @@map("usuario")
 }
 
@@ -346,12 +355,14 @@ model DocumentoExigido {
 
 model ChecklistModelo {
   id         String   @id @default(uuid()) @db.Uuid
+  organizacao_id String? @db.Uuid // NULL = modelo da plataforma (legado)
   nome       String
   itens      Json // [{id, texto, tipo:'SIM_NAO'|'TEXTO'|'NUMERO', obrigatorio}]
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
   created_by String?  @db.Uuid
 
+  organizacao Organizacao?          @relation(fields: [organizacao_id], references: [id])
   tipos_ato   TipoAto[]
   preenchidos ChecklistPreenchido[]
 
@@ -392,6 +403,7 @@ model Feriado {
 
 model ModeloDocumento {
   id         String        @id @default(uuid()) @db.Uuid
+  organizacao_id String?   @db.Uuid // NULL = modelo global da plataforma; senão, versão própria da organização
   tipo       TipoDocumento
   nome       String
   html       String
@@ -400,6 +412,8 @@ model ModeloDocumento {
   created_at DateTime      @default(now())
   updated_at DateTime      @updatedAt
   created_by String?       @db.Uuid
+
+  organizacao Organizacao? @relation(fields: [organizacao_id], references: [id])
 
   @@map("modelo_documento")
 }
@@ -902,6 +916,7 @@ model LogAuditoria {
 
 model Exportacao {
   id             String           @id @default(uuid()) @db.Uuid
+  organizacao_id String?          @db.Uuid // exportação restrita aos dados desta organização (NULL = legado)
   solicitada_por String           @db.Uuid
   escopo         String
   status         StatusExportacao @default(PENDENTE)
@@ -910,6 +925,8 @@ model Exportacao {
   erro           String?
   created_at     DateTime         @default(now())
   concluida_em   DateTime?
+
+  organizacao Organizacao? @relation(fields: [organizacao_id], references: [id])
 
   @@map("exportacao")
 }

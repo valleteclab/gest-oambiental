@@ -2,7 +2,7 @@ import { forbidden } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { exigirUsuario, getOrgaoAtivo } from "@/lib/auth";
-import { can, escopoMunicipios, filtroMunicipioPadrao } from "@/lib/rbac";
+import { can, filtroMunicipioPadrao, temEscopoOrganizacao } from "@/lib/rbac";
 import { fmtData, fmtMoeda, fmtNumero } from "@/lib/format";
 import { calcularIndicadores, opcoesFiltros } from "@/lib/indicadores/calcular";
 import { lerFiltros, municipioPermitido, queryFiltros } from "@/lib/indicadores/filtros";
@@ -44,7 +44,7 @@ export default async function PaginaDashboard({ searchParams }: { searchParams: 
 
   const [ind, opcoes] = await Promise.all([calcularIndicadores(u, filtros), opcoesFiltros(u)]);
   const t = ind.totais;
-  const mostrarTodos = escopoMunicipios(u) === "TODOS" || opcoes.municipios.length > 1;
+  const mostrarTodos = temEscopoOrganizacao(u) || opcoes.municipios.length > 1;
   const qPrazos = (aba: string) => `/prazos${queryFiltros({ municipio_id: filtros.municipio_id, tecnico_id: filtros.tecnico_id }, { ...(filtros.municipio_id ? {} : { municipio: "" }), aba })}`;
   const d = ind.filtros.descricao;
 

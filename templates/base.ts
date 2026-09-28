@@ -17,6 +17,7 @@ html, body { margin: 0; padding: 0; }
 body { font-family: "Liberation Sans", Arial, Helvetica, sans-serif; font-size: 10.5pt; line-height: 1.45; color: #111827; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .cab { display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #065f46; padding-bottom: 8px; margin-bottom: 14px; }
 .cab img { width: 56px; height: 67px; object-fit: contain; }
+.cab img.logo { width: auto; max-width: 190px; height: 64px; }
 .cab .inst { line-height: 1.25; }
 .cab .inst .l1 { font-size: 9pt; text-transform: uppercase; letter-spacing: .04em; color: #374151; }
 .cab .inst .l2 { font-size: 12.5pt; font-weight: 700; color: #064e3b; }
@@ -49,11 +50,11 @@ export function linhas(pares: [string, unknown][]): string {
 export function cabecalho(ctx: ContextoDocumento): string {
   const m = ctx.municipio;
   return `<header class="cab">
-  <img src="${esc(m.brasao)}" alt="Brasão do município de ${esc(m.nome)}">
+  ${m.logo ? `<img class="logo" src="${esc(m.logo)}" alt="Logo – Prefeitura Municipal de ${esc(m.nome)}">` : `<img src="${esc(m.brasao)}" alt="Brasão do município de ${esc(m.nome)}">`}
   <div class="inst">
     <div class="l1">Estado da Bahia · Prefeitura Municipal de ${esc(m.nome)}</div>
     <div class="l2">${esc(m.orgao)}</div>
-    <div class="l3">${esc([m.endereco, m.telefone, m.email].filter(Boolean).join(" · "))}${m.organizacao ? `<br>${esc(m.organizacao)}` : ""}</div>
+    <div class="l3">${esc([m.endereco, m.telefone, m.email].filter(Boolean).join(" · "))}${m.organizacao && m.organizacao !== `Prefeitura Municipal de ${m.nome}` ? `<br>${esc(m.organizacao)}` : ""}</div>
   </div>
 </header>`;
 }

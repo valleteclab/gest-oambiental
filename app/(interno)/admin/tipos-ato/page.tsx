@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { usuarioAdminPagina } from "@/lib/admin/guard";
+import { whereOrganizacao } from "@/lib/rbac";
 import { AcessoNegado } from "@/components/acesso-negado";
 import { Badge, CabecalhoPagina, Card } from "@/components/ui";
 
@@ -8,9 +9,9 @@ export const metadata = { title: "Tipos de ato – Administração" };
 const ROTULO_CATEGORIA = { LICENCA: "Licença", AUTORIZACAO: "Autorização", CERTIDAO: "Certidão", DECLARACAO: "Declaração" } as const;
 
 export default async function TiposAto() {
-  const { ok } = await usuarioAdminPagina();
+  const { u: admin, ok } = await usuarioAdminPagina();
   if (!ok) return <AcessoNegado />;
-  const lista = await prisma.tipoAto.findMany({ orderBy: { sigla: "asc" }, include: { checklist_modelo: { select: { nome: true } }, _count: { select: { documentos_exigidos: true, processos: true } } } });
+  const lista = await prisma.tipoAto.findMany({ where: whereOrganizacao(admin), orderBy: { sigla: "asc" }, include: { checklist_modelo: { select: { nome: true } }, _count: { select: { documentos_exigidos: true, processos: true } } } });
   return (
     <>
       <CabecalhoPagina titulo="Tipos de ato" subtitulo={<Link href="/admin" className="underline">Administração</Link>} acoes={<Link href="/admin/tipos-ato/novo" className="btn-primario">Novo tipo de ato</Link>} />

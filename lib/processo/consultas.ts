@@ -113,10 +113,10 @@ export async function listarProcessos(u: UsuarioSessao, f: FiltroProcessos) {
   return { total, itens };
 }
 
-/** Técnicos elegíveis para distribuição no município: TEC_MUNICIPAL do município + TEC_CONSORCIO (ativos). */
+/** Técnicos elegíveis para distribuição no município: TEC_MUNICIPAL do município + TEC_CONSORCIO (ativos) – só da organização do município. */
 export async function tecnicosElegiveis(municipioId: string, tx: Prisma.TransactionClient | typeof prisma = prisma) {
   return tx.usuario.findMany({
-    where: { ativo: true, papeis: { some: { OR: [{ papel: "TEC_MUNICIPAL", municipio_id: municipioId }, { papel: "TEC_CONSORCIO" }] } } },
+    where: { ativo: true, organizacao: { municipios: { some: { id: municipioId } } }, papeis: { some: { OR: [{ papel: "TEC_MUNICIPAL", municipio_id: municipioId }, { papel: "TEC_CONSORCIO" }] } } },
     select: { id: true, nome: true, papeis: { select: { papel: true, municipio_id: true } } },
     orderBy: { nome: "asc" },
   });
@@ -137,8 +137,9 @@ export function whereTitular(u: UsuarioSessao): Prisma.ProcessoWhereInput {
 }
 
 /** dias_alerta por etapa/município (prazo_config; município sobrepõe organização) – para o semáforo das listas. */
-export async function mapaDiasAlerta(): Promise<Record<string, number>> {
-  const cfgs = await prisma.prazoConfig.findMany({ select: { municipio_id: true, etapa: true, dias_alerta: true } });
+/** Dias de alerta por município/etapa ("*" = padrão da organização). Informe a organização do usuário (isolamento). */
+export async function mapaDiasAlerta(organizacaoId?: string | null): Promise<Record<string, number>> {
+  const cfgs = await prisma.prazoConfig.findMany({ where: { organizacao_id: organizacaoId ?? "00000000-0000-0000-0000-000000000000" }, select: { municipio_id: true, etapa: true, dias_alerta: true } });
   return Object.fromEntries(cfgs.map((c) => [`${c.municipio_id ?? "*"}:${c.etapa}`, c.dias_alerta]));
 }
 

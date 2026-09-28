@@ -57,7 +57,11 @@ export async function emitirDocumento(input: EmitirInput): Promise<DocumentoOfic
 
 async function emitirUmaVez(input: EmitirInput): Promise<DocumentoOficial> {
   const base = await carregarContexto(input);
-  const modelo = await prisma.modeloDocumento.findFirst({ where: { tipo: input.tipo, ativo: true }, orderBy: [{ versao: "desc" }, { updated_at: "desc" }] });
+  // Modelo: versão ativa da organização do município; senão, a global da plataforma (organizacao_id NULL); senão, o embutido.
+  const org = (await prisma.municipio.findUnique({ where: { id: input.municipio_id }, select: { organizacao_id: true } }))?.organizacao_id ?? null;
+  const modelo =
+    (org ? await prisma.modeloDocumento.findFirst({ where: { tipo: input.tipo, ativo: true, organizacao_id: org }, orderBy: [{ versao: "desc" }, { updated_at: "desc" }] }) : null) ??
+    (await prisma.modeloDocumento.findFirst({ where: { tipo: input.tipo, ativo: true, organizacao_id: null }, orderBy: [{ versao: "desc" }, { updated_at: "desc" }] }));
   const id = randomUUID();
   const emitidoEm = new Date();
   const ano = anoBahia(emitidoEm);

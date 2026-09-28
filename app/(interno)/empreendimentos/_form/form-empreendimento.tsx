@@ -1,7 +1,9 @@
 "use client";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Mapa } from "@/components/mapa";
+import { Mapa, type PoligonoGeo } from "@/components/mapa";
+import { areaM2, validarPoligono } from "@/lib/geo/validar";
+import { BuscaCar } from "./busca-car";
 import { calcularPorte, PORTES, ROTULO_PORTE } from "@/lib/cadastros/porte";
 import { salvarEmpreendimento } from "../actions";
 import { useFormAcao, CampoSelect, CampoTexto, CamposEndereco, Erro, MensagemEstado } from "../../pessoas/_form/campos";
@@ -50,15 +52,23 @@ export function FormEmpreendimento(props: { valor?: ValorEmp; municipios: Mun[];
       return null;
     }
   }, [poligono]);
+  const [numeroCar, setNumeroCar] = useState(valor?.numero_car ?? "");
+  const [area, setArea] = useState(valor?.area_m2?.toString() ?? "");
   const mun = municipios.find((m) => m.id === municipioId);
-  const centro: [number, number] = mun?.latitude && mun?.longitude ? [mun.latitude, mun.longitude] : [-12.45, -40.2];
+  // Sem coordenadas do município selecionado, o mapa centraliza no órgão ativo.
+  const centro: [number, number] | undefined = mun?.latitude && mun?.longitude ? [mun.latitude, mun.longitude] : undefined;
   const sel: [number, number] | null = lat && lng && !isNaN(Number(lat)) && !isNaN(Number(lng)) ? [Number(lat), Number(lng)] : null;
 
-  async function carregarArquivo(f: File | undefined) {
-    if (!f) return;
-    if (f.size > 2 * 1024 * 1024) return alert("Arquivo muito grande (máx. 2 MB).");
-    setPoligono(await f.text());
+  /** Polígono desenhado/importado/do CAR → GeoJSON do formulário + área (m²). */
+  function aplicarPoligono(g: PoligonoGeo | null, m2?: number) {
+    setPoligono(g ? JSON.stringify(g) : "");
+    if (g) setArea(String(Math.round((m2 ?? areaM2(g)) * 100) / 100));
   }
+  const erroPoligono = useMemo(() => {
+    if (!poligono.trim() || !poligonoObj) return null;
+    const r = validarPoligono(poligonoObj);
+    return r.ok ? null : r.erro;
+  }, [poligono, poligonoObj]);
 
   return (
     <form onSubmit={onSubmit} className="space-y-6" noValidate>
@@ -70,8 +80,8 @@ export function FormEmpreendimento(props: { valor?: ValorEmp; municipios: Mun[];
         <CampoSelect name="requerente_id" label="Requerente (titular)" required defaultValue={valor?.requerente_id ?? ""} estado={estado} vazio="Selecione…" opcoes={requerentes.map((r) => ({ valor: r.id, rotulo: `${r.nome} (${r.doc})` }))} dica="Não encontrou? Cadastre em Pessoas." />
         <CampoSelect name="rt_id" label="Responsável técnico atual" defaultValue={valor?.rt_id ?? ""} estado={estado} vazio="(nenhum)" opcoes={rts.map((r) => ({ valor: r.id, rotulo: `${r.nome} – ${r.registro}` }))} dica="Trocar o RT encerra o vínculo anterior (histórico)." />
         {valor?.id && <CampoSelect name="status" label="Situação" defaultValue={valor.status ?? "ATIVO"} estado={estado} opcoes={[{ valor: "ATIVO", rotulo: "Ativo" }, { valor: "INATIVO", rotulo: "Inativo" }]} />}
-        <CampoTexto name="numero_car" label="Nº do CAR (se rural)" defaultValue={valor?.numero_car ?? ""} estado={estado} />
-        <CampoTexto name="area_m2" label="Área total (m²)" inputMode="decimal" defaultValue={valor?.area_m2?.toString() ?? ""} estado={estado} />
+        <CampoTexto name="numero_car" label="Nº do CAR (se rural)" value={numeroCar} onChange={(e) => setNumeroCar(e.target.value)} estado={estado} dica="Pode ser preenchido pelo mapa: “Buscar imóvel no CAR neste ponto”." />
+        <CampoTexto name="area_m2" label="Área total (m²)" inputMode="decimal" value={area} onChange={(e) => setArea(e.target.value)} estado={estado} dica="Preenchida automaticamente ao desenhar/importar o polígono." />
       </div>
 
       <fieldset className="grid gap-3 rounded-md border border-slate-200 p-4 sm:grid-cols-2">
@@ -114,20 +124,35 @@ export function FormEmpreendimento(props: { valor?: ValorEmp; municipios: Mun[];
           <CampoTexto name="latitude" label="Latitude" inputMode="decimal" value={lat} onChange={(e) => setLat(e.target.value)} estado={estado} placeholder="-12.527500" />
           <CampoTexto name="longitude" label="Longitude" inputMode="decimal" value={lng} onChange={(e) => setLng(e.target.value)} estado={estado} placeholder="-40.306700" />
         </div>
-        <Mapa key={municipioId} centro={centro} zoom={sel ? 14 : 12} altura="320px" selecionavel selecionado={sel} poligono={poligonoObj} onSelecionar={(a, b) => { setLat(String(a)); setLng(String(b)); }} />
-        <div>
-          <label htmlFor="f-poligono" className="label">Polígono (GeoJSON, opcional)</label>
-          <textarea id="f-poligono" name="poligono_geojson" rows={4} className="input font-mono text-xs" value={poligono} onChange={(e) => setPoligono(e.target.value)} placeholder='{"type":"Polygon","coordinates":[[[-40.3,-12.5],[-40.29,-12.5],[-40.29,-12.51],[-40.3,-12.5]]]}' aria-describedby="f-poligono-erro" />
-          <Erro id="f-poligono-erro" msg={estado?.campos?.poligono_geojson} />
-          {poligono.trim() && !poligonoObj && <span className="mt-1 block text-xs text-amber-700">JSON ainda inválido.</span>}
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <label className="btn-secundario btn-sm cursor-pointer">
-              Carregar arquivo .geojson
-              <input type="file" accept=".geojson,.json,application/geo+json,application/json" className="sr-only" onChange={(e) => carregarArquivo(e.target.files?.[0])} />
-            </label>
-            {poligono && <button type="button" className="btn-secundario btn-sm" onClick={() => setPoligono("")}>Remover polígono</button>}
-          </div>
+        <Mapa
+          key={municipioId}
+          centro={centro}
+          zoom={sel ? 15 : 12}
+          altura="min(60vh, 440px)"
+          selecionavel
+          selecionado={sel}
+          camadasIniciais={["esri-rotulos", "car"]}
+          editavelPoligono
+          poligono={poligonoObj}
+          onPoligono={aplicarPoligono}
+          onSelecionar={(a, b) => { setLat(String(a)); setLng(String(b)); }}
+        />
+        <p className="text-xs text-slate-600">
+          Camadas (canto superior direito): satélite, CAR/SICAR (a partir do zoom 11), SIGEF, IBGE, PRODES/DETER, UCs. Desenhe o polígono com as ferramentas à esquerda ou importe um arquivo.
+        </p>
+        <BuscaCar ponto={sel} onUsarCar={setNumeroCar} onUsarPoligono={(g) => aplicarPoligono(g)} />
+        <input type="hidden" name="poligono_geojson" value={poligono} />
+        <Erro id="f-poligono-erro" msg={estado?.campos?.poligono_geojson} />
+        {erroPoligono && <span className="block text-xs text-amber-700">Polígono: {erroPoligono}</span>}
+        <div className="flex flex-wrap items-center gap-2">
+          {poligono && <button type="button" className="btn-secundario btn-sm" onClick={() => setPoligono("")}>Remover polígono</button>}
         </div>
+        <details className="text-sm">
+          <summary className="cursor-pointer text-slate-700">Editar GeoJSON do polígono (avançado)</summary>
+          <label htmlFor="f-poligono" className="label mt-2">Polígono (GeoJSON Polygon/MultiPolygon, WGS84)</label>
+          <textarea id="f-poligono" rows={5} className="input font-mono text-xs" value={poligono} onChange={(e) => setPoligono(e.target.value)} placeholder='{"type":"Polygon","coordinates":[[[-40.3,-12.5],[-40.29,-12.5],[-40.29,-12.51],[-40.3,-12.5]]]}' aria-describedby="f-poligono-erro" />
+          {poligono.trim() && !poligonoObj && <span className="mt-1 block text-xs text-amber-700">JSON ainda inválido.</span>}
+        </details>
       </fieldset>
 
       <div className="flex flex-wrap gap-2">

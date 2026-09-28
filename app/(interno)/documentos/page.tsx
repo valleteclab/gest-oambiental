@@ -43,7 +43,7 @@ export default async function DocumentosPage({ searchParams }: { searchParams: P
       take: TAMANHO,
       select: { id: true, tipo: true, numero: true, status: true, validade_ate: true, emitido_em: true, emitido_por_nome: true, codigo_verificador: true, municipio: { select: { sigla: true } }, processo: { select: { numero: true } } },
     }),
-    prisma.municipio.findMany({ where: escopo === "TODOS" ? {} : { id: { in: escopo } }, orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
+    prisma.municipio.findMany({ where: { id: { in: escopo } }, orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
   ]);
   const href = (p: number) => `/documentos?${new URLSearchParams(Object.entries({ ...sp, page: String(p) }).filter(([, v]) => v) as [string, string][])}`;
 

@@ -1,8 +1,7 @@
 import "server-only";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import ExcelJS from "exceljs";
 import { htmlParaPdf, esc } from "@/lib/pdf";
+import { lerImagem, logoProprio } from "@/lib/imagem";
 import { fmtData, fmtDataHora, fmtMoeda, fmtNumero } from "@/lib/format";
 import type { Cabecalho, Celula, Coluna, Relatorio } from "./modelo";
 
@@ -10,23 +9,21 @@ import type { Cabecalho, Celula, Coluna, Relatorio } from "./modelo";
 
 const COR_PRIMARIA = "065F46";
 
-async function logoSvg(logoUrl: string | null | undefined): Promise<string | null> {
-  const rel = (logoUrl && logoUrl.startsWith("/") ? logoUrl : "/brasao-generico.svg").replace(/^\/+/, "");
-  try {
-    return await readFile(path.join(process.cwd(), "public", path.normalize(rel).replace(/^(\.\.[/\\])+/, "")), "utf8");
-  } catch {
-    return null;
-  }
+/** Logo do cabeçalho: logo próprio da organização (PNG/JPG/SVG em public/ ou URL) ou o brasão genérico. */
+async function logoImagem(logoUrl: string | null | undefined) {
+  return (await lerImagem(logoProprio(logoUrl))) ?? (await lerImagem("/brasao-generico.svg"));
 }
 
-/** Logo em PNG para o XLSX (exceljs não aceita SVG). Usa sharp quando disponível. */
-async function logoPng(svg: string | null): Promise<Buffer | null> {
-  if (!svg) return null;
+/** Logo em PNG para o XLSX (exceljs não aceita SVG): PNG/JPEG são usados direto; SVG é convertido com sharp. */
+async function logoPng(img: { buf: Buffer; mime: string } | null): Promise<{ buf: Buffer; largura: number; altura: number } | null> {
+  if (!img) return null;
   try {
     const sharp = (await import("sharp")).default;
-    return await sharp(Buffer.from(svg), { density: 192 }).resize({ height: 96 }).png().toBuffer();
+    const png = img.mime === "image/svg+xml" ? await sharp(img.buf, { density: 192 }).resize({ height: 96 }).png().toBuffer() : await sharp(img.buf).png().toBuffer();
+    const meta = await sharp(png).metadata();
+    return { buf: png, largura: meta.width ?? 48, altura: meta.height ?? 58 };
   } catch {
-    return null;
+    return img.mime === "image/png" ? { buf: img.buf, largura: 48, altura: 58 } : null;
   }
 }
 
@@ -54,8 +51,8 @@ function fmtCelula(v: Celula, c: Coluna): string {
 const numerica = (c: Coluna) => ["inteiro", "decimal", "moeda", "percentual"].includes(c.tipo ?? "texto");
 
 export async function relatorioPdf(r: Relatorio, cab: Cabecalho, logoUrl?: string | null): Promise<Buffer> {
-  const svg = await logoSvg(logoUrl);
-  const logo = svg ? `<img class="logo" alt="" src="data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}" />` : "";
+  const img = await logoImagem(logoUrl);
+  const logo = img ? `<img class="logo" alt="" src="data:${img.mime};base64,${img.buf.toString("base64")}" />` : "";
   const filtros = r.filtros.map(([k, v]) => `<span><b>${esc(k)}:</b> ${esc(v)}</span>`).join("");
   const resumo = r.resumo?.length
     ? `<div class="resumo">${r.resumo.map(([k, v]) => `<div><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join("")}</div>`
@@ -78,7 +75,7 @@ export async function relatorioPdf(r: Relatorio, cab: Cabecalho, logoUrl?: strin
     * { box-sizing: border-box; }
     body { font-family: "Segoe UI", Roboto, Arial, sans-serif; font-size: 9pt; color: #0f172a; margin: 0; }
     header.inst { display: flex; gap: 12px; align-items: center; border-bottom: 2px solid #${COR_PRIMARIA}; padding-bottom: 8px; margin-bottom: 8px; }
-    .logo { height: 54px; }
+    .logo { height: 54px; width: auto; max-width: 180px; object-fit: contain; }
     .inst .org { font-size: 11pt; font-weight: 700; color: #${COR_PRIMARIA}; }
     .inst .mun { font-size: 10pt; }
     .inst .meta { margin-left: auto; text-align: right; font-size: 8pt; color: #475569; }
@@ -131,7 +128,9 @@ export async function relatorioXlsx(r: Relatorio, cab: Cabecalho, logoUrl?: stri
   const wb = new ExcelJS.Workbook();
   wb.creator = "LicenciaGov";
   wb.created = cab.emitido_em;
-  const png = await logoPng(await logoSvg(logoUrl));
+  const png = await logoPng(await logoImagem(logoUrl));
+  const alturaLogo = 58;
+  const larguraLogo = png ? Math.round((png.largura / png.altura) * alturaLogo) : 0;
   const nomesUsados = new Set<string>();
 
   for (const s of r.secoes) {
@@ -140,7 +139,7 @@ export async function relatorioXlsx(r: Relatorio, cab: Cabecalho, logoUrl?: stri
     nomesUsados.add(nome);
     const ws = wb.addWorksheet(nome, { pageSetup: { orientation: r.paisagem ? "landscape" : "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
     const ncol = Math.max(s.colunas.length, 4);
-    const inicioTexto = png ? 2 : 1; // coluna A reservada ao logo
+    const inicioTexto = png ? (larguraLogo > 70 ? 3 : 2) : 1; // coluna A (e B, se o logo for horizontal) reservadas ao logo
 
     // Cabeçalho institucional (linhas mescladas)
     const linhasCab: [string, Partial<ExcelJS.Font>][] = [
@@ -160,8 +159,8 @@ export async function relatorioXlsx(r: Relatorio, cab: Cabecalho, logoUrl?: stri
       c.alignment = { vertical: "middle", wrapText: false };
     });
     if (png) {
-      const img = wb.addImage({ buffer: png as unknown as ExcelJS.Buffer, extension: "png" });
-      ws.addImage(img, { tl: { col: 0.15, row: 0.15 }, ext: { width: 48, height: 58 } });
+      const img = wb.addImage({ buffer: png.buf as unknown as ExcelJS.Buffer, extension: "png" });
+      ws.addImage(img, { tl: { col: 0.15, row: 0.15 }, ext: { width: larguraLogo, height: alturaLogo } });
     }
     const linhaHeader = linhasCab.length + 2;
 

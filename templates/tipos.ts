@@ -10,7 +10,7 @@ export type ContextoDocumento = {
   dominio: string;
   emitido_em: Date;
   signatario: { nome: string; cargo: string | null };
-  municipio: { nome: string; sigla: string; orgao: string; endereco: string | null; email: string | null; telefone: string | null; brasao: string; organizacao: string | null };
+  municipio: { nome: string; sigla: string; orgao: string; endereco: string | null; email: string | null; telefone: string | null; brasao: string; organizacao: string | null; /** logo horizontal da organização (data URI), quando houver */ logo?: string | null };
   titular: { nome: string; tipo: "PF" | "PJ"; documento: string; endereco: string } | null;
   processo: { numero: string | null; data_protocolo: Date | null; tipo_ato_nome: string | null; tipo_ato_sigla: string | null; descricao_atividade: string | null } | null;
   empreendimento: {

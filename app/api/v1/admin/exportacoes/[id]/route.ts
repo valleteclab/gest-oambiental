@@ -14,7 +14,8 @@ export const GET = rota(async (req: Request, ctx: { params: Promise<{ id: string
   if (!can(u, "exportar", "exportacao")) throw proibido();
   const id = z.string().uuid().safeParse((await ctx.params).id);
   if (!id.success) throw naoEncontrado();
-  const exp = await prisma.exportacao.findUnique({ where: { id: id.data } });
+  // Isolamento: só exportações da organização do usuário (as de outro cliente respondem 404).
+  const exp = await prisma.exportacao.findFirst({ where: { id: id.data, organizacao_id: u.organizacao_id ?? "00000000-0000-0000-0000-000000000000" } });
   if (!exp) throw naoEncontrado("Exportação não encontrada.");
   const somenteStatus = new URL(req.url).searchParams.has("status");
   if (somenteStatus || exp.status !== "CONCLUIDA" || !exp.storage_key) {

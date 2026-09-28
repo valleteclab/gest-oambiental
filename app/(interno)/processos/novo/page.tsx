@@ -4,6 +4,7 @@ import { exigirUsuario, getOrgaoAtivo } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { podeProtocolarNoBalcao, podeVerMunicipio } from "@/lib/rbac";
 import { listarPessoas, podeVerPessoa } from "@/lib/cadastros/pessoas";
+import { whereResponsavelEscopo } from "@/lib/cadastros/escopo";
 import { municipiosDoEscopo } from "@/lib/cadastros/opcoes";
 import { documentosExigidos, UUID_RE } from "@/lib/processo/consultas";
 import { fmtDataHora } from "@/lib/format";
@@ -153,16 +154,18 @@ export default async function NovoProcessoBalcao({ searchParams }: { searchParam
   const pessoa = await prisma.pessoa.findUnique({ where: { id: requerenteId }, select: { id: true, nome: true, tipo: true, cpf_cnpj_mascara: true } });
   if (!pessoa) notFound();
   if (!(await podeVerPessoa(u, pessoa.id))) forbidden();
+  // Catálogo (tipologias/tipos de ato) da organização do município do protocolo – isolamento por cliente.
+  const orgMunicipio = (await prisma.municipio.findUniqueOrThrow({ where: { id: municipio.id }, select: { organizacao_id: true } })).organizacao_id;
 
   const [tipologias, tiposAto, empreendimentos, rts, comLogin] = await Promise.all([
-    prisma.tipologia.findMany({ where: { ativo: true }, select: { id: true, codigo: true, divisao: true, descricao: true, unidade_porte: true, faixas_porte: true, potencial_poluidor: true }, orderBy: { codigo: "asc" } }),
-    prisma.tipoAto.findMany({ where: { ativo: true }, select: { id: true, sigla: true, nome: true, categoria: true, validade_meses_padrao: true, prazo_analise_dias: true }, orderBy: { sigla: "asc" } }),
+    prisma.tipologia.findMany({ where: { ativo: true, organizacao_id: orgMunicipio }, select: { id: true, codigo: true, divisao: true, descricao: true, unidade_porte: true, faixas_porte: true, potencial_poluidor: true }, orderBy: { codigo: "asc" } }),
+    prisma.tipoAto.findMany({ where: { ativo: true, organizacao_id: orgMunicipio }, select: { id: true, sigla: true, nome: true, categoria: true, validade_meses_padrao: true, prazo_analise_dias: true }, orderBy: { sigla: "asc" } }),
     prisma.empreendimento.findMany({
       where: { requerente_id: pessoa.id, municipio_id: municipio.id, status: "ATIVO" },
       select: { id: true, nome: true, tipologia_id: true, grandeza_porte: true, latitude: true, longitude: true, municipio: { select: { nome: true } } },
       orderBy: { nome: "asc" },
     }),
-    prisma.responsavelTecnico.findMany({ select: { id: true, conselho: true, registro_conselho: true, pessoa: { select: { nome: true } } }, orderBy: { pessoa: { nome: "asc" } }, take: 500 }),
+    prisma.responsavelTecnico.findMany({ where: whereResponsavelEscopo(u), select: { id: true, conselho: true, registro_conselho: true, pessoa: { select: { nome: true } } }, orderBy: { pessoa: { nome: "asc" } }, take: 500 }),
     prisma.usuario.count({ where: { pessoa_id: pessoa.id, ativo: true } }),
   ]);
 

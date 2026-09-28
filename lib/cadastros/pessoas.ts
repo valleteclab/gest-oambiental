@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { auditar } from "@/lib/audit";
 import { cifrar, decifrar, formatarCpfCnpj, hashBusca, mascararCpfCnpj, somenteDigitos } from "@/lib/crypto";
 import { invalido, naoEncontrado, proibido } from "@/lib/http";
-import { can, escopoMunicipios, isInterno, type UsuarioSessao } from "@/lib/rbac";
+import { can, isInterno, temEscopoOrganizacao, type UsuarioSessao } from "@/lib/rbac";
 import { wherePessoaEscopo } from "./escopo";
 import { PessoaSchema, type PessoaEntrada } from "./validacao";
 
@@ -21,7 +21,7 @@ export type PessoaDecifrada = Omit<Pessoa, "cpf_cnpj_cifrado" | "cpf_cnpj_hash">
 export function podeVerDadosPessoais(u: UsuarioSessao, p: Pick<Pessoa, "municipio_id">): boolean {
   if (!isInterno(u)) return false;
   if (!can(u, "ver", "pessoa")) return false;
-  return escopoMunicipios(u) === "TODOS" || !p.municipio_id || can(u, "ver", "pessoa", p.municipio_id);
+  return !p.municipio_id || can(u, "ver", "pessoa", p.municipio_id);
 }
 
 function semSegredos(p: Pessoa): Omit<Pessoa, "cpf_cnpj_cifrado" | "cpf_cnpj_hash"> {
@@ -121,7 +121,7 @@ async function checarDuplicidade(u: UsuarioSessao, hash: string, ignorarId?: str
 function checarMunicipio(u: UsuarioSessao, acao: "criar" | "editar", municipioId: string | null | undefined) {
   if (!can(u, acao, "pessoa", municipioId ?? undefined)) throw proibido("Sem permissão para " + (acao === "criar" ? "cadastrar" : "editar") + " pessoas neste município.");
   // Usuário municipal deve vincular a pessoa a um município do seu escopo.
-  if (escopoMunicipios(u) !== "TODOS" && !municipioId) throw invalido("Informe o município da pessoa.", { campo: "municipio_id" });
+  if (!temEscopoOrganizacao(u) && !municipioId) throw invalido("Informe o município da pessoa.", { campo: "municipio_id" });
 }
 
 export async function criarPessoa(u: UsuarioSessao, entrada: unknown) {
@@ -129,7 +129,8 @@ export async function criarPessoa(u: UsuarioSessao, entrada: unknown) {
   checarMunicipio(u, "criar", e.municipio_id);
   const dados = dadosGravacao(e);
   await checarDuplicidade(u, dados.cpf_cnpj_hash);
-  const org = e.municipio_id ? (await prisma.municipio.findUnique({ where: { id: e.municipio_id }, select: { organizacao_id: true } }))?.organizacao_id : (await prisma.organizacao.findFirst({ select: { id: true } }))?.id;
+  // Organização da pessoa: a do município informado ou a do usuário que cadastra (isolamento por cliente).
+  const org = e.municipio_id ? (await prisma.municipio.findUnique({ where: { id: e.municipio_id }, select: { organizacao_id: true } }))?.organizacao_id : u.organizacao_id;
   return prisma.$transaction(async (tx) => {
     const p = await tx.pessoa.create({ data: { ...dados, organizacao_id: org ?? null, created_by: u.id } });
     await auditar({ usuario_id: u.id, acao: "CRIAR", entidade: "pessoa", entidade_id: p.id, depois: paraLog(p) }, tx);

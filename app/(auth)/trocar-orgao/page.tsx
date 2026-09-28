@@ -10,7 +10,7 @@ export default async function PaginaTrocarOrgao({ searchParams }: { searchParams
   const { next } = await searchParams;
   const u = await exigirUsuario();
   const [todos, atual] = await Promise.all([listarOrgaos(), getOrgaoAtivo()]);
-  const orgaos = orgaosPermitidos(u.papeis, todos);
+  const orgaos = orgaosPermitidos(u, todos);
   const voltar = isInterno(u) ? "/dashboard" : "/meus-processos";
   return (
     <>

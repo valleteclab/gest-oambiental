@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { usuarioAdminPagina } from "@/lib/admin/guard";
+import { whereOrganizacao } from "@/lib/rbac";
 import { AcessoNegado } from "@/components/acesso-negado";
 import { CabecalhoPagina, Card } from "@/components/ui";
 import { FormAdmin } from "../../_comp/form-admin";
@@ -14,11 +15,11 @@ const CATEGORIAS = [{ valor: "LICENCA", rotulo: "Licença" }, { valor: "AUTORIZA
 const MODELOS = ["LICENCA", "AUTORIZACAO", "CERTIDAO", "OFICIO"].map((v) => ({ valor: v, rotulo: v }));
 
 export default async function EditarTipoAto({ params }: { params: Promise<{ id: string }> }) {
-  const { ok } = await usuarioAdminPagina();
+  const { u: admin, ok } = await usuarioAdminPagina();
   if (!ok) return <AcessoNegado />;
   const { id } = await params;
   const novo = id === "novo";
-  const [t, checklists] = await Promise.all([novo ? null : prisma.tipoAto.findUnique({ where: { id } }).catch(() => null), prisma.checklistModelo.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true } })]);
+  const [t, checklists] = await Promise.all([novo ? null : prisma.tipoAto.findFirst({ where: { id, ...whereOrganizacao(admin) } }).catch(() => null), prisma.checklistModelo.findMany({ where: whereOrganizacao(admin), orderBy: { nome: "asc" }, select: { id: true, nome: true } })]);
   if (!novo && !t) notFound();
   return (
     <>

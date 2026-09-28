@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { usuarioAdminPagina } from "@/lib/admin/guard";
+import { whereOrganizacao } from "@/lib/rbac";
 import { faixasParaTexto } from "@/lib/cadastros/porte";
 import { AcessoNegado } from "@/components/acesso-negado";
 import { CabecalhoPagina, Card } from "@/components/ui";
@@ -12,11 +13,11 @@ import { salvarTipologia } from "../actions";
 export const metadata = { title: "Tipologia – Administração" };
 
 export default async function EditarTipologia({ params }: { params: Promise<{ id: string }> }) {
-  const { ok } = await usuarioAdminPagina();
+  const { u: admin, ok } = await usuarioAdminPagina();
   if (!ok) return <AcessoNegado />;
   const { id } = await params;
   const novo = id === "novo";
-  const t = novo ? null : await prisma.tipologia.findUnique({ where: { id } }).catch(() => null);
+  const t = novo ? null : await prisma.tipologia.findFirst({ where: { id, ...whereOrganizacao(admin) } }).catch(() => null);
   if (!novo && !t) notFound();
   return (
     <>

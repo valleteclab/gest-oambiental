@@ -10,7 +10,7 @@ export async function trocarOrgao(_: { erro?: string } | undefined, form: FormDa
   if (!u) redirect("/login");
   const orgao = await resolverOrgao(String(form.get("orgao") ?? ""));
   if (!orgao) return { erro: "Selecione um órgão." };
-  if (!podeAcessarOrgao(u.papeis, orgao.id)) {
+  if (!podeAcessarOrgao(u, orgao.id)) {
     await auditar({ usuario_id: u.id, acao: "TROCA_ORGAO_NEGADA", entidade: "usuario", entidade_id: u.id, depois: { orgao: orgao.sigla, motivo: "orgao_sem_acesso" } });
     return { erro: ERRO_ORGAO_SEM_ACESSO };
   }

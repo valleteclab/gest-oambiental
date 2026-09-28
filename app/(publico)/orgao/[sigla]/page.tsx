@@ -5,7 +5,8 @@ import { BadgeCheck, FileCheck2, LogIn, Mail, MapPin, Megaphone, Phone, Search }
 import { prisma } from "@/lib/db";
 import { numerosTransparencia } from "@/lib/documentos/publico";
 import { fmtNumero } from "@/lib/format";
-import { Brasao, demoAtivo } from "@/components/orgao";
+import { Brasao, LogoOrganizacao, demoAtivo } from "@/components/orgao";
+import { logoProprio } from "@/lib/imagem";
 
 // Portal público do órgão (município). Consulta o banco → dinâmico.
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ async function carregar(sigla: string) {
   if (!/^[A-Za-z]{2,5}$/.test(sigla)) return null;
   return prisma.municipio.findFirst({
     where: { sigla: sigla.toUpperCase(), ativo: true },
-    select: { id: true, sigla: true, nome: true, orgao_ambiental_nome: true, brasao_url: true, endereco: true, email: true, telefone: true },
+    select: { id: true, sigla: true, nome: true, orgao_ambiental_nome: true, brasao_url: true, endereco: true, email: true, telefone: true, organizacao: { select: { nome: true, logo_url: true } } },
   });
 }
 
@@ -48,7 +49,11 @@ export default async function PortalOrgao({ params }: Params) {
     <div data-testid="portal-orgao" data-sigla={m.sigla}>
       <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-10 sm:flex-row sm:items-center">
-          <Brasao src={m.brasao_url} nome={m.nome} className="h-20 w-20" />
+          {logoProprio(m.organizacao.logo_url) ? (
+            <LogoOrganizacao src={logoProprio(m.organizacao.logo_url)!} nome={m.organizacao.nome} className="h-20 w-auto max-w-[260px]" />
+          ) : (
+            <Brasao src={m.brasao_url} nome={m.nome} className="h-20 w-20" />
+          )}
           <div className="min-w-0">
             <p className="text-sm font-medium text-primaria-700">Município de {m.nome}{demoAtivo() ? " · demonstração" : ""}</p>
             <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{m.orgao_ambiental_nome}</h1>

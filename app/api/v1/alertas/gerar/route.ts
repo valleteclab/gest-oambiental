@@ -10,7 +10,8 @@ export const POST = rota(async () => {
   const u = await getUsuario();
   if (!u) throw naoAutenticado();
   if (!temPapel(u, "ADMIN")) throw proibido("Somente o administrador pode disparar a geração de alertas.");
-  const resumo = await gerarAlertas();
+  // Isolamento: o ADMIN de um cliente só dispara o motor para os municípios da sua organização.
+  const resumo = await gerarAlertas(new Date(), { organizacao_id: u.organizacao_id });
   await auditar({ usuario_id: u.id, acao: "ALERTAS_GERAR", entidade: "alerta", entidade_id: null, depois: resumo });
   return NextResponse.json(resumo);
 });

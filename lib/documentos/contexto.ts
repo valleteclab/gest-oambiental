@@ -1,10 +1,9 @@
 import "server-only";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import type { Prisma, TipoDocumento } from "@prisma/client";
 import { prisma } from "../db";
 import { decifrar, formatarCpfCnpj } from "../crypto";
 import { fmtNumero } from "../format";
+import { imagemDataUri, logoProprio } from "../imagem";
 import { BRASAO_GENERICO_URI, TITULO_PADRAO, type ContextoDocumento } from "@/templates";
 import { formatarEndereco, TIPOS_PUBLICOS } from "./render";
 import type { EmitirInput } from "./index";
@@ -22,30 +21,7 @@ const ROTULO_POTENCIAL: Record<string, string> = { BAIXO: "Baixo", MEDIO: "Médi
 
 /** Brasão como data URI (o Chromium não acessa URLs relativas do app). */
 export async function resolverBrasao(url: string | null | undefined): Promise<string> {
-  if (!url) return BRASAO_GENERICO_URI;
-  try {
-    if (url.startsWith("data:image/")) return url;
-    if (/^https?:\/\//i.test(url)) {
-      const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
-      const tipo = r.headers.get("content-type") ?? "";
-      if (!r.ok || !tipo.startsWith("image/")) return BRASAO_GENERICO_URI;
-      const buf = Buffer.from(await r.arrayBuffer());
-      if (buf.length > 2 * 1024 * 1024) return BRASAO_GENERICO_URI;
-      return `data:${tipo.split(";")[0]};base64,${buf.toString("base64")}`;
-    }
-    if (url.startsWith("/")) {
-      const publico = path.resolve(process.cwd(), "public");
-      const arq = path.resolve(publico, "." + url);
-      if (!arq.startsWith(publico + path.sep)) return BRASAO_GENERICO_URI;
-      const ext = path.extname(arq).toLowerCase();
-      const mime = ({ ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" } as Record<string, string>)[ext];
-      if (!mime) return BRASAO_GENERICO_URI;
-      return `data:${mime};base64,${(await readFile(arq)).toString("base64")}`;
-    }
-  } catch {
-    /* usa o genérico */
-  }
-  return BRASAO_GENERICO_URI;
+  return (await imagemDataUri(url)) ?? BRASAO_GENERICO_URI;
 }
 
 type Condicionante = ContextoDocumento["condicionantes"][number];
@@ -157,6 +133,8 @@ export async function carregarContexto(input: EmitirInput, db: Cliente = prisma)
       email: municipio.email,
       telefone: municipio.telefone,
       brasao: await resolverBrasao(municipio.brasao_url),
+      // Logo horizontal da organização (cliente), quando houver: substitui o brasão no cabeçalho do PDF.
+      logo: await imagemDataUri(logoProprio(municipio.organizacao?.logo_url)),
       organizacao: municipio.organizacao?.nome ?? null,
     },
     titular: pessoa ? { nome: pessoa.nome, tipo: pessoa.tipo, documento: docTitular, endereco: formatarEndereco(pessoa.endereco) } : null,

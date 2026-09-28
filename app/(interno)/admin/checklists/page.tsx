@@ -1,15 +1,16 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { usuarioAdminPagina } from "@/lib/admin/guard";
+import { whereOrganizacao } from "@/lib/rbac";
 import { AcessoNegado } from "@/components/acesso-negado";
 import { CabecalhoPagina, Card, Vazio } from "@/components/ui";
 
 export const metadata = { title: "Checklists – Administração" };
 
 export default async function Checklists() {
-  const { ok } = await usuarioAdminPagina();
+  const { u: admin, ok } = await usuarioAdminPagina();
   if (!ok) return <AcessoNegado />;
-  const lista = await prisma.checklistModelo.findMany({ orderBy: { nome: "asc" }, include: { tipos_ato: { select: { sigla: true } }, _count: { select: { preenchidos: true } } } });
+  const lista = await prisma.checklistModelo.findMany({ where: whereOrganizacao(admin), orderBy: { nome: "asc" }, include: { tipos_ato: { select: { sigla: true } }, _count: { select: { preenchidos: true } } } });
   return (
     <>
       <CabecalhoPagina titulo="Checklists" subtitulo={<Link href="/admin" className="underline">Administração</Link>} acoes={<Link href="/admin/checklists/novo" className="btn-primario">Novo checklist</Link>} />

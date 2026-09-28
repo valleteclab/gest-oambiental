@@ -19,7 +19,10 @@ const LOR = "11111111-1111-1111-1111-111111111111";
 const CSE = "22222222-2222-2222-2222-222222222222";
 const PESSOA = "33333333-3333-3333-3333-333333333333";
 
-const usuario = (papeis: PapelVinculo[], pessoa_id: string | null = null): UsuarioSessao => ({ id: "u", nome: "U", email: "u@x", cargo: null, pessoa_id, trocar_senha: false, papeis });
+const usuario = (papeis: PapelVinculo[], pessoa_id: string | null = null): UsuarioSessao => {
+  const interno = papeis.some((p) => p.papel !== "REQUERENTE");
+  return { id: "u", nome: "U", email: "u@x", cargo: null, pessoa_id, trocar_senha: false, papeis, organizacao_id: interno ? "org-a" : null, municipios_org: interno ? [LOR, CSE] : [] };
+};
 const tecLor = usuario([{ papel: "TEC_MUNICIPAL", municipio_id: LOR }]);
 const tecCse = usuario([{ papel: "TEC_MUNICIPAL", municipio_id: CSE }]);
 const tecConsorcio = usuario([{ papel: "TEC_CONSORCIO", municipio_id: null }]);

@@ -4,7 +4,7 @@ import { exigirUsuario } from "@/lib/auth";
 import { ErroApi } from "@/lib/http";
 import { fmtData, fmtDataHora, fmtMoeda } from "@/lib/format";
 import { Aviso, Badge, CabecalhoPagina, Card, Vazio } from "@/components/ui";
-import { Mapa } from "@/components/mapa";
+import { CompararImagens, Mapa } from "@/components/mapa";
 import { ROTULO_STATUS } from "@/components/ui";
 import { obterFiscalizacao } from "@/lib/fiscalizacao/servico";
 import { ehUuid } from "@/lib/fiscalizacao/api";
@@ -74,6 +74,13 @@ export default async function FichaFiscalizacao({ params, searchParams }: { para
           {temPonto ? <Mapa centro={[f.latitude!, f.longitude!]} zoom={16} altura="320px" pontos={[{ id: f.id, lat: f.latitude!, lng: f.longitude!, titulo: "Vistoria", descricao: fmtDataHora(f.data_hora), cor: COR_PIN_CONSTATACAO[f.constatacao ?? "SEM"] }]} /> : <Vazio>Sem coordenadas.</Vazio>}
         </Card>
       </div>
+
+      {temPonto && (
+        <Card titulo="Imagens de satélite – antes e depois" className="mt-4">
+          <p className="mb-3 text-sm text-slate-600">Compare o local da vistoria em datas diferentes (histórico Esri World Imagery Wayback) para verificar supressão de vegetação, obras ou alterações.</p>
+          <CompararImagens lat={f.latitude!} lng={f.longitude!} zoom={16} titulo="Vistoria" />
+        </Card>
+      )}
 
       <Card titulo={`Fotos (${f.anexos.length})`} className="mt-4">
         {f.anexos.length === 0 ? <Vazio>Nenhuma foto.</Vazio> : (

@@ -4,6 +4,8 @@ import { auditar } from "@/lib/audit";
 import { invalido } from "@/lib/http";
 import { acaoAdmin, bool, decOuNulo, obrigatorio, txtOuNulo } from "@/lib/admin/acao";
 import type { EstadoAcao } from "@/lib/admin/guard";
+import { organizacaoDoAdmin } from "@/lib/admin/escopo";
+import { naoEncontrado } from "@/lib/http";
 
 export async function salvarMunicipio(_: EstadoAcao, f: FormData): Promise<EstadoAcao> {
   return acaoAdmin(["/admin/municipios"], async (u) => {
@@ -24,7 +26,8 @@ export async function salvarMunicipio(_: EstadoAcao, f: FormData): Promise<Estad
       ativo: bool(f, "ativo"),
     };
     if (id) {
-      const antes = await prisma.municipio.findUniqueOrThrow({ where: { id } });
+      const antes = await prisma.municipio.findFirst({ where: { id, organizacao_id: organizacaoDoAdmin(u) } });
+      if (!antes) throw naoEncontrado("Município não encontrado.");
       const depois = await prisma.$transaction(async (tx) => {
         const m = await tx.municipio.update({ where: { id }, data: dados });
         await auditar({ usuario_id: u.id, acao: "EDITAR", entidade: "municipio", entidade_id: id, antes, depois: m }, tx);
@@ -36,7 +39,7 @@ export async function salvarMunicipio(_: EstadoAcao, f: FormData): Promise<Estad
     if (!/^[A-Z]{3}$/.test(sigla)) throw invalido("A sigla deve ter 3 letras (ex.: LOR).", { campo: "sigla" });
     const codigo_ibge = obrigatorio(f, "codigo_ibge", "o código IBGE");
     if (!/^\d{7}$/.test(codigo_ibge)) throw invalido("Código IBGE deve ter 7 dígitos.", { campo: "codigo_ibge" });
-    const org = await prisma.organizacao.findFirstOrThrow();
+    const org = { id: organizacaoDoAdmin(u) };
     const m = await prisma.$transaction(async (tx) => {
       const m = await tx.municipio.create({ data: { ...dados, sigla, codigo_ibge, organizacao_id: org.id, created_by: u.id } });
       await auditar({ usuario_id: u.id, acao: "CRIAR", entidade: "municipio", entidade_id: m.id, depois: m }, tx);

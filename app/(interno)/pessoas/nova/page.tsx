@@ -1,5 +1,5 @@
 import { exigirUsuario } from "@/lib/auth";
-import { can, escopoMunicipios, isSomenteLeitura } from "@/lib/rbac";
+import { can, isSomenteLeitura, temEscopoOrganizacao } from "@/lib/rbac";
 import { municipiosDoEscopo } from "@/lib/cadastros/opcoes";
 import { AcessoNegado } from "@/components/acesso-negado";
 import { CabecalhoPagina, Card } from "@/components/ui";
@@ -12,7 +12,7 @@ export default async function NovaPessoa({ searchParams }: { searchParams: Promi
   if (!can(u, "criar", "pessoa") || isSomenteLeitura(u)) return <AcessoNegado mensagem="Seu perfil não permite cadastrar pessoas." />;
   const municipios = await municipiosDoEscopo(u);
   const { tipo } = await searchParams;
-  const exige = escopoMunicipios(u) !== "TODOS";
+  const exige = !temEscopoOrganizacao(u);
   return (
     <>
       <CabecalhoPagina titulo="Nova pessoa" />

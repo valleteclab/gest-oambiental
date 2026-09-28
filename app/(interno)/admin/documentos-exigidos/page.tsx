@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { usuarioAdminPagina } from "@/lib/admin/guard";
+import { whereOrganizacao } from "@/lib/rbac";
 import { AcessoNegado } from "@/components/acesso-negado";
 import { CabecalhoPagina, Card, Vazio } from "@/components/ui";
 import { FormAdmin } from "../_comp/form-admin";
@@ -10,15 +11,15 @@ import { removerDocumentoExigido, salvarDocumentoExigido } from "./actions";
 export const metadata = { title: "Documentos exigidos – Administração" };
 
 export default async function DocumentosExigidos({ searchParams }: { searchParams: Promise<{ tipo_ato?: string }> }) {
-  const { ok } = await usuarioAdminPagina();
+  const { u: admin, ok } = await usuarioAdminPagina();
   if (!ok) return <AcessoNegado />;
   const [tipos, tipologias] = await Promise.all([
-    prisma.tipoAto.findMany({ orderBy: { sigla: "asc" }, select: { id: true, sigla: true, nome: true } }),
-    prisma.tipologia.findMany({ where: { ativo: true }, orderBy: { codigo: "asc" }, select: { id: true, codigo: true, descricao: true } }),
+    prisma.tipoAto.findMany({ where: whereOrganizacao(admin), orderBy: { sigla: "asc" }, select: { id: true, sigla: true, nome: true } }),
+    prisma.tipologia.findMany({ where: { ativo: true, ...whereOrganizacao(admin) }, orderBy: { codigo: "asc" }, select: { id: true, codigo: true, descricao: true } }),
   ]);
   const sp = await searchParams;
   const tipoId = tipos.some((t) => t.id === sp.tipo_ato) ? sp.tipo_ato! : tipos[0]?.id;
-  const docs = tipoId ? await prisma.documentoExigido.findMany({ where: { tipo_ato_id: tipoId }, include: { tipologia: { select: { codigo: true } } }, orderBy: [{ tipologia_id: { sort: "asc", nulls: "first" } }, { created_at: "asc" }] }) : [];
+  const docs = tipoId ? await prisma.documentoExigido.findMany({ where: { tipo_ato_id: tipoId, tipo_ato: whereOrganizacao(admin) }, include: { tipologia: { select: { codigo: true } } }, orderBy: [{ tipologia_id: { sort: "asc", nulls: "first" } }, { created_at: "asc" }] }) : [];
   const opTip = tipologias.map((t) => ({ valor: t.id, rotulo: `${t.codigo} – ${t.descricao}` }));
   return (
     <>

@@ -18,7 +18,7 @@ export default async function PaginaEmpreendimentos({ searchParams }: { searchPa
   const status = sp.status === "ATIVO" || sp.status === "INATIVO" ? sp.status : null;
   const [municipios, tipologias, { total, itens }] = await Promise.all([
     municipiosDoEscopo(u, false),
-    tipologiasAtivas(),
+    tipologiasAtivas(u),
     listarEmpreendimentos(u, { q: sp.q, municipio_id: sp.municipio || null, tipologia_id: sp.tipologia || null, status, skip: (page - 1) * size, take: size }),
   ]);
   const filtros = Object.fromEntries(Object.entries({ q: sp.q, municipio: sp.municipio, tipologia: sp.tipologia, status: sp.status }).filter(([, v]) => v)) as Record<string, string>;

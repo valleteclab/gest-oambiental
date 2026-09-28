@@ -64,8 +64,22 @@ class Execucao {
   private gestores = new Map<string, string[]>();
   private porPessoa = new Map<string, Destinatario[]>();
   private cfg = new Map<string, number>();
+  private orgDe = new Map<string, string | null>();
 
-  constructor(public agora: Date) {}
+  /** `organizacaoId`: restringe a execução aos municípios de uma organização (disparo manual por um ADMIN). */
+  constructor(public agora: Date, public organizacaoId: string | null = null) {}
+
+  /** Filtro Prisma por município da organização da execução (vazio = todas – job do worker). */
+  get whereMun(): { municipio_id?: { in: string[] } } {
+    return this.municipiosOrg ? { municipio_id: { in: this.municipiosOrg } } : {};
+  }
+  municipiosOrg: string[] | null = null;
+
+  async organizacaoDoMunicipio(municipioId: string | null): Promise<string | null> {
+    if (!municipioId) return null;
+    if (!this.orgDe.has(municipioId)) this.orgDe.set(municipioId, (await prisma.municipio.findUnique({ where: { id: municipioId }, select: { organizacao_id: true } }))?.organizacao_id ?? null);
+    return this.orgDe.get(municipioId)!;
+  }
 
   async usuario(id: string | null | undefined): Promise<Destinatario | null> {
     if (!id) return null;
@@ -114,7 +128,10 @@ class Execucao {
 
   /** Configuração livre em prazo_config (etapas extras: CONDICIONANTE, NOTIFICACAO, ARQUIVAMENTO_AUTO). */
   async configExtra(municipioId: string | null, etapa: string): Promise<{ dias: number; dias_alerta: number } | null> {
-    const cs = await prisma.prazoConfig.findMany({ where: { etapa, OR: [{ municipio_id: municipioId }, { municipio_id: null }] } });
+    // Só configurações da organização do município (a de outro cliente nunca vale aqui).
+    const org = await this.organizacaoDoMunicipio(municipioId);
+    if (!org) return null;
+    const cs = await prisma.prazoConfig.findMany({ where: { organizacao_id: org, etapa, OR: [{ municipio_id: municipioId }, { municipio_id: null }] } });
     const c = cs.find((x) => x.municipio_id === municipioId) ?? cs.find((x) => x.municipio_id === null);
     return c ? { dias: c.dias, dias_alerta: c.dias_alerta } : null;
   }
@@ -177,7 +194,7 @@ function escHtml(s: string) {
 async function alertasProcessos(ex: Execucao) {
   const limite = new Date(ex.agora.getTime() + 60 * DIA);
   const processos = await prisma.processo.findMany({
-    where: { status: { in: STATUS_COM_PRAZO }, prazo_pausado: false, prazo_etapa_ate: { not: null, lte: limite } },
+    where: { ...ex.whereMun, status: { in: STATUS_COM_PRAZO }, prazo_pausado: false, prazo_etapa_ate: { not: null, lte: limite } },
     select: { id: true, numero: true, status: true, organizacao_id: true, municipio_id: true, tecnico_id: true, gestor_id: true, prazo_etapa_ate: true, tipo_ato: { select: { sigla: true, prazo_analise_dias: true } } },
   });
   for (const p of processos) {
@@ -204,7 +221,7 @@ async function alertasProcessos(ex: Execucao) {
 /** Pendências ABERTAS vencendo/vencidas → requerente (e-mail) + técnico; vencidas passam a VENCIDA. */
 async function alertasPendencias(ex: Execucao) {
   const pendencias = await prisma.pendencia.findMany({
-    where: { status: "ABERTA", prazo_ate: { lte: new Date(ex.agora.getTime() + 60 * DIA) } },
+    where: { processo: ex.whereMun, status: "ABERTA", prazo_ate: { lte: new Date(ex.agora.getTime() + 60 * DIA) } },
     select: { id: true, descricao: true, prazo_ate: true, processo: { select: { id: true, numero: true, organizacao_id: true, municipio_id: true, tecnico_id: true, requerente_id: true } } },
   });
   for (const pe of pendencias) {
@@ -238,6 +255,7 @@ async function alertasPendencias(ex: Execucao) {
 async function alertasLicencas(ex: Execucao) {
   const docs = await prisma.documentoOficial.findMany({
     where: {
+      ...ex.whereMun,
       status: "VALIDO",
       tipo: { in: ["LICENCA", "AUTORIZACAO"] },
       validade_ate: { not: null, lte: new Date(ex.agora.getTime() + 121 * DIA), gte: new Date(ex.agora.getTime() - 30 * DIA) },
@@ -261,7 +279,7 @@ async function alertasLicencas(ex: Execucao) {
 /** Condicionantes PENDENTES com prazo → requerente + técnico (janela: prazo_config CONDICIONANTE ou 15 dias). */
 async function alertasCondicionantes(ex: Execucao) {
   const itens = await prisma.condicionante.findMany({
-    where: { status: "PENDENTE", prazo_ate: { not: null, lte: new Date(ex.agora.getTime() + 60 * DIA) } },
+    where: { processo: ex.whereMun, status: "PENDENTE", prazo_ate: { not: null, lte: new Date(ex.agora.getTime() + 60 * DIA) } },
     select: { id: true, descricao: true, prazo_ate: true, processo: { select: { id: true, numero: true, municipio_id: true, tecnico_id: true, requerente_id: true } } },
   });
   for (const c of itens) {
@@ -281,7 +299,7 @@ async function alertasCondicionantes(ex: Execucao) {
 /** Notificações EMITIDAS com prazo → notificado + técnico do processo (ou autor da fiscalização). */
 async function alertasNotificacoes(ex: Execucao) {
   const itens = await prisma.notificacao.findMany({
-    where: { status: "EMITIDA", prazo_ate: { lte: new Date(ex.agora.getTime() + 60 * DIA) } },
+    where: { ...ex.whereMun, status: "EMITIDA", prazo_ate: { lte: new Date(ex.agora.getTime() + 60 * DIA) } },
     select: { id: true, numero: true, prazo_ate: true, municipio_id: true, notificado_id: true, created_by: true, processo: { select: { id: true, tecnico_id: true } }, fiscalizacao: { select: { id: true, created_by: true } } },
   });
   for (const n of itens) {
@@ -321,8 +339,8 @@ export async function arquivarPendenciasVencidas(agora = new Date(), ex = new Ex
   if (!transicionar) return { status: "indisponivel", arquivados: 0 };
 
   const candidatos = await prisma.processo.findMany({
-    where: { status: "AGUARDANDO_REQUERENTE" },
-    select: { id: true, numero: true, status: true, municipio_id: true, pendencias: { select: { status: true, prazo_ate: true } } },
+    where: { ...ex.whereMun, status: "AGUARDANDO_REQUERENTE" },
+    select: { id: true, numero: true, status: true, organizacao_id: true, municipio_id: true, pendencias: { select: { status: true, prazo_ate: true } } },
   });
   let arquivados = 0;
   for (const p of candidatos) {
@@ -333,7 +351,7 @@ export async function arquivarPendenciasVencidas(agora = new Date(), ex = new Ex
     if (!deveArquivarAutomatico(p, agora, carencia)) continue;
     try {
       // Assinatura (lib/processo/transicionar.ts): transicionar(processoId, acao, payload, usuario)
-      await transicionar(p.id, "arquivar", { justificativa: `Arquivamento automático: prazo de resposta à pendência vencido há mais de ${carencia} dia(s) (SPEC 6).` }, USUARIO_SISTEMA);
+      await transicionar(p.id, "arquivar", { justificativa: `Arquivamento automático: prazo de resposta à pendência vencido há mais de ${carencia} dia(s) (SPEC 6).` }, usuarioSistema(p.organizacao_id, [p.municipio_id]));
       arquivados++;
     } catch (e) {
       ex.resumo.erros.push(`arquivar ${p.numero ?? p.id}: ${e instanceof Error ? e.message : String(e)}`);
@@ -344,14 +362,26 @@ export async function arquivarPendenciasVencidas(agora = new Date(), ex = new Ex
 
 /** Usuário sintético usado em transições automáticas (sem id real – log com usuario_id null). */
 // id nulo: tramitacao.de_usuario_id e log_auditoria.usuario_id ficam NULL (= ação do sistema).
-export const USUARIO_SISTEMA = { id: null as unknown as string, nome: "Sistema (job de prazos)", email: "sistema@licenciagov", cargo: null, pessoa_id: null, trocar_senha: false, papeis: [{ papel: "ADMIN" as const, municipio_id: null }] };
+export const USUARIO_SISTEMA = { id: null as unknown as string, nome: "Sistema (job de prazos)", email: "sistema@licenciagov", cargo: null, pessoa_id: null, trocar_senha: false, papeis: [{ papel: "ADMIN" as const, municipio_id: null }], organizacao_id: null as string | null, municipios_org: [] as string[] };
+
+/** Usuário do sistema com escopo restrito à organização/município do registro tratado (isolamento por cliente). */
+export function usuarioSistema(organizacaoId: string, municipios: string[]) {
+  return { ...USUARIO_SISTEMA, organizacao_id: organizacaoId, municipios_org: municipios };
+}
 
 // ───────────────────────── Entrada ─────────────────────────
 
-/** Gera todos os alertas devidos em `agora`. Idempotente – pode rodar quantas vezes quiser. */
-export async function gerarAlertas(agora = new Date()): Promise<ResumoGeracao> {
+/**
+ * Gera todos os alertas devidos em `agora`. Idempotente – pode rodar quantas vezes quiser.
+ * `opts.organizacao_id`: só os registros dos municípios dessa organização (disparo manual pelo ADMIN do cliente);
+ * sem ela, todas as organizações (job do worker). Cada alerta vai a destinatários do próprio registro.
+ */
+export async function gerarAlertas(agora = new Date(), opts: { organizacao_id?: string | null } = {}): Promise<ResumoGeracao> {
   const t0 = Date.now();
-  const ex = new Execucao(agora);
+  const ex = new Execucao(agora, opts.organizacao_id ?? null);
+  if (opts.organizacao_id !== undefined) {
+    ex.municipiosOrg = opts.organizacao_id ? (await prisma.municipio.findMany({ where: { organizacao_id: opts.organizacao_id }, select: { id: true } })).map((m) => m.id) : [];
+  }
   const etapas: [string, (e: Execucao) => Promise<void>][] = [
     ["processos", alertasProcessos],
     ["pendencias", alertasPendencias],

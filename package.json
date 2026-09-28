@@ -19,19 +19,26 @@
     "start:standalone": "node .next/standalone/server.js",
     "docker:build": "docker build -t licenciagov:local --target app . && docker build -t licenciagov-worker:local --target worker .",
     "docker:up": "docker compose up -d --build",
-    "openapi:export": "tsx -e \"import {documentoOpenApi} from './lib/openapi'; console.log(JSON.stringify(documentoOpenApi(), null, 2))\""
+    "openapi:export": "tsx -e \"import {documentoOpenApi} from './lib/openapi'; console.log(JSON.stringify(documentoOpenApi(), null, 2))\"",
+    "onboard": "tsx prisma/seed/onboarding.ts",
+    "seed:riachao-demo": "tsx --conditions=react-server prisma/seed/clientes/riachao-demo.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1141.0",
     "@aws-sdk/s3-request-presigner": "^3.1141.0",
+    "@geoman-io/leaflet-geoman-free": "^2.20.2",
     "@node-rs/argon2": "^2.2.1",
     "@prisma/client": "^6.19.3",
+    "@tmcw/togeojson": "^7.1.2",
+    "@turf/area": "^7.4.0",
     "archiver": "^8.0.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "exceljs": "^4.4.0",
     "jose": "^6.2.12",
+    "jszip": "^3.10.2",
     "leaflet": "^1.9.4",
+    "leaflet.gridlayer.googlemutant": "^0.16.0",
     "lucide-react": "^1.48.0",
     "next": "15.5.26",
     "nodemailer": "^10.0.11",
@@ -44,6 +51,7 @@
     "react-leaflet": "^5.0.0",
     "recharts": "^3.10.1",
     "server-only": "^0.0.1",
+    "shpjs": "^6.2.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {

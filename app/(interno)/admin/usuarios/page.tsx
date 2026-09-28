@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { usuarioAdminPagina } from "@/lib/admin/guard";
 import { listarUsuarios, PAPEIS } from "@/lib/admin/usuarios";
+import { whereMunicipiosAdmin } from "@/lib/admin/escopo";
 import { ROTULO_PAPEL } from "@/lib/rbac";
 import { fmtDataHora } from "@/lib/format";
 import { AcessoNegado } from "@/components/acesso-negado";
@@ -10,15 +11,15 @@ import { Badge, CabecalhoPagina, Card, Paginacao, Vazio } from "@/components/ui"
 export const metadata = { title: "Usuários – Administração" };
 
 export default async function Usuarios({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
-  const { ok } = await usuarioAdminPagina();
+  const { u: admin, ok } = await usuarioAdminPagina();
   if (!ok) return <AcessoNegado />;
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page ?? 1) || 1);
   const size = 30;
   const ativo = sp.ativo === "1" ? true : sp.ativo === "0" ? false : null;
   const [municipios, { total, itens }] = await Promise.all([
-    prisma.municipio.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
-    listarUsuarios({ q: sp.q, papel: sp.papel, municipio_id: sp.municipio, ativo, skip: (page - 1) * size, take: size }),
+    prisma.municipio.findMany({ where: whereMunicipiosAdmin(admin), orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
+    listarUsuarios(admin, { q: sp.q, papel: sp.papel, municipio_id: sp.municipio, ativo, skip: (page - 1) * size, take: size }),
   ]);
   const filtros = Object.fromEntries(Object.entries({ q: sp.q, papel: sp.papel, municipio: sp.municipio, ativo: sp.ativo }).filter(([, v]) => v)) as Record<string, string>;
   return (

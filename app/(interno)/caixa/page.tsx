@@ -19,7 +19,7 @@ export default async function PaginaCaixa() {
   const ordem = [{ prazo_etapa_ate: { sort: "asc" as const, nulls: "last" as const } }, { data_protocolo: "asc" as const }];
 
   const [alertas, meus, decisao, distribuir] = await Promise.all([
-    mapaDiasAlerta(),
+    mapaDiasAlerta(u.organizacao_id),
     prisma.processo.findMany({ where: { AND: [escopo, { tecnico_id: u.id, status: { in: STATUS_ATIVOS } }] }, select: SELECT_LISTA, orderBy: ordem, take: 200 }),
     gestor
       ? prisma.processo.findMany({ where: { AND: [escopo, { status: "AGUARDANDO_DECISAO" }, temPapel(u, "ADMIN") ? {} : { municipio_id: { in: municipiosGestor } }] }, select: SELECT_LISTA, orderBy: ordem, take: 200 })

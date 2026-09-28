@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getUsuario, contextoRequisicao } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { naoAutenticado, paginacao, proibido, rota } from "@/lib/http";
-import { can } from "@/lib/rbac";
+import { can, UUID_NENHUM } from "@/lib/rbac";
 import { solicitarExportacao } from "@/lib/export/exportar";
 
 // GET /api/v1/admin/exportacoes – lista (ADMIN / SEMA_INEMA)
@@ -13,8 +13,8 @@ export const GET = rota(async (req: Request) => {
   if (!can(u, "ver", "exportacao")) throw proibido();
   const { page, size, skip, take } = paginacao(new URL(req.url));
   const [data, total] = await Promise.all([
-    prisma.exportacao.findMany({ orderBy: { created_at: "desc" }, skip, take }),
-    prisma.exportacao.count(),
+    prisma.exportacao.findMany({ where: { organizacao_id: u.organizacao_id ?? UUID_NENHUM }, orderBy: { created_at: "desc" }, skip, take }),
+    prisma.exportacao.count({ where: { organizacao_id: u.organizacao_id ?? UUID_NENHUM } }),
   ]);
   return NextResponse.json({ data: data.map((x) => ({ ...x, storage_key: undefined, download: x.status === "CONCLUIDA" ? `/api/v1/admin/exportacoes/${x.id}` : null })), page, size, total });
 });

@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { StatusProcesso } from "@prisma/client";
 import { exigirUsuario, getOrgaoAtivo } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { can, escopoMunicipios, filtroMunicipioPadrao, isSomenteLeitura, podeProtocolarNoBalcao } from "@/lib/rbac";
+import { can, escopoMunicipios, filtroMunicipioPadrao, isSomenteLeitura, podeProtocolarNoBalcao, whereOrganizacao, whereTecnicosEscopo } from "@/lib/rbac";
 import { CabecalhoPagina, Card, Paginacao, ROTULO_STATUS } from "@/components/ui";
 import { listarProcessos, mapaDiasAlerta } from "@/lib/processo/consultas";
 import { TabelaProcessos } from "./_componentes/tabela-processos";
@@ -24,11 +24,11 @@ export default async function PaginaProcessos({ searchParams }: { searchParams: 
   const status = sp.status && sp.status in ROTULO_STATUS ? (sp.status as StatusProcesso) : null;
   const escopo = escopoMunicipios(u);
   const [alertas, municipios, tipos, tecnicos, { total, itens }] = await Promise.all([
-    mapaDiasAlerta(),
-    prisma.municipio.findMany({ where: escopo === "TODOS" ? { ativo: true } : { id: { in: escopo } }, select: { id: true, nome: true }, orderBy: { nome: "asc" } }),
-    prisma.tipoAto.findMany({ where: { ativo: true }, select: { id: true, sigla: true, nome: true }, orderBy: { sigla: "asc" } }),
+    mapaDiasAlerta(u.organizacao_id),
+    prisma.municipio.findMany({ where: { id: { in: escopo } }, select: { id: true, nome: true }, orderBy: { nome: "asc" } }),
+    prisma.tipoAto.findMany({ where: { ativo: true, ...whereOrganizacao(u) }, select: { id: true, sigla: true, nome: true }, orderBy: { sigla: "asc" } }),
     prisma.usuario.findMany({
-      where: { ativo: true, papeis: { some: escopo === "TODOS" ? { papel: { in: ["TEC_MUNICIPAL", "TEC_CONSORCIO"] } } : { OR: [{ papel: "TEC_MUNICIPAL", municipio_id: { in: escopo } }, { papel: "TEC_CONSORCIO" }] } } },
+      where: whereTecnicosEscopo(u),
       select: { id: true, nome: true },
       orderBy: { nome: "asc" },
     }),

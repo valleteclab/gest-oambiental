@@ -137,6 +137,7 @@ export async function salvarRascunho(entrada: unknown, u: UsuarioSessao) {
       }
     }
     if (tipoAto.organizacao_id !== emp.organizacao_id) throw invalido("Tipo de ato não disponível para este município.");
+    if (tipologia.organizacao_id !== emp.organizacao_id) throw invalido("Tipologia não disponível para este município.");
 
     // ── Processo (RASCUNHO) ──
     const dadosProc = {

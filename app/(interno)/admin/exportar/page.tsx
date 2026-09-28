@@ -1,7 +1,7 @@
 import { exigirUsuario } from "@/lib/auth";
 import { AcessoNegado } from "@/components/acesso-negado";
 import { prisma } from "@/lib/db";
-import { can } from "@/lib/rbac";
+import { can, UUID_NENHUM } from "@/lib/rbac";
 import { fmtDataHora } from "@/lib/format";
 import { fmtBytes } from "@/lib/backup/registrar";
 import { Aviso, Badge, CabecalhoPagina, Card, Vazio } from "@/components/ui";
@@ -17,7 +17,7 @@ export default async function PaginaExportar({ searchParams }: { searchParams: P
   const u = await exigirUsuario({ interno: true });
   if (!can(u, "exportar", "exportacao")) return <AcessoNegado mensagem="A exportação completa é restrita a ADMIN e SEMA/INEMA." />;
   const sp = await searchParams;
-  const exps = await prisma.exportacao.findMany({ orderBy: { created_at: "desc" }, take: 50 });
+  const exps = await prisma.exportacao.findMany({ where: { organizacao_id: u.organizacao_id ?? UUID_NENHUM }, orderBy: { created_at: "desc" }, take: 50 });
   const nomes = new Map((await prisma.usuario.findMany({ where: { id: { in: [...new Set(exps.map((e) => e.solicitada_por))] } }, select: { id: true, nome: true } })).map((x) => [x.id, x.nome]));
   const emAndamento = exps.some((e) => e.status === "PENDENTE" || e.status === "PROCESSANDO");
 
@@ -36,7 +36,7 @@ export default async function PaginaExportar({ searchParams }: { searchParams: P
         {sp.ok && <Aviso tipo="sucesso">Exportação solicitada. O arquivo fica disponível para download abaixo quando concluir.</Aviso>}
         {sp.erro === "403" && <Aviso tipo="erro">Você não tem permissão para exportar.</Aviso>}
         <Aviso>
-          Senhas não são exportadas. CPF/CNPJ, e-mail e telefone de pessoas físicas saem <strong>cifrados</strong> (AES-256-GCM); a chave é entregue ao órgão por canal
+          A exportação contém somente os dados da sua organização (municípios, cadastros, processos, documentos e anexos dela). Senhas não são exportadas. CPF/CNPJ, e-mail e telefone de pessoas físicas saem <strong>cifrados</strong> (AES-256-GCM); a chave é entregue ao órgão por canal
           separado. O arquivo contém dados pessoais – armazene-o com segurança (LGPD).
         </Aviso>
         <AtualizarEnquanto ativo={emAndamento} />

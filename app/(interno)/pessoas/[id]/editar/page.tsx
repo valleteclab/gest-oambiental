@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { exigirUsuario } from "@/lib/auth";
-import { can, escopoMunicipios, isSomenteLeitura } from "@/lib/rbac";
+import { can, isSomenteLeitura, temEscopoOrganizacao } from "@/lib/rbac";
 import { obterPessoa } from "@/lib/cadastros/pessoas";
 import { municipiosDoEscopo } from "@/lib/cadastros/opcoes";
 import { AcessoNegado } from "@/components/acesso-negado";
@@ -23,7 +23,7 @@ export default async function EditarPessoa({ params }: { params: Promise<{ id: s
       <Card>
         <FormPessoa
           municipios={municipios}
-          exigeMunicipio={escopoMunicipios(u) !== "TODOS"}
+          exigeMunicipio={!temEscopoOrganizacao(u)}
           valor={{ id: d.id, tipo: d.tipo, cpf_cnpj: d.cpf_cnpj_formatado, nome: d.nome, nome_fantasia: d.nome_fantasia, email: d.email, telefone: d.telefone, municipio_id: d.municipio_id, endereco: d.endereco as Record<string, string | null> | null }}
         />
       </Card>

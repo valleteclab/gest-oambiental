@@ -2,10 +2,13 @@
 import { useActionState } from "react";
 import { entrar } from "./actions";
 
-export type OpcaoOrgao = { sigla: string; rotulo: string };
+export type OpcaoOrgao = { sigla: string; rotulo: string; grupo?: string };
 
 export function FormLogin({ next, orgaos, orgaoInicial }: { next?: string; orgaos: OpcaoOrgao[]; orgaoInicial?: string }) {
   const [estado, acao, pendente] = useActionState(entrar, undefined);
+  // Agrupa por organização (cliente) quando há mais de uma; senão, lista simples.
+  const grupos = [...new Set(orgaos.map((o) => o.grupo ?? ""))];
+  const opcao = (o: OpcaoOrgao) => <option key={o.sigla} value={o.sigla}>{o.rotulo}</option>;
   return (
     <form action={acao} className="space-y-4">
       <input type="hidden" name="next" value={next ?? ""} />
@@ -14,16 +17,15 @@ export function FormLogin({ next, orgaos, orgaoInicial }: { next?: string; orgao
         <select
           id="orgao"
           name="orgao"
-          required
           className="input"
           key={estado?.orgao ?? orgaoInicial ?? ""}
           defaultValue={estado?.orgao ?? orgaoInicial ?? ""}
           aria-describedby="orgao-ajuda"
         >
-          <option value="" disabled>Selecione o órgão…</option>
-          {orgaos.map((o) => <option key={o.sigla} value={o.sigla}>{o.rotulo}</option>)}
+          <option value="">Escolher depois de entrar</option>
+          {grupos.length > 1 ? grupos.map((g) => <optgroup key={g} label={g || "Outros"}>{orgaos.filter((o) => (o.grupo ?? "") === g).map(opcao)}</optgroup>) : orgaos.map(opcao)}
         </select>
-        <p id="orgao-ajuda" className="mt-1 text-xs text-slate-500">Município / órgão ambiental em que você vai atuar.</p>
+        <p id="orgao-ajuda" className="mt-1 text-xs text-slate-500">Município / órgão ambiental em que você vai atuar. Se deixar para depois, aparecem só os órgãos do seu usuário.</p>
       </div>
       <div>
         <label htmlFor="email" className="label">E-mail</label>

@@ -6,16 +6,17 @@ import { auditar } from "@/lib/audit";
 import { hashSenha } from "@/lib/auth";
 import { cifrar, hashBusca, somenteDigitos, validarCPF } from "@/lib/crypto";
 import { invalido, naoEncontrado } from "@/lib/http";
-import type { UsuarioSessao } from "@/lib/rbac";
+import { PAPEIS_ORGANIZACAO, type UsuarioSessao } from "@/lib/rbac";
 import { gerarSenhaTemporaria } from "./senha";
+import { exigirMunicipioDoAdmin, organizacaoDoAdmin, whereUsuariosAdmin } from "./escopo";
 
 // Gestão de usuários e papéis (SPEC 4.2/4.3): nunca deletar usuário; senha temporária + troca obrigatória.
 
 export const PAPEIS: Papel[] = ["ADMIN", "TEC_CONSORCIO", "TEC_MUNICIPAL", "GESTOR_MUNICIPAL", "FISCAL", "SEMA_INEMA", "REQUERENTE"];
 /** Papéis com escopo organização (municipio_id NULL). Os demais exigem município. */
-export const PAPEIS_SEM_MUNICIPIO: Papel[] = ["ADMIN", "TEC_CONSORCIO", "SEMA_INEMA", "REQUERENTE"];
+export const PAPEIS_SEM_MUNICIPIO: Papel[] = [...PAPEIS_ORGANIZACAO, "REQUERENTE"];
 
-const SELECAO = { id: true, nome: true, email: true, cargo: true, ativo: true, trocar_senha: true, ultimo_login: true, bloqueado_ate: true, pessoa_id: true, created_at: true, papeis: { select: { id: true, papel: true, municipio_id: true, municipio: { select: { nome: true, sigla: true } } } } } satisfies Prisma.UsuarioSelect;
+const SELECAO = { id: true, nome: true, email: true, cargo: true, ativo: true, trocar_senha: true, ultimo_login: true, bloqueado_ate: true, pessoa_id: true, organizacao_id: true, created_at: true, papeis: { select: { id: true, papel: true, municipio_id: true, municipio: { select: { nome: true, sigla: true } } } } } satisfies Prisma.UsuarioSelect;
 
 export const NovoUsuarioSchema = z.object({
   nome: z.string().trim().min(3, "Informe o nome."),
@@ -33,9 +34,11 @@ export const EdicaoUsuarioSchema = z.object({
   ativo: z.boolean().optional(),
 });
 
-export async function listarUsuarios(f: { q?: string | null; papel?: string | null; municipio_id?: string | null; ativo?: boolean | null; skip?: number; take?: number }) {
+/** Usuários da organização do admin (isolamento por cliente) com filtros. */
+export async function listarUsuarios(admin: UsuarioSessao, f: { q?: string | null; papel?: string | null; municipio_id?: string | null; ativo?: boolean | null; skip?: number; take?: number }) {
   const where: Prisma.UsuarioWhereInput = {
     AND: [
+      whereUsuariosAdmin(admin),
       f.q ? { OR: [{ nome: { contains: f.q, mode: "insensitive" } }, { email: { contains: f.q, mode: "insensitive" } }] } : {},
       f.papel && (PAPEIS as string[]).includes(f.papel) ? { papeis: { some: { papel: f.papel as Papel } } } : {},
       f.municipio_id ? { papeis: { some: { municipio_id: f.municipio_id } } } : {},
@@ -46,8 +49,16 @@ export async function listarUsuarios(f: { q?: string | null; papel?: string | nu
   return { total, itens };
 }
 
-export async function obterUsuarioAdmin(id: string) {
-  return prisma.usuario.findUnique({ where: { id }, select: SELECAO }).catch(() => null);
+/** Usuário visível ao admin (null = inexistente OU de outra organização – não revela a existência). */
+export async function obterUsuarioAdmin(admin: UsuarioSessao, id: string) {
+  return prisma.usuario.findFirst({ where: { AND: [{ id }, whereUsuariosAdmin(admin)] }, select: SELECAO }).catch(() => null);
+}
+
+/** Exige que o usuário-alvo seja administrável pelo admin (404 caso contrário). */
+async function exigirVisivel(admin: UsuarioSessao, id: string) {
+  const u = await obterUsuarioAdmin(admin, id);
+  if (!u) throw naoEncontrado("Usuário não encontrado.");
+  return u;
 }
 
 function validarPapel(papel: Papel, municipioId: string | null) {
@@ -61,11 +72,13 @@ export async function criarUsuario(admin: UsuarioSessao, entrada: unknown) {
   if (await prisma.usuario.findUnique({ where: { email: e.email } })) throw invalido("Já existe usuário com este e-mail.", { campo: "email" });
   if (e.cpf && (await prisma.usuario.findUnique({ where: { cpf_hash: hashBusca(e.cpf) } }))) throw invalido("Já existe usuário com este CPF.", { campo: "cpf" });
   if (e.papel) validarPapel(e.papel, e.municipio_id ?? null);
+  const organizacao_id = organizacaoDoAdmin(admin);
+  await exigirMunicipioDoAdmin(admin, e.municipio_id);
   const senha = gerarSenhaTemporaria();
   const senha_hash = await hashSenha(senha);
   const u = await prisma.$transaction(async (tx) => {
     const u = await tx.usuario.create({
-      data: { nome: e.nome, email: e.email, cargo: e.cargo, cpf_cifrado: e.cpf ? cifrar(e.cpf) : null, cpf_hash: e.cpf ? hashBusca(e.cpf) : null, senha_hash, trocar_senha: true, created_by: admin.id },
+      data: { organizacao_id, nome: e.nome, email: e.email, cargo: e.cargo, cpf_cifrado: e.cpf ? cifrar(e.cpf) : null, cpf_hash: e.cpf ? hashBusca(e.cpf) : null, senha_hash, trocar_senha: true, created_by: admin.id },
     });
     if (e.papel) await tx.usuarioPapel.create({ data: { usuario_id: u.id, papel: e.papel, municipio_id: e.municipio_id ?? null, created_by: admin.id } });
     await auditar({ usuario_id: admin.id, acao: "CRIAR", entidade: "usuario", entidade_id: u.id, depois: { nome: u.nome, email: u.email, cargo: u.cargo, papel: e.papel ?? null, municipio_id: e.municipio_id ?? null } }, tx);
@@ -76,6 +89,7 @@ export async function criarUsuario(admin: UsuarioSessao, entrada: unknown) {
 
 export async function editarUsuario(admin: UsuarioSessao, id: string, entrada: unknown) {
   const e = EdicaoUsuarioSchema.parse(entrada);
+  await exigirVisivel(admin, id);
   const atual = await prisma.usuario.findUnique({ where: { id } });
   if (!atual) throw naoEncontrado("Usuário não encontrado.");
   if (e.ativo === false && id === admin.id) throw invalido("Você não pode desativar o próprio usuário.");
@@ -91,17 +105,22 @@ export async function editarUsuario(admin: UsuarioSessao, id: string, entrada: u
 export async function adicionarPapel(admin: UsuarioSessao, usuarioId: string, papel: Papel, municipioId: string | null) {
   if (!PAPEIS.includes(papel)) throw invalido("Papel inválido.", { campo: "papel" });
   validarPapel(papel, municipioId);
-  if (!(await prisma.usuario.count({ where: { id: usuarioId } }))) throw naoEncontrado("Usuário não encontrado.");
-  if (municipioId && !(await prisma.municipio.count({ where: { id: municipioId } }))) throw invalido("Município inválido.", { campo: "municipio_id" });
+  const alvo = await exigirVisivel(admin, usuarioId);
+  const org = organizacaoDoAdmin(admin);
+  if (municipioId && !(await prisma.municipio.count({ where: { id: municipioId, organizacao_id: org } }))) throw invalido("Município inválido.", { campo: "municipio_id" });
+  // Papel interno em requerente sem organização: o usuário passa a pertencer à organização do admin.
+  const vincularOrganizacao = papel !== "REQUERENTE" && !alvo.organizacao_id;
   if (await prisma.usuarioPapel.findFirst({ where: { usuario_id: usuarioId, papel, municipio_id: municipioId } })) throw invalido("O usuário já possui este papel neste escopo.");
   return prisma.$transaction(async (tx) => {
     const p = await tx.usuarioPapel.create({ data: { usuario_id: usuarioId, papel, municipio_id: municipioId, created_by: admin.id } });
+    if (vincularOrganizacao) await tx.usuario.update({ where: { id: usuarioId }, data: { organizacao_id: org } });
     await auditar({ usuario_id: admin.id, acao: "ADICIONAR_PAPEL", entidade: "usuario", entidade_id: usuarioId, depois: { papel, municipio_id: municipioId } }, tx);
     return p;
   });
 }
 
 export async function removerPapel(admin: UsuarioSessao, usuarioId: string, papelId: string) {
+  await exigirVisivel(admin, usuarioId);
   const p = await prisma.usuarioPapel.findFirst({ where: { id: papelId, usuario_id: usuarioId } });
   if (!p) throw naoEncontrado("Vínculo não encontrado.");
   if (usuarioId === admin.id && p.papel === "ADMIN") {
@@ -116,7 +135,7 @@ export async function removerPapel(admin: UsuarioSessao, usuarioId: string, pape
 
 /** Gera nova senha temporária, força troca no próximo acesso e desbloqueia a conta. */
 export async function redefinirSenha(admin: UsuarioSessao, usuarioId: string) {
-  if (!(await prisma.usuario.count({ where: { id: usuarioId } }))) throw naoEncontrado("Usuário não encontrado.");
+  await exigirVisivel(admin, usuarioId);
   const senha = gerarSenhaTemporaria();
   const senha_hash = await hashSenha(senha);
   await prisma.$transaction(async (tx) => {

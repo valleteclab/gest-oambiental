@@ -96,17 +96,18 @@ describe("porte (tipologia + grandeza)", () => {
 describe("EmpreendimentoSchema", () => {
   const base = { municipio_id: "11111111-1111-4111-8111-111111111111", requerente_id: "22222222-2222-4222-8222-222222222222", nome: "Posto Estrela", tipologia_id: "33333333-3333-4333-8333-333333333333" };
   it("converte números com vírgula e aceita polígono GeoJSON em texto", () => {
-    const r = EmpreendimentoSchema.parse({ ...base, latitude: "-12,284200", longitude: "-40.4936", grandeza_porte: "90", porte: "", rt_id: "", poligono_geojson: '{"type":"Polygon","coordinates":[]}' });
+    const r = EmpreendimentoSchema.parse({ ...base, latitude: "-12,284200", longitude: "-40.4936", grandeza_porte: "90", porte: "", rt_id: "", poligono_geojson: '{"type":"Polygon","coordinates":[[[-40.3,-12.5],[-40.29,-12.5],[-40.29,-12.51],[-40.3,-12.5]]]}' });
     expect(r.latitude).toBeCloseTo(-12.2842);
     expect(r.grandeza_porte).toBe(90);
     expect(r.porte).toBeNull();
     expect(r.rt_id).toBeNull();
-    expect(r.poligono_geojson).toEqual({ type: "Polygon", coordinates: [] });
+    expect(r.poligono_geojson).toEqual({ type: "Polygon", coordinates: [[[-40.3, -12.5], [-40.29, -12.5], [-40.29, -12.51], [-40.3, -12.5]]] });
   });
   it("rejeita coordenadas fora da faixa e GeoJSON inválido", () => {
     expect(EmpreendimentoSchema.safeParse({ ...base, latitude: 95 }).success).toBe(false);
     expect(EmpreendimentoSchema.safeParse({ ...base, poligono_geojson: "{x" }).success).toBe(false);
     expect(EmpreendimentoSchema.safeParse({ ...base, poligono_geojson: '{"type":"Point","coordinates":[0,0]}' }).success).toBe(false);
+    expect(EmpreendimentoSchema.safeParse({ ...base, poligono_geojson: '{"type":"Polygon","coordinates":[]}' }).success).toBe(false);
   });
 });
 

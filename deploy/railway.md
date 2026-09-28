@@ -7,8 +7,7 @@ Topologia: 1 projeto com **Postgres** (plugin), serviço **app** (Next.js) e ser
 2. **+ New → Database → PostgreSQL**.
 3. Serviço `app` (do repo): *Settings → Build → Dockerfile path* = `Dockerfile`; *Deploy → Healthcheck path* = `/api/health`.
 4. Serviço `worker` (mesmo repo): *Dockerfile path* = `Dockerfile.worker`; *Pre-deploy command* =
-   `sh -c 'npx prisma migrate deploy && if [ "$SEED_DEMO" = "true" ]; then npm run seed:demo; fi'`
-   (migrações a cada deploy; `SEED_DEMO=true` só em homologação – o seed é idempotente).
+   `sh scripts/predeploy.sh` (migrações a cada deploy + seeds/onboarding opcionais – ver §3).
 5. No `app`: *Settings → Networking → Generate Domain* (ou domínio próprio, ex.: `licenciagov.valleteclab.com.br`).
 
 ## 2. Variáveis (app e worker – use *Shared Variables*)
@@ -29,8 +28,24 @@ Topologia: 1 projeto com **Postgres** (plugin), serviço **app** (Next.js) e ser
 | `TZ` | `America/Bahia` |
 | `PORT` | `3000` (app) |
 
-## 3. Dados de demonstração (homolog apenas)
-No worker: `railway run --service worker npm run seed:demo` (ou `seed:base` para produção de cliente: cria só configuração e usuários – troque as senhas).
+## 3. Pré-deploy do worker: migrações, seeds e onboarding de clientes
+`scripts/predeploy.sh` roda, nesta ordem, conforme as variáveis do serviço **worker**:
+
+| Variável | Efeito |
+|---|---|
+| `RESET_DB=true` | **Apaga** o banco e recria (`prisma migrate reset`). Só homologação/demonstração – remova a variável logo depois do deploy. |
+| _(sempre)_ | `prisma migrate deploy` |
+| `SEED_DEMO=true` | `npm run seed:demo` – consórcio fictício CID-DEMO (idempotente). Só homologação. |
+| `SEED_ONBOARDING=riachao-das-neves` | `npm run onboard -- riachao-das-neves` (arquivo `prisma/seed/clientes/<cliente>.json`; vários clientes separados por vírgula). Com `DEMO_MODE=true` roda com `--demo` (senha demo `Demo@2026licencia`, sem troca obrigatória). Idempotente: cria só o que falta. |
+| `SEED_RIACHAO_DEMO=true` | `npm run seed:riachao-demo` – empreendimentos, processos, licenças, denúncias e vistorias **fictícios** de Riachão das Neves (exige o onboarding acima; idempotente). |
+| `ONBOARD_SENHA` | (opcional) senha fixa dos usuários criados pelo onboarding. Sem ela e sem `--demo`, cada usuário novo recebe uma senha temporária **impressa uma única vez no log do pré-deploy** (troca obrigatória no 1º acesso). |
+
+Ambiente de apresentação para Riachão das Neves (exemplo): `DEMO_MODE=true`, `SEED_DEMO=true`, `SEED_ONBOARDING=riachao-das-neves`, `SEED_RIACHAO_DEMO=true`.
+Produção de um cliente: apenas `SEED_ONBOARDING=<cliente>` no primeiro deploy (sem `DEMO_MODE`/`SEED_DEMO`/`SEED_RIACHAO_DEMO`); guarde as senhas temporárias do log e depois remova a variável.
+
+Manual: `railway run --service worker npm run onboard -- <cliente> [--demo] [--atualizar]` (`--atualizar` sobrescreve os dados cadastrais do órgão com os do JSON; `--redefinir-senhas` gera novas senhas).
+
+**Isolamento por cliente:** cada organização (tenant) só enxerga os próprios municípios, usuários, configurações, relatórios e exportações; o consórcio de demonstração e Riachão das Neves ficam isolados mesmo no mesmo banco. Os limites municipais são obtidos do IBGE pelo `codigo_ibge` (nada a configurar).
 
 ## 4. Homolog × produção
 Crie dois *Environments* no projeto (`homolog`, `production`) – cada um tem seu próprio Postgres, bucket e domínio. Região: o Railway não tem região no Brasil; se a exigência de hospedagem no Brasil (SPEC §3) for contratual, use AWS sa-east-1 (`deploy/README.md`).

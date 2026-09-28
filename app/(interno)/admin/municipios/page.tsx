@@ -1,15 +1,16 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { usuarioAdminPagina } from "@/lib/admin/guard";
+import { whereMunicipiosAdmin } from "@/lib/admin/escopo";
 import { AcessoNegado } from "@/components/acesso-negado";
 import { Badge, CabecalhoPagina, Card } from "@/components/ui";
 
 export const metadata = { title: "Municípios – Administração" };
 
 export default async function Municipios() {
-  const { ok } = await usuarioAdminPagina();
+  const { u: admin, ok } = await usuarioAdminPagina();
   if (!ok) return <AcessoNegado />;
-  const lista = await prisma.municipio.findMany({ orderBy: { nome: "asc" }, include: { _count: { select: { papeis: true, processos: true } } } });
+  const lista = await prisma.municipio.findMany({ where: whereMunicipiosAdmin(admin), orderBy: { nome: "asc" }, include: { _count: { select: { papeis: true, processos: true } } } });
   return (
     <>
       <CabecalhoPagina titulo="Municípios" subtitulo={<Link href="/admin" className="underline">Administração</Link>} acoes={<Link href="/admin/municipios/novo" className="btn-primario">Novo município</Link>} />

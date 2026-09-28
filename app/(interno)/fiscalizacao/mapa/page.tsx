@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { exigirUsuario } from "@/lib/auth";
+import { exigirUsuario, getOrgaoAtivo } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { can, whereMunicipio } from "@/lib/rbac";
 import { fmtDataHora } from "@/lib/format";
@@ -52,7 +52,10 @@ export default async function MapaFiscalizacao({ searchParams }: { searchParams:
     })),
   ];
   const mun = municipios.find((m) => m.id === municipio);
-  const centro: [number, number] = mun?.latitude != null && mun.longitude != null ? [mun.latitude, mun.longitude] : pontos.length === 1 ? [pontos[0].lat, pontos[0].lng] : [-12.45, -40.2];
+  // Sem filtro de município: centraliza no órgão ativo (município escolhido no login).
+  const ativo = mun ? null : await getOrgaoAtivo();
+  const munCentro = mun ?? municipios.find((m) => m.id === ativo?.id);
+  const centro: [number, number] = munCentro?.latitude != null && munCentro.longitude != null ? [munCentro.latitude, munCentro.longitude] : pontos.length === 1 ? [pontos[0].lat, pontos[0].lng] : [-12.45, -40.2];
 
   return (
     <div>
@@ -75,7 +78,7 @@ export default async function MapaFiscalizacao({ searchParams }: { searchParams:
       </form>
       <Card>
         <div data-testid="mapa-fiscalizacao" data-pontos={pontos.length}>
-          <Mapa key={`${municipio}-${tipo}-${constatacao}-${status}`} centro={centro} zoom={mun ? 12 : 8} altura="min(70vh, 600px)" pontos={pontos} />
+          <Mapa key={`${municipio}-${tipo}-${constatacao}-${status}`} centro={centro} zoom={munCentro ? 12 : 8} altura="min(70vh, 600px)" pontos={pontos} />
         </div>
         <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-700" aria-label="Legenda">
           <span className="font-semibold">Vistorias:</span>

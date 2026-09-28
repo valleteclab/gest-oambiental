@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { usuarioAdminPagina } from "@/lib/admin/guard";
+import { whereOrganizacao } from "@/lib/rbac";
 import { faixasParaTexto } from "@/lib/cadastros/porte";
 import { AcessoNegado } from "@/components/acesso-negado";
 import { Badge, CabecalhoPagina, Card } from "@/components/ui";
@@ -13,9 +14,9 @@ export const metadata = { title: "Tipologias – Administração" };
 const PP = { BAIXO: <Badge cor="verde">Baixo</Badge>, MEDIO: <Badge cor="amarelo">Médio</Badge>, ALTO: <Badge cor="vermelho">Alto</Badge> };
 
 export default async function Tipologias() {
-  const { ok } = await usuarioAdminPagina();
+  const { u: admin, ok } = await usuarioAdminPagina();
   if (!ok) return <AcessoNegado />;
-  const lista = await prisma.tipologia.findMany({ orderBy: { codigo: "asc" }, include: { _count: { select: { empreendimentos: true } } } });
+  const lista = await prisma.tipologia.findMany({ where: whereOrganizacao(admin), orderBy: { codigo: "asc" }, include: { _count: { select: { empreendimentos: true } } } });
   return (
     <>
       <CabecalhoPagina titulo="Tipologias" subtitulo={<Link href="/admin" className="underline">Administração</Link>} acoes={<Link href="/admin/tipologias/novo" className="btn-primario">Nova tipologia</Link>} />

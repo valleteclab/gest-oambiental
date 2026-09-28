@@ -49,13 +49,18 @@ export default async function NovoRequerimento({ searchParams }: { searchParams:
     };
   }
 
-  const [orgao, municipios, tipologias, tiposAto, empreendimentos] = await Promise.all([
-    getOrgaoAtivo(),
-    prisma.municipio.findMany({ where: { ativo: true }, select: { id: true, nome: true, latitude: true, longitude: true }, orderBy: { nome: "asc" } }),
-    prisma.tipologia.findMany({ where: { ativo: true }, select: { id: true, codigo: true, divisao: true, descricao: true, unidade_porte: true, faixas_porte: true, potencial_poluidor: true }, orderBy: { codigo: "asc" } }),
-    prisma.tipoAto.findMany({ where: { ativo: true }, select: { id: true, sigla: true, nome: true, categoria: true, validade_meses_padrao: true, prazo_analise_dias: true }, orderBy: { sigla: "asc" } }),
+  // Isolamento por organização (cliente): o requerimento é feito nos órgãos da organização do ÓRGÃO ATIVO
+  // (ou do rascunho em andamento) – catálogo de tipologias/tipos de ato daquela organização. Para requerer
+  // em outro cliente, o requerente troca de órgão.
+  const orgao = await getOrgaoAtivo();
+  const orgId = rascunho ? (await prisma.processo.findUniqueOrThrow({ where: { id: rascunho.id }, select: { organizacao_id: true } })).organizacao_id : orgao?.organizacao.id;
+  if (!orgId) redirect("/trocar-orgao?next=/novo-requerimento");
+  const [municipios, tipologias, tiposAto, empreendimentos] = await Promise.all([
+    prisma.municipio.findMany({ where: { ativo: true, organizacao_id: orgId }, select: { id: true, nome: true, latitude: true, longitude: true }, orderBy: { nome: "asc" } }),
+    prisma.tipologia.findMany({ where: { ativo: true, organizacao_id: orgId }, select: { id: true, codigo: true, divisao: true, descricao: true, unidade_porte: true, faixas_porte: true, potencial_poluidor: true }, orderBy: { codigo: "asc" } }),
+    prisma.tipoAto.findMany({ where: { ativo: true, organizacao_id: orgId }, select: { id: true, sigla: true, nome: true, categoria: true, validade_meses_padrao: true, prazo_analise_dias: true }, orderBy: { sigla: "asc" } }),
     prisma.empreendimento.findMany({
-      where: { requerente_id: u.pessoa_id, status: "ATIVO" },
+      where: { requerente_id: u.pessoa_id, status: "ATIVO", organizacao_id: orgId },
       select: { id: true, nome: true, municipio_id: true, tipologia_id: true, grandeza_porte: true, latitude: true, longitude: true, municipio: { select: { nome: true } } },
       orderBy: { nome: "asc" },
     }),

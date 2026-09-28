@@ -6,6 +6,8 @@ import { auditar } from "@/lib/audit";
 import { invalido } from "@/lib/http";
 import { acaoAdmin, obrigatorio, txt, txtOuNulo } from "@/lib/admin/acao";
 import type { EstadoAcao } from "@/lib/admin/guard";
+import { organizacaoDoAdmin } from "@/lib/admin/escopo";
+import { naoEncontrado } from "@/lib/http";
 
 const Itens = z
   .array(z.object({ id: z.string().min(1).max(40), texto: z.string().trim().min(3, "Texto do item muito curto."), tipo: z.enum(["SIM_NAO", "TEXTO", "NUMERO"]), obrigatorio: z.boolean() }))
@@ -24,7 +26,8 @@ export async function salvarChecklist(_: EstadoAcao, f: FormData): Promise<Estad
     }
     const data = { nome, itens: itens as unknown as Prisma.InputJsonValue };
     if (id) {
-      const antes = await prisma.checklistModelo.findUniqueOrThrow({ where: { id } });
+      const antes = await prisma.checklistModelo.findFirst({ where: { id, organizacao_id: organizacaoDoAdmin(u) } });
+      if (!antes) throw naoEncontrado("Checklist não encontrado.");
       await prisma.$transaction(async (tx) => {
         const c = await tx.checklistModelo.update({ where: { id }, data });
         await auditar({ usuario_id: u.id, acao: "EDITAR", entidade: "checklist_modelo", entidade_id: id, antes, depois: c }, tx);
@@ -32,7 +35,7 @@ export async function salvarChecklist(_: EstadoAcao, f: FormData): Promise<Estad
       return "Checklist salvo. (Checklists já preenchidos mantêm suas respostas.)";
     }
     const c = await prisma.$transaction(async (tx) => {
-      const c = await tx.checklistModelo.create({ data: { ...data, created_by: u.id } });
+      const c = await tx.checklistModelo.create({ data: { ...data, organizacao_id: organizacaoDoAdmin(u), created_by: u.id } });
       await auditar({ usuario_id: u.id, acao: "CRIAR", entidade: "checklist_modelo", entidade_id: c.id, depois: c }, tx);
       return c;
     });

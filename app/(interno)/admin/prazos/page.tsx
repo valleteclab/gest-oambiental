@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { usuarioAdminPagina } from "@/lib/admin/guard";
+import { whereOrganizacao } from "@/lib/rbac";
+import { whereMunicipiosAdmin } from "@/lib/admin/escopo";
 import { AcessoNegado } from "@/components/acesso-negado";
 import { CabecalhoPagina, Card } from "@/components/ui";
 import { FormAdmin } from "../_comp/form-admin";
@@ -12,11 +14,11 @@ export const metadata = { title: "Prazos – Administração" };
 const ETAPAS: Record<string, string> = { TRIAGEM: "Triagem", ANALISE_CURTA: "Análise curta (LS/AA/CERT…)", ANALISE_LONGA: "Análise longa (LP/LI/LO/LU…)", PENDENCIA: "Resposta a pendência", VISTORIA: "Vistoria", DECISAO: "Decisão" };
 
 export default async function Prazos() {
-  const { ok } = await usuarioAdminPagina();
+  const { u: admin, ok } = await usuarioAdminPagina();
   if (!ok) return <AcessoNegado />;
   const [prazos, municipios] = await Promise.all([
-    prisma.prazoConfig.findMany({ include: { municipio: { select: { nome: true } } }, orderBy: [{ etapa: "asc" }, { municipio_id: { sort: "asc", nulls: "first" } }] }),
-    prisma.municipio.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
+    prisma.prazoConfig.findMany({ where: whereOrganizacao(admin), include: { municipio: { select: { nome: true } } }, orderBy: [{ etapa: "asc" }, { municipio_id: { sort: "asc", nulls: "first" } }] }),
+    prisma.municipio.findMany({ where: whereMunicipiosAdmin(admin), orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
   ]);
   const ordem = Object.keys(ETAPAS);
   prazos.sort((a, b) => ordem.indexOf(a.etapa) - ordem.indexOf(b.etapa) || (a.municipio_id ? 1 : 0) - (b.municipio_id ? 1 : 0));

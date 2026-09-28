@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { usuarioAdminPagina } from "@/lib/admin/guard";
 import { PAPEIS, PAPEIS_SEM_MUNICIPIO } from "@/lib/admin/usuarios";
+import { whereMunicipiosAdmin } from "@/lib/admin/escopo";
 import { ROTULO_PAPEL } from "@/lib/rbac";
 import { AcessoNegado } from "@/components/acesso-negado";
 import { CabecalhoPagina, Card } from "@/components/ui";
@@ -12,9 +13,9 @@ import { acaoCriarUsuario } from "../actions";
 export const metadata = { title: "Novo usuário – Administração" };
 
 export default async function NovoUsuario() {
-  const { ok } = await usuarioAdminPagina();
+  const { u: admin, ok } = await usuarioAdminPagina();
   if (!ok) return <AcessoNegado />;
-  const municipios = await prisma.municipio.findMany({ where: { ativo: true }, orderBy: { nome: "asc" }, select: { id: true, nome: true } });
+  const municipios = await prisma.municipio.findMany({ where: { ativo: true, ...whereMunicipiosAdmin(admin) }, orderBy: { nome: "asc" }, select: { id: true, nome: true } });
   return (
     <>
       <CabecalhoPagina titulo="Novo usuário" subtitulo={<Link href="/admin/usuarios" className="underline">Usuários</Link>} />

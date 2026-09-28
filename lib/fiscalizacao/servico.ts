@@ -497,14 +497,15 @@ export async function obterNotificacao(u: UsuarioSessao, id: string) {
 
 /** Municípios em que o usuário pode registrar (ou ver) – para selects. */
 export async function municipiosDoUsuario(u: UsuarioSessao) {
-  return prisma.municipio.findMany({ where: { ativo: true, ...(whereMunicipio(u).municipio_id ? { id: whereMunicipio(u).municipio_id } : {}) }, orderBy: { nome: "asc" }, select: { id: true, nome: true, sigla: true, latitude: true, longitude: true } })
+  return prisma.municipio.findMany({ where: { ativo: true, id: whereMunicipio(u).municipio_id }, orderBy: { nome: "asc" }, select: { id: true, nome: true, sigla: true, latitude: true, longitude: true } })
     .then((l) => l.map((m) => ({ ...m, latitude: num(m.latitude), longitude: num(m.longitude) })));
 }
 
 /** Usuários internos que podem compor a equipe (papéis no município ou escopo organização). */
 export async function equipeDisponivel(municipioId: string) {
   const us = await prisma.usuario.findMany({
-    where: { ativo: true, papeis: { some: { OR: [{ municipio_id: municipioId, papel: { in: ["FISCAL", "TEC_MUNICIPAL", "GESTOR_MUNICIPAL"] } }, { municipio_id: null, papel: "TEC_CONSORCIO" }] } } },
+    // Só usuários da organização do município (isolamento por cliente).
+    where: { ativo: true, organizacao: { municipios: { some: { id: municipioId } } }, papeis: { some: { OR: [{ municipio_id: municipioId, papel: { in: ["FISCAL", "TEC_MUNICIPAL", "GESTOR_MUNICIPAL"] } }, { municipio_id: null, papel: "TEC_CONSORCIO" }] } } },
     orderBy: { nome: "asc" }, select: { id: true, nome: true, cargo: true },
   });
   return us;

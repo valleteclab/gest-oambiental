@@ -9,7 +9,7 @@ import { excedeuLimite } from "@/lib/fiscalizacao/antiabuso";
 
 const MUN_A = "11111111-1111-4111-8111-111111111111";
 const MUN_B = "22222222-2222-4222-8222-222222222222";
-const usuario = (papel: UsuarioSessao["papeis"][number]["papel"], municipio_id: string | null = MUN_A): UsuarioSessao => ({ id: "u", nome: "U", email: "u@x", cargo: null, pessoa_id: null, trocar_senha: false, papeis: [{ papel, municipio_id }] });
+const usuario = (papel: UsuarioSessao["papeis"][number]["papel"], municipio_id: string | null = MUN_A): UsuarioSessao => ({ id: "u", nome: "U", email: "u@x", cargo: null, pessoa_id: null, trocar_senha: false, papeis: [{ papel, municipio_id }], organizacao_id: "org-a", municipios_org: [MUN_A, MUN_B] });
 
 beforeAll(() => {
   process.env.DATA_KEY ??= "0".repeat(64);

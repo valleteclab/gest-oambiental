@@ -1,6 +1,6 @@
 import { FileSpreadsheet, FileText } from "lucide-react";
 import { exigirUsuario } from "@/lib/auth";
-import { can, escopoMunicipios } from "@/lib/rbac";
+import { can, temEscopoOrganizacao } from "@/lib/rbac";
 import { fmtData } from "@/lib/format";
 import { opcoesFiltros, resolverEscopo } from "@/lib/indicadores/calcular";
 import { lerFiltros, municipioPermitido, queryFiltros } from "@/lib/indicadores/filtros";
@@ -29,7 +29,7 @@ export default async function PaginaRelatorios({ searchParams }: { searchParams:
         municipios={opcoes.municipios}
         tiposAto={opcoes.tiposAto}
         tecnicos={opcoes.tecnicos}
-        mostrarTodos={escopoMunicipios(u) === "TODOS" || opcoes.municipios.length > 1}
+        mostrarTodos={temEscopoOrganizacao(u) || opcoes.municipios.length > 1}
         valores={{ municipio: filtros.municipio_id ?? "", de: e.deStr, ate: e.ateStr, tipo_ato: filtros.tipo_ato_id ?? "", tecnico: filtros.tecnico_id ?? "" }}
       />
       <p className="mb-4 text-sm text-slate-600" data-testid="relatorios-filtros">

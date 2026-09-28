@@ -253,8 +253,9 @@ export async function listarLicencasPublicas(f: FiltroLicencas) {
 export async function opcoesFiltroPublico() {
   const [municipios, siglas] = await Promise.all([
     prisma.municipio.findMany({ where: { ativo: true }, orderBy: { nome: "asc" }, select: { sigla: true, nome: true } }),
-    prisma.tipoAto.findMany({ where: { ativo: true, categoria: { in: ["LICENCA", "AUTORIZACAO", "CERTIDAO"] } }, orderBy: { sigla: "asc" }, select: { sigla: true, nome: true } }),
+    prisma.tipoAto.findMany({ where: { ativo: true, categoria: { in: ["LICENCA", "AUTORIZACAO", "CERTIDAO"] } }, orderBy: { sigla: "asc" }, distinct: ["sigla"], select: { sigla: true, nome: true } }),
   ]);
+  // Portal público lista órgãos de todas as organizações; siglas repetidas entre clientes aparecem uma vez só.
   return { municipios, siglas };
 }
 

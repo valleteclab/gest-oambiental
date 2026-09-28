@@ -68,8 +68,10 @@ function paraLog(e: Empreendimento | null, rt_id?: string | null) {
 type Resolvido = { porte: Porte; potencial: Empreendimento["potencial_poluidor"]; justificativa: string | null; calculado: Porte | null };
 
 async function resolverPorte(u: UsuarioSessao, municipioId: string, tipologiaId: string, grandeza: number | null, porteInformado: Porte | null | undefined, justificativa: string | null, porteAtual?: Porte): Promise<Resolvido> {
-  const tip = await prisma.tipologia.findUnique({ where: { id: tipologiaId } });
+  const [tip, mun] = await Promise.all([prisma.tipologia.findUnique({ where: { id: tipologiaId } }), prisma.municipio.findUnique({ where: { id: municipioId }, select: { organizacao_id: true } })]);
   if (!tip || !tip.ativo) throw invalido("Tipologia inválida ou inativa.", { campo: "tipologia_id" });
+  // Isolamento por organização: a tipologia precisa ser do catálogo da organização do município.
+  if (!mun || tip.organizacao_id !== mun.organizacao_id) throw invalido("Tipologia não disponível para este município.", { campo: "tipologia_id" });
   const calculado = calcularPorte(tip.faixas_porte, grandeza);
   // Mantém o porte ajustado anteriormente se o formulário não mandou outro valor.
   const final = porteInformado ?? (porteAtual && justificativa ? porteAtual : calculado);

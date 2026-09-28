@@ -2,7 +2,7 @@ import "server-only";
 import { Prisma, type StatusProcesso } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { inicioDoDia } from "@/lib/dias";
-import { whereMunicipio, type UsuarioSessao } from "@/lib/rbac";
+import { temEscopoOrganizacao, whereMunicipio, whereOrganizacao, type UsuarioSessao } from "@/lib/rbac";
 import {
   DIAS_LICENCA_VENCENDO,
   DIAS_VENCENDO,
@@ -66,15 +66,15 @@ export async function resolverEscopo(usuario: UsuarioSessao, filtros: FiltrosInd
 
   const wm = whereMunicipio(usuario, filtros.municipio_id || null);
   const municipios = await prisma.municipio.findMany({
-    where: wm.municipio_id === undefined ? {} : { id: wm.municipio_id },
+    where: { id: wm.municipio_id },
     select: { id: true, nome: true, sigla: true, organizacao_id: true },
     orderBy: { nome: "asc" },
   });
   const ids = municipios.map((m) => m.id);
 
   const [tipoAto, tecnico] = await Promise.all([
-    filtros.tipo_ato_id ? prisma.tipoAto.findUnique({ where: { id: filtros.tipo_ato_id }, select: { id: true, sigla: true, nome: true } }).catch(() => null) : null,
-    filtros.tecnico_id ? prisma.usuario.findUnique({ where: { id: filtros.tecnico_id }, select: { id: true, nome: true } }).catch(() => null) : null,
+    filtros.tipo_ato_id ? prisma.tipoAto.findFirst({ where: { id: filtros.tipo_ato_id, ...whereOrganizacao(usuario) }, select: { id: true, sigla: true, nome: true } }).catch(() => null) : null,
+    filtros.tecnico_id ? prisma.usuario.findFirst({ where: { id: filtros.tecnico_id, ...whereOrganizacao(usuario) }, select: { id: true, nome: true } }).catch(() => null) : null,
   ]);
   const municipioSel = filtros.municipio_id ? municipios.find((m) => m.id === filtros.municipio_id) ?? null : null;
 
@@ -90,7 +90,7 @@ export async function resolverEscopo(usuario: UsuarioSessao, filtros: FiltrosInd
     municipio: municipioSel,
     /** Descrição legível dos filtros (cabeçalho de relatórios). */
     descricao: {
-      municipio: municipioSel ? municipioSel.nome : filtros.municipio_id ? "(sem acesso)" : wm.municipio_id === undefined ? "Todos os municípios" : municipios.length === 1 ? municipios[0].nome : municipios.map((m) => m.nome).join(", "),
+      municipio: municipioSel ? municipioSel.nome : filtros.municipio_id ? "(sem acesso)" : temEscopoOrganizacao(usuario) ? "Todos os municípios" : municipios.length === 1 ? municipios[0].nome : municipios.map((m) => m.nome).join(", "),
       periodo: [deStr, ateStr] as const,
       tipo_ato: tipoAto ? `${tipoAto.sigla} – ${tipoAto.nome}` : "Todos",
       tecnico: tecnico ? tecnico.nome : "Todos",
@@ -331,12 +331,13 @@ export async function calcularIndicadores(usuario: UsuarioSessao, filtros: Filtr
 /** Opções dos filtros (municípios no escopo, tipos de ato, técnicos). */
 export async function opcoesFiltros(usuario: UsuarioSessao) {
   const wm = whereMunicipio(usuario);
-  const municipios = await prisma.municipio.findMany({ where: wm.municipio_id === undefined ? {} : { id: wm.municipio_id }, select: { id: true, nome: true }, orderBy: { nome: "asc" } });
+  const municipios = await prisma.municipio.findMany({ where: { id: wm.municipio_id }, select: { id: true, nome: true }, orderBy: { nome: "asc" } });
   const ids = municipios.map((m) => m.id);
   const [tiposAto, tecnicos] = await Promise.all([
-    prisma.tipoAto.findMany({ where: { ativo: true }, select: { id: true, sigla: true, nome: true }, orderBy: { sigla: "asc" } }),
+    prisma.tipoAto.findMany({ where: { ativo: true, ...whereOrganizacao(usuario) }, select: { id: true, sigla: true, nome: true }, orderBy: { sigla: "asc" } }),
     prisma.usuario.findMany({
       where: {
+        ...whereOrganizacao(usuario),
         papeis: { some: { papel: { in: ["TEC_CONSORCIO", "TEC_MUNICIPAL"] }, OR: [{ municipio_id: null }, { municipio_id: { in: ids } }] } },
       },
       select: { id: true, nome: true },

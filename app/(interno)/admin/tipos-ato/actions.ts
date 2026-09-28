@@ -5,6 +5,8 @@ import { auditar } from "@/lib/audit";
 import { invalido } from "@/lib/http";
 import { acaoAdmin, bool, int, intOuNulo, obrigatorio, txtOuNulo } from "@/lib/admin/acao";
 import type { EstadoAcao } from "@/lib/admin/guard";
+import { organizacaoDoAdmin } from "@/lib/admin/escopo";
+import { naoEncontrado } from "@/lib/http";
 
 const CATEGORIAS: CategoriaAto[] = ["LICENCA", "AUTORIZACAO", "CERTIDAO", "DECLARACAO"];
 
@@ -27,11 +29,13 @@ export async function salvarTipoAto(_: EstadoAcao, f: FormData): Promise<EstadoA
       prazo_analise_dias: int(f, "prazo_analise_dias", 1, 720),
       ativo: bool(f, "ativo"),
     };
-    const org = await prisma.organizacao.findFirstOrThrow();
+    const org = { id: organizacaoDoAdmin(u) };
+    if (dados.checklist_modelo_id && !(await prisma.checklistModelo.count({ where: { id: dados.checklist_modelo_id, organizacao_id: org.id } }))) throw invalido("Checklist inválido.", { campo: "checklist_modelo_id" });
     const dup = await prisma.tipoAto.findFirst({ where: { organizacao_id: org.id, sigla, ...(id ? { id: { not: id } } : {}) } });
     if (dup) throw invalido(`Já existe tipo de ato com a sigla ${sigla}.`, { campo: "sigla" });
     if (id) {
-      const antes = await prisma.tipoAto.findUniqueOrThrow({ where: { id } });
+      const antes = await prisma.tipoAto.findFirst({ where: { id, organizacao_id: org.id } });
+      if (!antes) throw naoEncontrado("Tipo de ato não encontrado.");
       await prisma.$transaction(async (tx) => {
         const t = await tx.tipoAto.update({ where: { id }, data: dados });
         await auditar({ usuario_id: u.id, acao: "EDITAR", entidade: "tipo_ato", entidade_id: id, antes, depois: t }, tx);

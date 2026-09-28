@@ -4,6 +4,8 @@ import { auditar } from "@/lib/audit";
 import { invalido } from "@/lib/http";
 import { acaoAdmin, bool, int, obrigatorio, txtOuNulo } from "@/lib/admin/acao";
 import type { EstadoAcao } from "@/lib/admin/guard";
+import { exigirMunicipioDoAdmin, organizacaoDoAdmin } from "@/lib/admin/escopo";
+import { naoEncontrado } from "@/lib/http";
 
 const ETAPAS = ["TRIAGEM", "ANALISE_CURTA", "ANALISE_LONGA", "PENDENCIA", "VISTORIA", "DECISAO"];
 
@@ -13,7 +15,8 @@ export async function salvarPrazo(_: EstadoAcao, f: FormData): Promise<EstadoAca
     const dados = { dias: int(f, "dias", 1, 720), dias_alerta: int(f, "dias_alerta", 0, 365), conta_dias_uteis: bool(f, "conta_dias_uteis") };
     if (dados.dias_alerta >= dados.dias) throw invalido("Os dias de alerta devem ser menores que o prazo.", { campo: "dias_alerta" });
     if (id) {
-      const antes = await prisma.prazoConfig.findUniqueOrThrow({ where: { id } });
+      const antes = await prisma.prazoConfig.findFirst({ where: { id, organizacao_id: organizacaoDoAdmin(u) } });
+      if (!antes) throw naoEncontrado("Configuração não encontrada.");
       await prisma.$transaction(async (tx) => {
         const p = await tx.prazoConfig.update({ where: { id }, data: dados });
         await auditar({ usuario_id: u.id, acao: "EDITAR", entidade: "prazo_config", entidade_id: id, antes, depois: p }, tx);
@@ -23,7 +26,8 @@ export async function salvarPrazo(_: EstadoAcao, f: FormData): Promise<EstadoAca
     const etapa = obrigatorio(f, "etapa", "a etapa");
     if (!ETAPAS.includes(etapa)) throw invalido("Etapa inválida.", { campo: "etapa" });
     const municipio_id = txtOuNulo(f, "municipio_id");
-    const org = await prisma.organizacao.findFirstOrThrow();
+    const org = { id: organizacaoDoAdmin(u) };
+    await exigirMunicipioDoAdmin(u, municipio_id);
     if (await prisma.prazoConfig.findFirst({ where: { organizacao_id: org.id, etapa, municipio_id } })) throw invalido("Já existe configuração para esta etapa neste escopo – edite-a na tabela.");
     await prisma.$transaction(async (tx) => {
       const p = await tx.prazoConfig.create({ data: { ...dados, etapa, municipio_id, organizacao_id: org.id, created_by: u.id } });
@@ -36,7 +40,8 @@ export async function salvarPrazo(_: EstadoAcao, f: FormData): Promise<EstadoAca
 export async function removerPrazo(_: EstadoAcao, f: FormData): Promise<EstadoAcao> {
   return acaoAdmin("/admin/prazos", async (u) => {
     const id = obrigatorio(f, "id", "o prazo");
-    const antes = await prisma.prazoConfig.findUniqueOrThrow({ where: { id } });
+    const antes = await prisma.prazoConfig.findFirst({ where: { id, organizacao_id: organizacaoDoAdmin(u) } });
+    if (!antes) throw naoEncontrado("Configuração não encontrada.");
     if (!antes.municipio_id) throw invalido("O prazo padrão da organização não pode ser removido – apenas editado.");
     await prisma.$transaction(async (tx) => {
       await tx.prazoConfig.delete({ where: { id } });

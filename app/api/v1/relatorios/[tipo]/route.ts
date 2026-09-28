@@ -25,7 +25,8 @@ export const GET = rota(async (req: Request, ctx: { params: Promise<{ tipo: stri
   if (!municipioPermitido(u, filtros)) throw proibido("Município fora do seu escopo.");
 
   const rel = await montarRelatorio(tipo, u, filtros);
-  const org = await prisma.organizacao.findFirst({ select: { nome: true, sigla: true, logo_url: true } });
+  // Cabeçalho institucional: a organização DO USUÁRIO (nunca a de outro cliente).
+  const org = u.organizacao_id ? await prisma.organizacao.findUnique({ where: { id: u.organizacao_id }, select: { nome: true, sigla: true, logo_url: true } }) : null;
   const municipio = rel.filtros.find(([k]) => k === "Município")?.[1] ?? "Todos os municípios";
   const cab = {
     organizacao: org?.nome ?? "LicenciaGov",

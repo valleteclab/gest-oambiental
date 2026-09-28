@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { usuarioAdminPagina } from "@/lib/admin/guard";
+import { whereUsuariosAdmin } from "@/lib/admin/escopo";
 import { fmtDataHora } from "@/lib/format";
 import { AcessoNegado } from "@/components/acesso-negado";
 import { Badge, CabecalhoPagina, Card, Paginacao, Vazio } from "@/components/ui";
@@ -8,12 +9,14 @@ import { Badge, CabecalhoPagina, Card, Paginacao, Vazio } from "@/components/ui"
 export const metadata = { title: "Caixa de e-mails – Administração" };
 
 export default async function Emails({ searchParams }: { searchParams: Promise<{ q?: string; page?: string }> }) {
-  const { ok } = await usuarioAdminPagina();
+  const { u: admin, ok } = await usuarioAdminPagina();
   if (!ok) return <AcessoNegado />;
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page ?? 1) || 1);
   const size = 30;
-  const where = sp.q ? { OR: [{ para: { contains: sp.q, mode: "insensitive" as const } }, { assunto: { contains: sp.q, mode: "insensitive" as const } }] } : {};
+  // Isolamento: só e-mails enviados a usuários da organização do admin (ou requerentes vinculados a ela).
+  const destinatarios = (await prisma.usuario.findMany({ where: whereUsuariosAdmin(admin), select: { email: true } })).map((x) => x.email);
+  const where = { para: { in: destinatarios }, ...(sp.q ? { OR: [{ para: { contains: sp.q, mode: "insensitive" as const } }, { assunto: { contains: sp.q, mode: "insensitive" as const } }] } : {}) };
   const [total, emails] = await Promise.all([prisma.emailEnviado.count({ where }), prisma.emailEnviado.findMany({ where, orderBy: { created_at: "desc" }, skip: (page - 1) * size, take: size })]);
   return (
     <>

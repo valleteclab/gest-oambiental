@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { usuarioAdminPagina } from "@/lib/admin/guard";
 import { obterUsuarioAdmin, PAPEIS } from "@/lib/admin/usuarios";
+import { whereMunicipiosAdmin } from "@/lib/admin/escopo";
 import { ROTULO_PAPEL } from "@/lib/rbac";
 import { fmtDataHora } from "@/lib/format";
 import { AcessoNegado } from "@/components/acesso-negado";
@@ -17,10 +18,10 @@ export default async function Usuario({ params }: { params: Promise<{ id: string
   const { u: admin, ok } = await usuarioAdminPagina();
   if (!ok) return <AcessoNegado />;
   const { id } = await params;
-  const u = await obterUsuarioAdmin(id);
+  const u = await obterUsuarioAdmin(admin, id);
   if (!u) notFound();
   const [municipios, logs] = await Promise.all([
-    prisma.municipio.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
+    prisma.municipio.findMany({ where: whereMunicipiosAdmin(admin), orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
     prisma.logAuditoria.findMany({ where: { entidade: "usuario", entidade_id: id }, orderBy: { created_at: "desc" }, take: 10 }),
   ]);
   return (

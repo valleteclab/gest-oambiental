@@ -80,7 +80,7 @@ export default async function PaginaProcesso({ params, searchParams }: { params:
   const itensChecklist = lerItensChecklist(p.tipo_ato.checklist_modelo?.itens);
   const respostas = (checklist?.respostas as Record<string, unknown>) ?? {};
   const checklistPendente = itensChecklistPendentes(itensChecklist, respostas).map((i) => i.texto);
-  const sem = semaforo(p.prazo_etapa_ate, diasAlertaDe(await mapaDiasAlerta(), p.municipio_id, p.etapa_atual), p.prazo_pausado);
+  const sem = semaforo(p.prazo_etapa_ate, diasAlertaDe(await mapaDiasAlerta(p.organizacao_id), p.municipio_id, p.etapa_atual), p.prazo_pausado);
   const restantes = p.prazo_etapa_ate ? diasRestantes(p.prazo_etapa_ate) : null;
   const abertas = pendencias.filter((x) => x.status === "ABERTA" || x.status === "VENCIDA");
   const logs = aba === "log" ? await prisma.logAuditoria.findMany({

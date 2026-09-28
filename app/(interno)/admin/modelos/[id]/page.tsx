@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { usuarioAdminPagina } from "@/lib/admin/guard";
+import { whereOrganizacao } from "@/lib/rbac";
 import { VARIAVEIS_MODELO } from "@/lib/documentos/modelo";
 import { AcessoNegado } from "@/components/acesso-negado";
 import { Badge, CabecalhoPagina, Card } from "@/components/ui";
@@ -20,11 +21,11 @@ const EXEMPLO = `<h1>{{titulo}} nº {{numero}}</h1>
 {{{condicionantes_html}}}`;
 
 export default async function Modelo({ params }: { params: Promise<{ id: string }> }) {
-  const { ok } = await usuarioAdminPagina();
+  const { u: admin, ok } = await usuarioAdminPagina();
   if (!ok) return <AcessoNegado />;
   const { id } = await params;
   const novo = id === "novo";
-  const m = novo ? null : await prisma.modeloDocumento.findUnique({ where: { id } }).catch(() => null);
+  const m = novo ? null : await prisma.modeloDocumento.findFirst({ where: { id, OR: [whereOrganizacao(admin), { organizacao_id: null }] } }).catch(() => null);
   if (!novo && !m) notFound();
   return (
     <>

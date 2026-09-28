@@ -1,16 +1,23 @@
 import { describe, expect, it } from "vitest";
 import type { Papel } from "@prisma/client";
-import { can, escopoMunicipios, isInterno, isSomenteLeitura, podeProtocolarNoBalcao, podeVerMunicipio, UUID_NENHUM, whereMunicipio, whereProcessoEscopo, type Acao, type Recurso, type UsuarioSessao } from "@/lib/rbac";
-import { whereEmpreendimentoEscopo, wherePessoaEscopo } from "@/lib/cadastros/escopo";
+import { can, escopoMunicipios, isInterno, isSomenteLeitura, podeProtocolarNoBalcao, podeVerMunicipio, temEscopoOrganizacao, UUID_NENHUM, whereMunicipio, whereOrganizacao, whereProcessoEscopo, whereTecnicosEscopo, type Acao, type Recurso, type UsuarioSessao } from "@/lib/rbac";
+import { whereEmpreendimentoEscopo, wherePessoaEscopo, whereResponsavelEscopo } from "@/lib/cadastros/escopo";
 
 // Matriz de permissões e regras de escopo (SPEC 4 / T7).
 const CSE = "11111111-1111-4111-8111-111111111111";
 const LOR = "22222222-2222-4222-8222-222222222222";
 const SSR = "33333333-3333-4333-8333-333333333333";
 const PESSOA = "44444444-4444-4444-8444-444444444444";
+// Organização A (consórcio de demonstração): CSE, LOR, SSR. Organização B (outro cliente): RDN.
+const ORG_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const ORG_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const RDN = "55555555-5555-4555-8555-555555555555";
+const MUNICIPIOS: Record<string, string[]> = { [ORG_A]: [CSE, LOR, SSR], [ORG_B]: [RDN] };
 
-function usuario(papeis: [Papel, string | null][], pessoa_id: string | null = null): UsuarioSessao {
-  return { id: "u", nome: "U", email: "u@x", cargo: null, pessoa_id, trocar_senha: false, papeis: papeis.map(([papel, municipio_id]) => ({ papel, municipio_id })) };
+function usuario(papeis: [Papel, string | null][], pessoa_id: string | null = null, org: string | null = undefined as unknown as string | null): UsuarioSessao {
+  // Internos pertencem à organização A por padrão; requerente puro não tem organização.
+  const organizacao_id = org === undefined ? (papeis.some(([p]) => p !== "REQUERENTE") ? ORG_A : null) : org;
+  return { id: "u", nome: "U", email: "u@x", cargo: null, pessoa_id, trocar_senha: false, papeis: papeis.map(([papel, municipio_id]) => ({ papel, municipio_id })), organizacao_id, municipios_org: organizacao_id ? MUNICIPIOS[organizacao_id] : [] };
 }
 
 const admin = usuario([["ADMIN", null]]);
@@ -68,10 +75,10 @@ describe("escopo por município – técnico de Campo das Seriemas (T7)", () => 
 });
 
 describe("escopo organização", () => {
-  it("ADMIN e TEC_CONSORCIO veem todos os municípios", () => {
+  it("ADMIN, TEC_CONSORCIO e SEMA_INEMA veem todos os municípios DA SUA organização (lista explícita, nunca {})", () => {
     for (const u of [admin, tecConsorcio, sema]) {
-      expect(escopoMunicipios(u)).toBe("TODOS");
-      expect(whereMunicipio(u)).toEqual({});
+      expect(escopoMunicipios(u)).toEqual([CSE, LOR, SSR]);
+      expect(whereMunicipio(u)).toEqual({ municipio_id: { in: [CSE, LOR, SSR] } });
       expect(whereMunicipio(u, LOR)).toEqual({ municipio_id: LOR });
       expect(podeVerMunicipio(u, LOR)).toBe(true);
     }
@@ -182,5 +189,76 @@ describe("protocolo no balcão (/processos/novo) – quem pode abrir processo em
 describe("visitante (sem sessão)", () => {
   it("não pode nada", () => {
     for (const r of RECURSOS) expect(can(null, "ver", r)).toBe(false);
+  });
+});
+
+describe("isolamento entre organizações (clientes SaaS)", () => {
+  const adminB = usuario([["ADMIN", null]], null, ORG_B);
+  const semaB = usuario([["SEMA_INEMA", null]], null, ORG_B);
+  const tecB = usuario([["TEC_MUNICIPAL", RDN]], null, ORG_B);
+
+  it("ADMIN da organização A não vê nem atua em município da organização B", () => {
+    expect(escopoMunicipios(admin)).not.toContain(RDN);
+    expect(podeVerMunicipio(admin, RDN)).toBe(false);
+    expect(whereMunicipio(admin, RDN)).toEqual({ municipio_id: UUID_NENHUM });
+    for (const a of ["ver", "criar", "editar", "decidir", "emitir_documento"] as Acao[]) expect(can(admin, a, "processo", RDN), a).toBe(false);
+    expect(can(admin, "ver", "documento", RDN)).toBe(false);
+    expect(can(admin, "fiscalizar", "fiscalizacao", RDN)).toBe(false);
+  });
+
+  it("ADMIN da organização B vê só os seus municípios", () => {
+    expect(escopoMunicipios(adminB)).toEqual([RDN]);
+    expect(whereMunicipio(adminB)).toEqual({ municipio_id: { in: [RDN] } });
+    for (const m of [CSE, LOR, SSR]) {
+      expect(podeVerMunicipio(adminB, m)).toBe(false);
+      expect(can(adminB, "ver", "processo", m)).toBe(false);
+      expect(whereMunicipio(adminB, m)).toEqual({ municipio_id: UUID_NENHUM });
+    }
+    expect(can(adminB, "decidir", "processo", RDN)).toBe(true);
+  });
+
+  it("SEMA_INEMA da organização A não vê a organização B (e vice-versa)", () => {
+    expect(podeVerMunicipio(sema, RDN)).toBe(false);
+    expect(can(sema, "ver", "processo", RDN)).toBe(false);
+    expect(can(sema, "ver", "relatorio", RDN)).toBe(false);
+    expect(escopoMunicipios(semaB)).toEqual([RDN]);
+    expect(can(semaB, "ver", "processo", LOR)).toBe(false);
+    expect(can(semaB, "ver", "processo", RDN)).toBe(true);
+  });
+
+  it("papel municipal apontando para município de outra organização não dá acesso (defesa em profundidade)", () => {
+    const torto = usuario([["TEC_MUNICIPAL", RDN]], null, ORG_A);
+    expect(escopoMunicipios(torto)).toEqual([]);
+    expect(can(torto, "ver", "processo", RDN)).toBe(false);
+    expect(escopoMunicipios(tecB)).toEqual([RDN]);
+  });
+
+  it("usuário interno sem organização não enxerga nada (nega por padrão)", () => {
+    const orfao = usuario([["ADMIN", null]], null, null);
+    expect(escopoMunicipios(orfao)).toEqual([]);
+    expect(whereMunicipio(orfao)).toEqual({ municipio_id: { in: [] } });
+    expect(can(orfao, "ver", "processo", LOR)).toBe(false);
+    expect(whereOrganizacao(orfao)).toEqual({ organizacao_id: UUID_NENHUM });
+  });
+
+  it("configuração e técnicos filtrados pela organização", () => {
+    expect(whereOrganizacao(admin)).toEqual({ organizacao_id: ORG_A });
+    expect(whereOrganizacao(adminB)).toEqual({ organizacao_id: ORG_B });
+    expect(whereTecnicosEscopo(adminB)).toMatchObject({ organizacao_id: ORG_B });
+    expect(temEscopoOrganizacao(adminB)).toBe(true);
+    expect(temEscopoOrganizacao(tecB)).toBe(false);
+  });
+
+  it("pessoas e responsáveis técnicos do escopo organização ficam na organização", () => {
+    const w = wherePessoaEscopo(adminB) as { OR: Record<string, unknown>[] };
+    expect(w.OR[0]).toEqual({ organizacao_id: ORG_B });
+    expect(JSON.stringify(w)).not.toContain(LOR);
+    expect(JSON.stringify(whereResponsavelEscopo(admin))).toContain(ORG_A);
+    expect(JSON.stringify(whereResponsavelEscopo(admin))).not.toContain(ORG_B);
+  });
+
+  it("requerente continua global: filtrado por titularidade, não por organização", () => {
+    expect(can(requerente, "criar", "processo", RDN)).toBe(true);
+    expect(whereProcessoEscopo(requerente)).toEqual({ OR: [{ requerente_id: PESSOA }, { rt: { pessoa_id: PESSOA } }] });
   });
 });

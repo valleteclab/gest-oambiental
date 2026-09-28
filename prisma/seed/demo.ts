@@ -281,6 +281,7 @@ async function main() {
   const { FiscalizacaoSchema, AutoInfracaoSchema, NotificacaoSchema, DenunciaInternaSchema, DenunciaPublicaSchema } = await import("../../lib/fiscalizacao/schemas");
   const { gerarAlertas } = await import("../../lib/alertas/gerar");
   const { registrarBackup, registrarTesteRestauracao } = await import("../../lib/backup/registrar");
+  const { sessaoPorEmail } = await import("../../lib/sessao");
   type UsuarioSessao = import("../../lib/rbac").UsuarioSessao;
 
   const log = (...a: unknown[]) => console.log(`[demo ${((Date.now() - t0) / 1000).toFixed(0).padStart(3)}s]`, ...a);
@@ -289,17 +290,19 @@ async function main() {
   const cacheSessao = new Map<string, UsuarioSessao>();
   async function sessao(email: string): Promise<UsuarioSessao> {
     if (cacheSessao.has(email)) return cacheSessao.get(email)!;
-    const u = await prisma.usuario.findUnique({ where: { email }, include: { papeis: true } });
-    if (!u) throw new Error(`Usuário ${email} não encontrado – rode o seed base (npm run seed:base).`);
-    const s: UsuarioSessao = { id: u.id, nome: u.nome, email: u.email, cargo: u.cargo, pessoa_id: u.pessoa_id, trocar_senha: u.trocar_senha, papeis: u.papeis.map((p) => ({ papel: p.papel, municipio_id: p.municipio_id })) };
+    const s: UsuarioSessao = await sessaoPorEmail(email).catch(() => {
+      throw new Error(`Usuário ${email} não encontrado – rode o seed base (npm run seed:base).`);
+    });
     cacheSessao.set(email, s);
     return s;
   }
 
-  const municipios = await prisma.municipio.findMany();
+  // Somente a organização de demonstração (outras organizações/clientes podem existir na mesma base).
+  const orgDemo = await prisma.organizacao.findFirstOrThrow({ where: { sigla: "CID-DEMO" } });
+  const municipios = await prisma.municipio.findMany({ where: { organizacao_id: orgDemo.id } });
   const mun = Object.fromEntries(municipios.map((m) => [m.sigla, m]));
-  const tipologias = Object.fromEntries((await prisma.tipologia.findMany()).map((t) => [t.codigo, t]));
-  const atos = Object.fromEntries((await prisma.tipoAto.findMany()).map((t) => [t.sigla, t]));
+  const tipologias = Object.fromEntries((await prisma.tipologia.findMany({ where: { organizacao_id: orgDemo.id } })).map((t) => [t.codigo, t]));
+  const atos = Object.fromEntries((await prisma.tipoAto.findMany({ where: { organizacao_id: orgDemo.id } })).map((t) => [t.sigla, t]));
   const admin = await sessao("admin@licenciagov.demo");
   const COM_EQUIPE = new Set(["LOR", "SSR", "CSE"]); // municípios com técnico/gestor/fiscal próprios no seed base
   const gestorDe = (sigla: string) => (COM_EQUIPE.has(sigla) ? sessao(`gestor.${sigla.toLowerCase()}@licenciagov.demo`) : Promise.resolve(admin));
@@ -590,7 +593,7 @@ async function main() {
   log("Registros de backup e teste de restauração criados.");
 
   // ── Alertas (T3) ──
-  const alertas = await gerarAlertas();
+  const alertas = await gerarAlertas(new Date(), { organizacao_id: orgDemo.id });
   log(`Alertas: ${alertas.alertas_criados} criados, ${alertas.emails_enviados} e-mails na caixa de teste.${alertas.erros.length ? " Erros: " + alertas.erros.join("; ") : ""}`);
 
   // ── Resumo ──

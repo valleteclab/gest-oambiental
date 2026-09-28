@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PoligonoGeoJsonSchema } from "@/lib/geo/validar";
 import { mascararCpfCnpj, somenteDigitos, validarCNPJ, validarCPF } from "@/lib/crypto";
 
 // Schemas zod compartilhados por API (/api/v1) e Server Actions dos cadastros (SPEC 5.2).
@@ -115,29 +116,9 @@ const numOpc = (min: number, max: number, msg: string) =>
       return n;
     });
 
-const TIPOS_GEOJSON = ["Polygon", "MultiPolygon", "Feature", "FeatureCollection"];
-
-export const PoligonoSchema = z
-  .union([z.string(), z.record(z.string(), z.unknown())])
-  .optional()
-  .nullable()
-  .transform((v, ctx) => {
-    if (v === null || v === undefined || v === "") return null;
-    let obj: unknown = v;
-    if (typeof v === "string") {
-      try {
-        obj = JSON.parse(v);
-      } catch {
-        ctx.addIssue({ code: "custom", message: "Polígono: JSON inválido." });
-        return z.NEVER;
-      }
-    }
-    if (!obj || typeof obj !== "object" || !TIPOS_GEOJSON.includes(String((obj as { type?: unknown }).type))) {
-      ctx.addIssue({ code: "custom", message: `Polígono: GeoJSON deve ser do tipo ${TIPOS_GEOJSON.join(", ")}.` });
-      return z.NEVER;
-    }
-    return obj as Record<string, unknown>;
-  });
+// Polygon/MultiPolygon validado (anéis fechados, coordenadas no intervalo, ≤ 300 KB) – lib/geo/validar.ts.
+// Feature/FeatureCollection são aceitos e convertidos para a geometria.
+export const PoligonoSchema = PoligonoGeoJsonSchema;
 
 export const EmpreendimentoSchema = z.object({
   municipio_id: z.uuid("Selecione o município."),

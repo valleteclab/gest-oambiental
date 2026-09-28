@@ -5,6 +5,8 @@ import { auditar } from "@/lib/audit";
 import { invalido } from "@/lib/http";
 import { acaoAdmin, bool, obrigatorio, txt } from "@/lib/admin/acao";
 import type { EstadoAcao } from "@/lib/admin/guard";
+import { organizacaoDoAdmin } from "@/lib/admin/escopo";
+import { naoEncontrado } from "@/lib/http";
 
 const TIPOS: TipoDocumento[] = ["LICENCA", "AUTORIZACAO", "CERTIDAO", "AUTO_INFRACAO", "NOTIFICACAO", "PARECER", "OFICIO", "RECIBO"];
 
@@ -18,11 +20,13 @@ export async function salvarNovaVersao(_: EstadoAcao, f: FormData): Promise<Esta
     if (html.length < 20) throw invalido("O HTML do modelo está vazio ou muito curto.", { campo: "html" });
     if (/<script[\s>]/i.test(html)) throw invalido("Scripts não são permitidos no modelo.", { campo: "html" });
     const ativar = bool(f, "ativar");
+    // Versões são da ORGANIZAÇÃO do admin (modelos globais da plataforma nunca são alterados por um cliente).
+    const organizacao_id = organizacaoDoAdmin(u);
     const m = await prisma.$transaction(async (tx) => {
-      const ultima = await tx.modeloDocumento.aggregate({ where: { tipo }, _max: { versao: true } });
+      const ultima = await tx.modeloDocumento.aggregate({ where: { tipo, organizacao_id }, _max: { versao: true } });
       const versao = (ultima._max.versao ?? 0) + 1;
-      if (ativar) await tx.modeloDocumento.updateMany({ where: { tipo, ativo: true }, data: { ativo: false } });
-      const m = await tx.modeloDocumento.create({ data: { tipo, nome, html, versao, ativo: ativar, created_by: u.id } });
+      if (ativar) await tx.modeloDocumento.updateMany({ where: { tipo, organizacao_id, ativo: true }, data: { ativo: false } });
+      const m = await tx.modeloDocumento.create({ data: { organizacao_id, tipo, nome, html, versao, ativo: ativar, created_by: u.id } });
       await auditar({ usuario_id: u.id, acao: "NOVA_VERSAO", entidade: "modelo_documento", entidade_id: m.id, depois: { tipo, nome, versao, ativo: ativar, tamanho_html: html.length, origem_id: txt(f, "origem_id") || null } }, tx);
       return m;
     });
@@ -33,10 +37,11 @@ export async function salvarNovaVersao(_: EstadoAcao, f: FormData): Promise<Esta
 export async function alternarAtivo(_: EstadoAcao, f: FormData): Promise<EstadoAcao> {
   return acaoAdmin("/admin/modelos", async (u) => {
     const id = obrigatorio(f, "id", "o modelo");
-    const m = await prisma.modeloDocumento.findUniqueOrThrow({ where: { id } });
+    const m = await prisma.modeloDocumento.findFirst({ where: { id, organizacao_id: organizacaoDoAdmin(u) } });
+    if (!m) throw naoEncontrado("Modelo não encontrado (modelos globais da plataforma não podem ser alterados – salve uma versão própria).");
     const ativo = !m.ativo;
     await prisma.$transaction(async (tx) => {
-      if (ativo) await tx.modeloDocumento.updateMany({ where: { tipo: m.tipo, ativo: true }, data: { ativo: false } });
+      if (ativo) await tx.modeloDocumento.updateMany({ where: { tipo: m.tipo, organizacao_id: m.organizacao_id, ativo: true }, data: { ativo: false } });
       await tx.modeloDocumento.update({ where: { id }, data: { ativo } });
       await auditar({ usuario_id: u.id, acao: ativo ? "ATIVAR" : "DESATIVAR", entidade: "modelo_documento", entidade_id: id, antes: { ativo: m.ativo }, depois: { ativo } }, tx);
     });
