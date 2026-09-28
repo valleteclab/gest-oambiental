@@ -12,6 +12,7 @@ import { Aviso, Badge, CabecalhoPagina, Card, Vazio } from "@/components/ui";
 import { NavEtapas, WizardRequerimento, type DadosWizard } from "@/components/processo/wizard-requerimento";
 import { BotaoReemitir } from "../_componentes/formularios";
 import { CadastroRequerenteBalcao } from "./cadastro-requerente";
+import { lerDadosDemanda } from "@/lib/demandas/catalogo";
 
 // Novo processo (balcão): servidor interno protocola em nome de um requerente que compareceu ao órgão.
 // Passo 0 (esta página, sem ?requerente): busca/cadastro do requerente; depois o mesmo wizard do requerente.
@@ -77,7 +78,9 @@ export default async function NovoProcessoBalcao({ searchParams }: { searchParam
       tipologia_id: p.empreendimento.tipologia_id,
       grandeza: p.empreendimento.grandeza_porte?.toString() ?? "",
       tipo_ato_id: p.tipo_ato_id,
-      descricao_atividade: p.descricao_atividade ?? "",
+      // Demandas urbanas: campos do serviço ficam em texto estruturado na descrição (lib/demandas)
+      descricao_atividade: lerDadosDemanda(p.descricao_atividade)?.livre ?? p.descricao_atividade ?? "",
+      dados_demanda: lerDadosDemanda(p.descricao_atividade)?.dados,
       exigidos: exigidos.map((d) => ({ id: d.id, nome: d.nome, obrigatorio: d.obrigatorio, formatos: d.formatos })),
       anexos: p.anexos.map((a) => ({ id: a.id, nome: a.nome_arquivo, tamanho: a.tamanho, documento_exigido_id: a.documento_exigido_id })),
     };

@@ -10,9 +10,11 @@ export type TipoAlerta =
   | "PENDENCIA_VENCIDA"
   | "LICENCA_RENOVACAO"
   | "CONDICIONANTE"
-  | "NOTIFICACAO";
+  | "NOTIFICACAO"
+  | "DESMATAMENTO";
 
-export type ReferenciaTipo = "PROCESSO" | "PENDENCIA" | "DOCUMENTO" | "CONDICIONANTE" | "NOTIFICACAO";
+/** ALERTA_DESMATAMENTO / MONITORAMENTO: avisos do monitoramento por satélite (lib/monitoramento/sync.ts). */
+export type ReferenciaTipo = "PROCESSO" | "PENDENCIA" | "DOCUMENTO" | "CONDICIONANTE" | "NOTIFICACAO" | "ALERTA_DESMATAMENTO" | "MONITORAMENTO";
 
 export const ROTULO_TIPO_ALERTA: Record<TipoAlerta, string> = {
   PRAZO_VENCENDO: "Prazo vencendo",
@@ -22,6 +24,7 @@ export const ROTULO_TIPO_ALERTA: Record<TipoAlerta, string> = {
   LICENCA_RENOVACAO: "Renovação de licença",
   CONDICIONANTE: "Condicionante",
   NOTIFICACAO: "Notificação",
+  DESMATAMENTO: "Desmatamento (satélite)",
 };
 
 /** Status em que o relógio da etapa corre (SPEC 6). AGUARDANDO_REQUERENTE fica pausado. */

@@ -57,6 +57,8 @@ export const DESCRICAO_TABELA: Record<string, string> = {
   MensagemConversa: "Mensagens das conversas (cidadão, IA, atendente). Mídias em anexos/{midia_key} não são copiadas; as fotos da denúncia estão em anexo.",
   EventoWebhook: "Caixa bruta de webhooks (transitória) – NÃO exportada por organização (somente cabeçalho).",
   UsoIa: "Consumo de IA (tokens e custo estimado em US$) por organização.",
+  AlertaDesmatamento: "Alertas de desmatamento por satélite (INPE DETER/PRODES, MapBiomas) do município: polígono (GeoJSON WGS84), área, cruzamento com CAR e licenças locais, sugestão e situação do tratamento.",
+  MonitoramentoSync: "Execuções da sincronização do monitoramento por satélite (origem, situação, resumo por fonte).",
 };
 
 const DESCRICAO_COLUNA: Record<string, string> = {

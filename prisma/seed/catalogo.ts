@@ -2,8 +2,29 @@
 // checklist padrão, prazos por etapa e feriados nacionais. Usado pelo seed base (organização de demonstração)
 // e pelo onboarding de clientes (prisma/seed/onboarding.ts). Idempotente: só cria o que falta.
 import type { PrismaClient, PotencialPoluidor, CategoriaAto } from "@prisma/client";
+import { CHECKLIST_PODA, CHECKLIST_SOM, DOC_ANUENCIA, DOC_LAUDO_ACUSTICO } from "../../lib/demandas/catalogo";
 
-export const TIPOS_ATO: { sigla: string; nome: string; categoria: CategoriaAto; validade: number | null; vistoria: boolean; prazo: number }[] = [
+export type TipoAtoCatalogo = {
+  sigla: string;
+  nome: string;
+  categoria: CategoriaAto;
+  validade: number | null;
+  vistoria: boolean;
+  /** prazo de análise (dias) */
+  prazo: number;
+  /** exige parecer técnico antes da decisão (padrão: true, exceto DECL) */
+  parecer?: boolean;
+  /** tipo_ato.modelo_documento (padrão: pela categoria) */
+  modelo?: string;
+  /** checklist próprio (padrão: checklist padrão de análise) */
+  checklist?: "PODA" | "SOM";
+  /** documentos exigidos próprios [nome, obrigatório, formatos] (padrão: documentosPadrao(categoria)) */
+  documentos?: [string, boolean, string][];
+};
+
+const IMG = "pdf,jpg,png";
+
+export const TIPOS_ATO: TipoAtoCatalogo[] = [
   { sigla: "LP", nome: "Licença Prévia", categoria: "LICENCA", validade: 36, vistoria: true, prazo: 60 },
   { sigla: "LI", nome: "Licença de Instalação", categoria: "LICENCA", validade: 48, vistoria: true, prazo: 60 },
   { sigla: "LO", nome: "Licença de Operação", categoria: "LICENCA", validade: 48, vistoria: true, prazo: 60 },
@@ -15,6 +36,38 @@ export const TIPOS_ATO: { sigla: string; nome: string; categoria: CategoriaAto; 
   { sigla: "ASV", nome: "Autorização de Supressão de Vegetação", categoria: "AUTORIZACAO", validade: 12, vistoria: true, prazo: 60 },
   { sigla: "CERT_DISP", nome: "Certidão de Dispensa / Não Exigibilidade", categoria: "CERTIDAO", validade: 24, vistoria: false, prazo: 30 },
   { sigla: "DECL", nome: "Declaração Ambiental", categoria: "DECLARACAO", validade: null, vistoria: false, prazo: 30 },
+  // ── Demandas urbanas (fluxo simplificado – lib/demandas): sem parecer, decisão pelo técnico/gestor, distribuição automática ──
+  {
+    sigla: "APC", nome: "Autorização de Poda/Corte de Árvore", categoria: "AUTORIZACAO", validade: 6, vistoria: true, prazo: 15, parecer: false, modelo: "AUTORIZACAO_PODA", checklist: "PODA",
+    documentos: [
+      ["Foto(s) da árvore (visão geral e do tronco)", true, IMG],
+      ["Localização da árvore (endereço, ponto de referência ou croqui)", true, IMG],
+      ["Justificativa do pedido (risco à rede elétrica/edificação, doença, obra)", true, IMG],
+      ["Comprovante de propriedade do imóvel ou autorização do proprietário", true, IMG],
+      ["Laudo técnico ou ART (quando houver)", false, IMG],
+    ],
+  },
+  {
+    // Validade = duração do evento (calculada pelas datas do pedido – lib/demandas validadeDemanda)
+    sigla: "ASE", nome: "Autorização para Emissão Sonora em Evento", categoria: "AUTORIZACAO", validade: null, vistoria: false, prazo: 5, parecer: false, modelo: "AUTORIZACAO_SOM", checklist: "SOM",
+    documentos: [
+      ["Croqui ou endereço do local do evento", true, IMG],
+      ["Programação do evento (data e horário)", true, IMG],
+      ["Estimativa de público (declaração do organizador)", true, IMG],
+      ["Descrição do equipamento de som (potência e nº de caixas)", true, IMG],
+      [`${DOC_ANUENCIA} (obrigatória em área residencial)`, false, IMG],
+      [`${DOC_LAUDO_ACUSTICO} (obrigatório para eventos de grande porte)`, false, IMG],
+    ],
+  },
+  {
+    // Validade de 30 ou 90 dias conforme o pedido (padrão 3 meses)
+    sigla: "ACS", nome: "Autorização para Carro/Propaganda de Som", categoria: "AUTORIZACAO", validade: 3, vistoria: false, prazo: 3, parecer: false, modelo: "AUTORIZACAO_SOM", checklist: "SOM",
+    documentos: [
+      ["CRLV do veículo", true, IMG],
+      ["CNH do condutor", true, IMG],
+      ["Descrição do equipamento de som (tipo e potência)", true, IMG],
+    ],
+  },
 ];
 
 export type TipologiaCatalogo = {
@@ -39,6 +92,10 @@ export const TIPOLOGIAS: TipologiaCatalogo[] = [
   { codigo: "F1.1", divisao: "Mineração", descricao: "Extração de areia / cascalho", unidade: "volume (m³/ano)", pp: "MEDIO", faixas: [5000, 20000, 60000, 120000] },
   { codigo: "G1.1", divisao: "Parcelamento do solo", descricao: "Loteamento urbano", unidade: "área total (ha)", pp: "MEDIO", faixas: [5, 20, 50, 100] },
   { codigo: "H1.1", divisao: "Serviços de saúde", descricao: "Clínicas e consultórios com geração de RSS", unidade: "área construída (m²)", pp: "BAIXO", faixas: [200, 500, 1500, 3000] },
+  // Demandas urbanas (lib/demandas TIPOLOGIA_DEMANDA): "empreendimento" = imóvel/local/veículo; casos usuais → MICRO/BAIXO
+  { codigo: "U1.1", divisao: "Demandas urbanas", descricao: "Imóvel urbano (poda/corte de árvore)", unidade: "nº de árvores", pp: "BAIXO", faixas: [10, 50, 200, 1000] },
+  { codigo: "U1.2", divisao: "Demandas urbanas", descricao: "Evento com emissão sonora", unidade: "público estimado (pessoas)", pp: "BAIXO", faixas: [1000, 5000, 20000, 100000] },
+  { codigo: "U1.3", divisao: "Demandas urbanas", descricao: "Veículo de propaganda sonora", unidade: "nº de veículos", pp: "BAIXO", faixas: [1, 5, 20, 50] },
 ];
 
 export const PORTES = ["MICRO", "PEQUENO", "MEDIO", "GRANDE", "EXCEPCIONAL"] as const;
@@ -91,7 +148,7 @@ export const FERIADOS_NACIONAIS_2026: [string, string][] = [
 
 export type DocumentoExtra = { tipo_ato: string; tipologia?: string | null; nome: string; obrigatorio?: boolean; formatos?: string };
 
-export type ResumoCatalogo = { tipos_ato: number; documentos: number; tipologias: number; checklist: boolean; prazos: number; feriados: number };
+export type ResumoCatalogo = { tipos_ato: number; documentos: number; tipologias: number; checklist: boolean; checklists: number; prazos: number; feriados: number };
 
 /**
  * Aplica o catálogo-base (e tipologias/documentos extras do cliente) à organização. Idempotente:
@@ -102,7 +159,7 @@ export async function aplicarCatalogo(
   organizacaoId: string,
   extras: { tipologias?: TipologiaCatalogo[]; documentos?: DocumentoExtra[] } = {},
 ): Promise<ResumoCatalogo> {
-  const r: ResumoCatalogo = { tipos_ato: 0, documentos: 0, tipologias: 0, checklist: false, prazos: 0, feriados: 0 };
+  const r: ResumoCatalogo = { tipos_ato: 0, documentos: 0, tipologias: 0, checklist: false, checklists: 0, prazos: 0, feriados: 0 };
 
   let checklist = await prisma.checklistModelo.findFirst({ where: { nome: CHECKLIST_PADRAO.nome, organizacao_id: organizacaoId } });
   if (!checklist) {
@@ -110,22 +167,33 @@ export async function aplicarCatalogo(
     r.checklist = true;
   }
 
+  // Checklists próprios das demandas urbanas (criados só quando algum tipo de ato os usa)
+  const proprios: Record<"PODA" | "SOM", { nome: string; itens: unknown[] }> = { PODA: CHECKLIST_PODA, SOM: CHECKLIST_SOM };
+  const checklistDe = async (k: "PODA" | "SOM") => {
+    const m = proprios[k];
+    const achado = await prisma.checklistModelo.findFirst({ where: { nome: m.nome, organizacao_id: organizacaoId } });
+    if (achado) return achado;
+    r.checklists++;
+    return prisma.checklistModelo.create({ data: { organizacao_id: organizacaoId, nome: m.nome, itens: m.itens as object[] } });
+  };
+
   for (const t of TIPOS_ATO) {
     let ato = await prisma.tipoAto.findUnique({ where: { organizacao_id_sigla: { organizacao_id: organizacaoId, sigla: t.sigla } } });
     if (!ato) {
       ato = await prisma.tipoAto.create({
         data: {
           organizacao_id: organizacaoId, sigla: t.sigla, nome: t.nome, categoria: t.categoria, validade_meses_padrao: t.validade,
-          exige_vistoria: t.vistoria, exige_parecer: t.sigla !== "DECL", prazo_analise_dias: t.prazo,
-          modelo_documento: t.categoria === "CERTIDAO" || t.categoria === "DECLARACAO" ? "CERTIDAO" : t.categoria === "AUTORIZACAO" ? "AUTORIZACAO" : "LICENCA",
-          checklist_modelo_id: checklist.id,
+          exige_vistoria: t.vistoria, exige_parecer: t.parecer ?? t.sigla !== "DECL", prazo_analise_dias: t.prazo,
+          modelo_documento: t.modelo ?? (t.categoria === "CERTIDAO" || t.categoria === "DECLARACAO" ? "CERTIDAO" : t.categoria === "AUTORIZACAO" ? "AUTORIZACAO" : "LICENCA"),
+          checklist_modelo_id: t.checklist ? (await checklistDe(t.checklist)).id : checklist.id,
         },
       });
       r.tipos_ato++;
     }
     if ((await prisma.documentoExigido.count({ where: { tipo_ato_id: ato.id, tipologia_id: null } })) === 0) {
-      const docs = documentosPadrao(t.categoria);
-      await prisma.documentoExigido.createMany({ data: docs.map(([nome, obrigatorio]) => ({ tipo_ato_id: ato.id, nome, obrigatorio, formatos: nome.includes("KML") ? "pdf,kml,kmz,dwg" : "pdf,jpg,png" })) });
+      const docs: [string, boolean, string][] = t.documentos ?? documentosPadrao(t.categoria).map(([nome, obrigatorio]) => [nome, obrigatorio, nome.includes("KML") ? "pdf,kml,kmz,dwg" : "pdf,jpg,png"]);
+      // Um a um (created_at crescente): a ordem do catálogo é a ordem exibida ao requerente
+      for (const [nome, obrigatorio, formatos] of docs) await prisma.documentoExigido.create({ data: { tipo_ato_id: ato.id, nome, obrigatorio, formatos } });
       r.documentos += docs.length;
     }
   }

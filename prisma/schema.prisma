@@ -205,6 +205,20 @@ enum StatusExportacao {
   ERRO
 }
 
+enum FonteAlertaDesmatamento {
+  DETER
+  PRODES
+  MAPBIOMAS
+}
+
+enum StatusAlertaDesmatamento {
+  NOVO
+  EM_ANALISE
+  AUTORIZADO
+  IRREGULAR
+  DESCARTADO
+}
+
 enum Severidade {
   CRITICO
   NAO_CRITICO
@@ -232,6 +246,8 @@ model Organizacao {
   modelos       ModeloDocumento[]
   exportacoes   Exportacao[]
   canais        CanalAtendimento[]
+  alertas_desmatamento AlertaDesmatamento[]
+  monitoramento_syncs  MonitoramentoSync[]
 
   @@map("organizacao")
 }
@@ -271,6 +287,8 @@ model Municipio {
   chamados       ChamadoSuporte[]
   canais         CanalAtendimento[]
   conversas      Conversa[]
+  alertas_desmatamento AlertaDesmatamento[]
+  monitoramento_syncs  MonitoramentoSync[]
 
   @@map("municipio")
 }
@@ -757,6 +775,7 @@ model DocumentoOficial {
   municipio    Municipio     @relation(fields: [municipio_id], references: [id])
   processo     Processo?     @relation(fields: [processo_id], references: [id])
   fiscalizacao Fiscalizacao? @relation(fields: [fiscalizacao_id], references: [id])
+  alertas_desmatamento AlertaDesmatamento[]
 
   @@unique([municipio_id, tipo, numero])
   @@map("documento_oficial")
@@ -788,6 +807,7 @@ model Denuncia {
   fiscalizacoes Fiscalizacao[]
   anexos        Anexo[]
   conversa      Conversa?      @relation(fields: [conversa_id], references: [id], onDelete: SetNull)
+  alertas_desmatamento AlertaDesmatamento[]
 
   @@index([contato_hash])
   @@map("denuncia")
@@ -821,6 +841,7 @@ model Fiscalizacao {
   autos          AutoInfracao[]
   notificacoes   Notificacao[]
   documentos     DocumentoOficial[]
+  alertas_desmatamento AlertaDesmatamento[]
 
   @@map("fiscalizacao")
 }
@@ -1137,4 +1158,64 @@ model UsoIa {
 
   @@index([organizacao_id, created_at])
   @@map("uso_ia")
+}
+
+// ───────────────────── Monitoramento por satélite (docs/monitoramento.md) ─────────────────────
+
+/// Alerta de desmatamento (INPE DETER/PRODES, MapBiomas Alerta) no município, cruzado com o CAR e as licenças locais.
+model AlertaDesmatamento {
+  id              String                   @id @default(uuid()) @db.Uuid
+  organizacao_id  String                   @db.Uuid
+  municipio_id    String                   @db.Uuid
+  fonte           FonteAlertaDesmatamento
+  id_externo      String // identificador na fonte (DETER gid, PRODES uuid, MapBiomas alertCode)
+  classe          String // DESMATAMENTO_CR, DESMATAMENTO, d2024…
+  data_deteccao   DateTime                 @db.Date
+  area_ha         Decimal                  @db.Decimal(14, 4)
+  geometria       Json? // Polygon/MultiPolygon WGS84 simplificado (≤ 300 KB)
+  latitude        Decimal                  @db.Decimal(9, 6) // centroide
+  longitude       Decimal                  @db.Decimal(9, 6)
+  status          StatusAlertaDesmatamento @default(NOVO)
+  status_sugerido String? // AUTORIZADO | POSSIVEL_IRREGULAR | SEM_CAR | INDETERMINADO (lib/monitoramento/regras.ts)
+  cruzamento      Json? // {car:{imoveis:[{cod_imovel, sobreposicao_ha…}]}, empreendimentos:[…], sugestao, motivo}
+  cruzado_em      DateTime?
+  dados_fonte     Json? // atributos originais da fonte
+  fiscalizacao_id String?                  @db.Uuid
+  denuncia_id     String?                  @db.Uuid
+  documento_id    String?                  @db.Uuid // licença/ASV vinculada ao marcar AUTORIZADO
+  observacao      String?
+  atualizado_por  String?                  @db.Uuid
+  created_at      DateTime                 @default(now())
+  updated_at      DateTime                 @updatedAt
+
+  organizacao  Organizacao       @relation(fields: [organizacao_id], references: [id])
+  municipio    Municipio         @relation(fields: [municipio_id], references: [id])
+  fiscalizacao Fiscalizacao?     @relation(fields: [fiscalizacao_id], references: [id], onDelete: SetNull)
+  denuncia     Denuncia?         @relation(fields: [denuncia_id], references: [id], onDelete: SetNull)
+  documento    DocumentoOficial? @relation(fields: [documento_id], references: [id], onDelete: SetNull)
+
+  @@unique([fonte, id_externo])
+  @@index([municipio_id, status])
+  @@index([municipio_id, data_deteccao])
+  @@map("alerta_desmatamento")
+}
+
+/// Execuções da sincronização do monitoramento por satélite (job diário e "Sincronizar agora").
+model MonitoramentoSync {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizacao_id String    @db.Uuid
+  municipio_id   String    @db.Uuid
+  origem         String // agendado | manual
+  usuario_id     String?   @db.Uuid
+  status         String // EXECUTANDO | OK | PARCIAL | ERRO | IGNORADO
+  iniciado_em    DateTime  @default(now())
+  concluido_em   DateTime?
+  resumo         Json? // por fonte: recebidos, novos, atualizados, cruzados, erros
+  erro           String?
+
+  organizacao Organizacao @relation(fields: [organizacao_id], references: [id])
+  municipio   Municipio   @relation(fields: [municipio_id], references: [id])
+
+  @@index([municipio_id, iniciado_em])
+  @@map("monitoramento_sync")
 }

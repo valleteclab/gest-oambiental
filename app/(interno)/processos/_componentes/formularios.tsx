@@ -5,47 +5,65 @@ import { gerarPdfParecerAcao, gerarReciboAcao, salvarChecklistAcao } from "@/lib
 import type { ItemChecklist } from "@/lib/processo/maquina";
 import { ACCEPT_PADRAO, enviarAnexo, type MetaUpload } from "@/lib/processo/upload-cliente";
 
-/** Checklist de análise (SIM_NAO / TEXTO / NUMERO). */
+/** Checklist de análise (SIM_NAO / TEXTO / NUMERO; TEXTO com `opcoes` = escolha única). */
 export function FormChecklist({ processoId, itens, respostas, editavel }: { processoId: string; itens: ItemChecklist[]; respostas: Record<string, unknown>; editavel: boolean }) {
   const [estado, enviar, pendente] = useActionState(salvarChecklistAcao.bind(null, processoId), undefined);
   return (
     <form action={enviar} className="space-y-4" data-testid="form-checklist">
-      <fieldset disabled={!editavel} className="space-y-4">
-        {itens.map((i) => {
-          const id = `item-${i.id}`;
-          const v = respostas[i.id];
-          const valor = v === null || v === undefined ? "" : String(v);
-          return (
-            <div key={i.id} className="rounded-md border border-slate-200 p-3">
-              {i.tipo === "SIM_NAO" ? (
-                <fieldset>
-                  <legend className="text-sm font-medium text-slate-800">{i.texto}{i.obrigatorio && <span className="text-red-700"> *</span>}</legend>
-                  <div className="mt-2 flex flex-wrap gap-4 text-sm">
-                    {([["SIM", "Sim"], ["NAO", "Não"], ["NA", "Não se aplica"]] as const).map(([k, r]) => (
-                      <label key={k} className="inline-flex items-center gap-2">
-                        <input type="radio" name={`item:${i.id}`} value={k} defaultChecked={valor === k} /> {r}
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-              ) : (
-                <>
-                  <label htmlFor={id} className="text-sm font-medium text-slate-800">{i.texto}{i.obrigatorio && <span className="text-red-700"> *</span>}</label>
-                  {i.tipo === "NUMERO" ? (
-                    <input id={id} name={`item:${i.id}`} type="text" inputMode="decimal" className="input mt-1 max-w-xs" defaultValue={valor} />
-                  ) : (
-                    <textarea id={id} name={`item:${i.id}`} className="input mt-1" rows={2} defaultValue={valor} />
-                  )}
-                </>
-              )}
-            </div>
-          );
-        })}
-      </fieldset>
+      <CamposChecklist itens={itens} respostas={respostas} editavel={editavel} />
       {estado?.erro && <p role="alert" className="text-sm text-red-700">{estado.erro}</p>}
       {estado?.ok && <p role="status" className="text-sm text-emerald-700">{estado.mensagem}</p>}
       {editavel && <button className="btn-primario" disabled={pendente}>{pendente ? "Salvando…" : "Salvar checklist"}</button>}
     </form>
+  );
+}
+
+/** Campos do checklist (name="item:<id>") – reutilizados no formulário de vistoria das demandas urbanas (/demandas). */
+export function CamposChecklist({ itens, respostas, editavel }: { itens: ItemChecklist[]; respostas: Record<string, unknown>; editavel: boolean }) {
+  return (
+    <fieldset disabled={!editavel} className="space-y-4">
+      {itens.map((i) => {
+        const id = `item-${i.id}`;
+        const v = respostas[i.id];
+        const valor = v === null || v === undefined ? "" : String(v);
+        return (
+          <div key={i.id} className="rounded-md border border-slate-200 p-3">
+            {i.tipo === "SIM_NAO" ? (
+              <fieldset>
+                <legend className="text-sm font-medium text-slate-800">{i.texto}{i.obrigatorio && <span className="text-red-700"> *</span>}</legend>
+                <div className="mt-2 flex flex-wrap gap-4 text-sm">
+                  {([["SIM", "Sim"], ["NAO", "Não"], ["NA", "Não se aplica"]] as const).map(([k, r]) => (
+                    <label key={k} className="inline-flex min-h-8 items-center gap-2">
+                      <input type="radio" name={`item:${i.id}`} value={k} defaultChecked={valor === k} /> {r}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            ) : i.opcoes?.length ? (
+              <fieldset>
+                <legend className="text-sm font-medium text-slate-800">{i.texto}{i.obrigatorio && <span className="text-red-700"> *</span>}</legend>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-sm">
+                  {i.opcoes.map((o) => (
+                    <label key={o} className="inline-flex min-h-8 items-center gap-2">
+                      <input type="radio" name={`item:${i.id}`} value={o} defaultChecked={valor === o} /> {o}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            ) : (
+              <>
+                <label htmlFor={id} className="text-sm font-medium text-slate-800">{i.texto}{i.obrigatorio && <span className="text-red-700"> *</span>}</label>
+                {i.tipo === "NUMERO" ? (
+                  <input id={id} name={`item:${i.id}`} type="text" inputMode="decimal" className="input mt-1 max-w-xs" defaultValue={valor} />
+                ) : (
+                  <textarea id={id} name={`item:${i.id}`} className="input mt-1" rows={2} defaultValue={valor} />
+                )}
+              </>
+            )}
+          </div>
+        );
+      })}
+    </fieldset>
   );
 }
 

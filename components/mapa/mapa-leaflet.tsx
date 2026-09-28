@@ -28,6 +28,9 @@ const SEM_PM = { pmIgnore: true } as object;
 
 export type PontoMapa = { id: string; lat: number; lng: number; titulo: string; descricao?: string; href?: string; cor?: string };
 
+/** Polígono temático (ex.: alertas de desmatamento coloridos pela situação) com popup e link para a ficha. */
+export type FeicaoMapa = { id: string; geometria: GeoJSON.Geometry; cor: string; titulo: string; descricao?: string; href?: string };
+
 export type PropsMapa = {
   /** Centro inicial. Sem centro (e sem ponto selecionado/pontos), usa o município do órgão ativo. */
   centro?: [number, number];
@@ -48,6 +51,10 @@ export type PropsMapa = {
   editavelPoligono?: boolean;
   /** Chamado ao desenhar, editar, importar ou apagar o polígono (null ao apagar). */
   onPoligono?: (geojson: PoligonoGeo | null, areaM2: number) => void;
+  /** Polígonos temáticos coloridos (somente leitura), com popup e link. */
+  feicoes?: FeicaoMapa[];
+  /** Enquadra as feições na primeira exibição (ignora `centro`). */
+  enquadrarFeicoes?: boolean;
 };
 
 function Clique({ onSelecionar }: { onSelecionar?: (lat: number, lng: number) => void }) {
@@ -97,8 +104,39 @@ function EnquadrarPoligono({ poligono }: { poligono: GeoJSON.GeoJsonObject }) {
   return null;
 }
 
+const escHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+
+/** Camada GeoJSON única com todas as feições (cor por feição, popup com link). */
+function CamadaFeicoes({ feicoes, enquadrar }: { feicoes: FeicaoMapa[]; enquadrar?: boolean }) {
+  const map = useMap();
+  const dados = useMemo<GeoJSON.FeatureCollection>(
+    () => ({ type: "FeatureCollection", features: feicoes.map((f) => ({ type: "Feature", id: f.id, geometry: f.geometria, properties: { cor: f.cor, titulo: f.titulo, descricao: f.descricao ?? "", href: f.href ?? "" } })) }),
+    [feicoes],
+  );
+  const chave = useMemo(() => `${feicoes.length}:${feicoes.map((f) => f.id + f.cor).join("|").length}:${feicoes[0]?.id ?? ""}`, [feicoes]);
+  const feito = useRef(false);
+  useEffect(() => {
+    if (!enquadrar || feito.current || !feicoes.length) return;
+    feito.current = true;
+    const b = L.geoJSON(dados).getBounds();
+    if (b.isValid()) map.fitBounds(b, { padding: [20, 20], maxZoom: 16 });
+  }, [map, dados, enquadrar, feicoes.length]);
+  return (
+    <GeoJSON
+      key={chave}
+      data={dados}
+      {...SEM_PM}
+      style={(f) => ({ color: f?.properties?.cor ?? "#dc2626", weight: 2, fillColor: f?.properties?.cor ?? "#dc2626", fillOpacity: 0.35 })}
+      onEachFeature={(f, layer) => {
+        const p = (f.properties ?? {}) as { titulo?: string; descricao?: string; href?: string };
+        layer.bindPopup(`<strong>${escHtml(p.titulo ?? "")}</strong>${p.descricao ? `<div>${escHtml(p.descricao)}</div>` : ""}${p.href ? `<a href="${escHtml(p.href)}">Abrir ficha</a>` : ""}`);
+      }}
+    />
+  );
+}
+
 export default function MapaLeaflet(props: PropsMapa) {
-  const { centro, zoom = 8, pontos = [], altura = "400px", selecionavel, selecionado, onSelecionar, poligono, publico, camadasIniciais, editavelPoligono, onPoligono } = props;
+  const { centro, zoom = 8, pontos = [], altura = "400px", selecionavel, selecionado, onSelecionar, poligono, publico, camadasIniciais, editavelPoligono, onPoligono, feicoes, enquadrarFeicoes } = props;
   const cfg = useConfigMapas(!publico);
   const [ativas, setAtivas] = useState<string[]>([]);
   const [erros, setErros] = useState<Record<string, true>>({});
@@ -141,6 +179,7 @@ export default function MapaLeaflet(props: PropsMapa) {
             </Popup>
           </Marker>
         ))}
+        {feicoes && feicoes.length > 0 && <CamadaFeicoes feicoes={feicoes} enquadrar={enquadrarFeicoes} />}
         {selecionavel && <Clique onSelecionar={onSelecionar} />}
         {selecionado && <Marker position={selecionado} icon={icone("#b91c1c")} title="Ponto selecionado" {...SEM_PM} />}
         {selecionado && <SeguirSelecionado ponto={selecionado} />}

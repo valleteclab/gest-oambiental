@@ -1,6 +1,6 @@
 // Renderização do HTML final: modelo_documento ativo (placeholders) ou modelo embutido (templates/).
 import { fmtData, fmtDataHora } from "../format";
-import { listaCondicionantes, MODELOS, pagina, type ContextoDocumento } from "@/templates";
+import { chaveModeloEspecifico, listaCondicionantes, MODELOS, MODELOS_ESPECIFICOS, pagina, type ContextoDocumento } from "@/templates";
 import { aplicarPlaceholders, sanitizarHtml } from "./render";
 
 /** Variáveis disponíveis em `modelo_documento.html` ({{x}} escapado; {{{x_html}}} HTML sanitizado). */
@@ -36,6 +36,9 @@ export function variaveisModelo(ctx: ContextoDocumento): Record<string, unknown>
 
 /** HTML completo do documento. `modeloHtml` = html do modelo_documento ativo (opcional). */
 export function renderizarDocumento(ctx: ContextoDocumento, modeloHtml?: string | null): string {
+  // Modelo específico do tipo de ato (ex.: autorização de poda/som) prevalece sobre o modelo genérico da categoria.
+  const especifico = chaveModeloEspecifico(ctx);
+  if (especifico) return MODELOS_ESPECIFICOS[especifico](ctx);
   if (modeloHtml && modeloHtml.trim()) {
     const corpo = aplicarPlaceholders(modeloHtml, variaveisModelo(ctx));
     // Modelo completo (<html>) é usado como está; fragmento recebe cabeçalho institucional + assinatura.

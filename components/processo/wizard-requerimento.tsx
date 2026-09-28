@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState, useTransition } from "react";
+import { Fragment, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
@@ -8,6 +8,7 @@ import { calcularPorte, ROTULO_PORTE } from "@/lib/cadastros/porte";
 import { removerAnexoAcao, salvarRascunhoAcao } from "@/lib/processo/actions";
 import { formatarTamanho } from "@/lib/processo/upload-cliente";
 import { FormAcao } from "@/app/(interno)/processos/_componentes/acoes-processo";
+import { CAMPOS_DEMANDA, ehDemandaUrbana, paresDemanda, TIPOLOGIA_DEMANDA, validarDadosDemanda, type DadosDemanda } from "@/lib/demandas/catalogo";
 import { UploadAnexo } from "@/app/(interno)/processos/_componentes/formularios";
 
 // Wizard de requerimento compartilhado (SPEC 10):
@@ -32,6 +33,8 @@ export type DadosWizard = {
   balcao?: DadosBalcao;
   /** Município padrão de um novo empreendimento (órgão ativo da sessão). */
   municipioPadrao?: string | null;
+  /** Sigla do tipo de ato pré-selecionado (ex.: /novo-requerimento?tipo=APC, vindo de /servicos). */
+  tipoInicial?: string | null;
   municipios: { id: string; nome: string; lat: number | null; lng: number | null }[];
   tipologias: { id: string; codigo: string; divisao: string; descricao: string; unidade_porte: string; faixas_porte: unknown; potencial_poluidor: string }[];
   tiposAto: { id: string; sigla: string; nome: string; categoria: string; validade_meses_padrao: number | null; prazo_analise_dias: number }[];
@@ -43,6 +46,8 @@ export type DadosWizard = {
     grandeza: string;
     tipo_ato_id: string;
     descricao_atividade: string;
+    /** Campos do serviço (demandas urbanas), relidos do texto estruturado da descrição. */
+    dados_demanda?: DadosDemanda;
     exigidos: { id: string; nome: string; obrigatorio: boolean; formatos: string }[];
     anexos: { id: string; nome: string; tamanho: number; documento_exigido_id: string | null }[];
   } | null;
@@ -97,21 +102,28 @@ export function WizardRequerimento({ dados, passoInicial }: { dados: DadosWizard
   const r = dados.rascunho;
   const [passo, setPasso] = useState(passoInicial);
   const [rtId, setRtId] = useState(balcao?.rt_id ?? "");
-  const [modo, setModo] = useState<"existente" | "novo">(r || dados.empreendimentos.length ? "existente" : "novo");
+  // Serviço pré-selecionado (demandas urbanas): tipo de ato, tipologia genérica ("imóvel urbano"…) e novo local.
+  const tipoPre = !r && dados.tipoInicial ? dados.tiposAto.find((t) => t.sigla === dados.tipoInicial) : undefined;
+  const siglaPre = tipoPre?.sigla;
+  const codigoPre = ehDemandaUrbana(siglaPre) ? TIPOLOGIA_DEMANDA[siglaPre] : null;
+  const tipologiaPre = codigoPre ? dados.tipologias.find((t) => t.codigo === codigoPre) : undefined;
+  const [modo, setModo] = useState<"existente" | "novo">(r || (dados.empreendimentos.length && !tipologiaPre) ? "existente" : "novo");
   const [empId, setEmpId] = useState(r?.empreendimento_id ?? dados.empreendimentos[0]?.id ?? "");
   const [novo, setNovo] = useState({ nome: "", municipio_id: dados.municipioPadrao ?? "", logradouro: "", numero: "", bairro: "", cep: "", area_m2: "", numero_car: "" });
   const [ponto, setPonto] = useState<[number, number] | null>(null);
   const empSel = dados.empreendimentos.find((e) => e.id === empId);
-  const [tipologiaId, setTipologiaId] = useState(r?.tipologia_id ?? "");
-  const [grandeza, setGrandeza] = useState(r?.grandeza ?? "");
-  const [tipoAtoId, setTipoAtoId] = useState(r?.tipo_ato_id ?? "");
+  const [tipologiaId, setTipologiaId] = useState(r?.tipologia_id ?? tipologiaPre?.id ?? "");
+  const [grandeza, setGrandeza] = useState(r?.grandeza ?? (tipologiaPre ? "1" : ""));
+  const [tipoAtoId, setTipoAtoId] = useState(r?.tipo_ato_id ?? tipoPre?.id ?? "");
   const [descricao, setDescricao] = useState(r?.descricao_atividade ?? "");
+  const [dadosDemanda, setDadosDemanda] = useState<DadosDemanda>(r?.dados_demanda ?? {});
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, iniciar] = useTransition();
 
   const tipologia = dados.tipologias.find((t) => t.id === tipologiaId);
   const porte = useMemo(() => (tipologia && grandeza !== "" ? calcularPorte(tipologia.faixas_porte, grandeza.replace(",", ".")) : null), [tipologia, grandeza]);
   const tipoAto = dados.tiposAto.find((t) => t.id === tipoAtoId);
+  const siglaDemanda = tipoAto && ehDemandaUrbana(tipoAto.sigla) ? tipoAto.sigla : null;
   const mun = dados.municipios.find((m) => m.id === novo.municipio_id);
   const divisoes = [...new Set(dados.tipologias.map((t) => t.divisao))];
 
@@ -138,6 +150,10 @@ export function WizardRequerimento({ dados, passoInicial }: { dados: DadosWizard
       if (grandeza === "" || !porte) return "Informe a grandeza para cálculo do porte.";
     }
     if (ate >= 3 && !tipoAtoId) return "Selecione o tipo de ato (licença/autorização/certidão).";
+    if (ate >= 3 && siglaDemanda) {
+      const v = validarDadosDemanda(siglaDemanda, dadosDemanda);
+      if (!v.ok) return Object.values(v.erros)[0];
+    }
     return null;
   }
 
@@ -164,6 +180,7 @@ export function WizardRequerimento({ dados, passoInicial }: { dados: DadosWizard
         grandeza: grandeza.replace(",", "."),
         tipo_ato_id: tipoAtoId,
         descricao_atividade: descricao,
+        dados_demanda: siglaDemanda ? dadosDemanda : null,
       });
       if (!res?.ok || !res.id) {
         setErro(res?.erro ?? "Não foi possível salvar o rascunho.");
@@ -179,6 +196,11 @@ export function WizardRequerimento({ dados, passoInicial }: { dados: DadosWizard
 
   return (
     <div className="space-y-5">
+      {siglaDemanda && (
+        <p className="rounded-md border border-primaria-100 bg-primaria-50 px-3 py-2 text-sm text-primaria-900" data-testid="servico-selecionado">
+          Serviço: <strong>{tipoAto!.sigla} – {tipoAto!.nome}</strong>. Na etapa 1, informe o {siglaDemanda === "APC" ? "imóvel onde está a árvore" : siglaDemanda === "ASE" ? "local do evento" : "endereço de guarda do veículo"}; os dados específicos do serviço são pedidos na etapa 3.
+        </p>
+      )}
       <NavEtapas modo={modoWizard} atual={passo} liberado={r ? 5 : 3} onIr={(n) => { setErro(null); setPasso(n); }} />
 
       <section className="card p-4 sm:p-6" aria-labelledby="titulo-passo">
@@ -225,8 +247,8 @@ export function WizardRequerimento({ dados, passoInicial }: { dados: DadosWizard
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">
-                  <label htmlFor="w-nome" className="label">Nome do empreendimento *</label>
-                  <input id="w-nome" className="input" value={novo.nome} onChange={(e) => setNovo({ ...novo, nome: e.target.value })} placeholder="Ex.: Laticínio Boa Vista – unidade Lagoa do Orvalho" />
+                  <label htmlFor="w-nome" className="label">{siglaDemanda ? "Identificação do imóvel/local *" : "Nome do empreendimento *"}</label>
+                  <input id="w-nome" className="input" value={novo.nome} onChange={(e) => setNovo({ ...novo, nome: e.target.value })} placeholder={siglaDemanda ? "Ex.: Residência – Rua das Flores, 120" : "Ex.: Laticínio Boa Vista – unidade Lagoa do Orvalho"} />
                 </div>
                 <div>
                   <label htmlFor="w-mun" className="label">Município *</label>
@@ -321,9 +343,43 @@ export function WizardRequerimento({ dados, passoInicial }: { dados: DadosWizard
                 ))}
               </div>
             </fieldset>
+            {siglaDemanda && (
+              <fieldset className="space-y-3 rounded-md border border-slate-200 p-3" data-testid="dados-servico">
+                <legend className="px-1 text-sm font-semibold text-slate-800">Dados do serviço ({siglaDemanda})</legend>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {CAMPOS_DEMANDA[siglaDemanda].map((c) => {
+                    const idc = `w-d-${c.id}`;
+                    const valor = dadosDemanda[c.id] ?? "";
+                    const set = (v: string) => setDadosDemanda({ ...dadosDemanda, [c.id]: v });
+                    return (
+                      <div key={c.id} className={c.tipo === "texto" && c.id !== "placa" ? "sm:col-span-2" : undefined}>
+                        <label htmlFor={idc} className="label">{c.rotulo}{c.obrigatorio ? " *" : ""}</label>
+                        {c.tipo === "opcao" ? (
+                          <select id={idc} className="input" value={valor} onChange={(e) => set(e.target.value)}>
+                            <option value="">Selecione…</option>
+                            {c.opcoes!.map((o) => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        ) : (
+                          <input
+                            id={idc}
+                            className="input"
+                            type={c.tipo === "data" ? "date" : c.tipo === "hora" ? "time" : "text"}
+                            inputMode={c.tipo === "numero" ? "numeric" : undefined}
+                            value={valor}
+                            onChange={(e) => set(e.target.value)}
+                            aria-describedby={c.dica ? `${idc}-dica` : undefined}
+                          />
+                        )}
+                        {c.dica && <p id={`${idc}-dica`} className="mt-1 text-xs text-slate-500">{c.dica}</p>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            )}
             <div>
-              <label htmlFor="w-desc" className="label">Descrição da atividade</label>
-              <textarea id="w-desc" className="input" rows={4} value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Descreva o processo produtivo, capacidade, horário de funcionamento etc." />
+              <label htmlFor="w-desc" className="label">{siglaDemanda ? "Observações (opcional)" : "Descrição da atividade"}</label>
+              <textarea id="w-desc" className="input" rows={4} value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder={siglaDemanda ? "Informações adicionais para a equipe técnica." : "Descreva o processo produtivo, capacidade, horário de funcionamento etc."} />
             </div>
           </div>
         )}
@@ -371,6 +427,7 @@ export function WizardRequerimento({ dados, passoInicial }: { dados: DadosWizard
               <dt className="text-slate-500">Tipologia</dt><dd>{tipologia ? `${tipologia.codigo} – ${tipologia.descricao}` : "—"}</dd>
               <dt className="text-slate-500">Grandeza / porte</dt><dd>{grandeza} {tipologia?.unidade_porte} · {porte ? ROTULO_PORTE[porte] : "—"}</dd>
               <dt className="text-slate-500">Tipo de ato</dt><dd>{tipoAto ? `${tipoAto.sigla} – ${tipoAto.nome}` : "—"}</dd>
+              {siglaDemanda && paresDemanda(siglaDemanda, dadosDemanda).map(([k, v]) => <Fragment key={k}><dt className="text-slate-500">{k}</dt><dd>{v}</dd></Fragment>)}
               <dt className="text-slate-500">Documentos</dt><dd>{r.anexos.length} arquivo(s) anexado(s)</dd>
             </dl>
             {faltando.length > 0 ? (

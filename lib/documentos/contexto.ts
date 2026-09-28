@@ -178,6 +178,7 @@ export async function carregarContexto(input: EmitirInput, db: Cliente = prisma)
     fiscalizacao: fiscalizacao
       ? { data_hora: fiscalizacao.data_hora, latitude: dec(fiscalizacao.latitude), longitude: dec(fiscalizacao.longitude), relato: fiscalizacao.relato, constatacao: fiscalizacao.constatacao }
       : null,
+    modelo_ato: tipoAto?.modelo_documento ?? null,
     anexos: tipo === "RECIBO" && processo ? processo.anexos.map((a) => ({ nome: a.nome_arquivo, tipo: a.tipo, sha256: a.sha256 })) : [],
     dados: d,
     sigla_municipio: municipio.sigla,

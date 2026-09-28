@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BadgeCheck, FileCheck2, LogIn, Mail, MapPin, Megaphone, Phone, Search } from "lucide-react";
+import { BadgeCheck, FileCheck2, LogIn, Mail, MapPin, Megaphone, Phone, Search, Trees } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { numerosTransparencia } from "@/lib/documentos/publico";
 import { fmtNumero } from "@/lib/format";
@@ -37,6 +37,7 @@ export default async function PortalOrgao({ params }: Params) {
     { href: `/consulta?orgao=${s}`, icone: Search, t: "Consultar processo", d: "Acompanhe pelo número do processo." },
     { href: `/licencas?municipio=${s}`, icone: FileCheck2, t: "Licenças emitidas", d: `Licenças, autorizações e certidões de ${m.nome}.` },
     { href: `/validar?orgao=${s}`, icone: BadgeCheck, t: "Validar documento", d: "Confira a autenticidade pelo código ou QR Code." },
+    { href: `/servicos?orgao=${s}`, icone: Trees, t: "Serviços urbanos", d: "Poda/corte de árvore, som em eventos e carro de som – peça pela internet." },
     { href: `/denuncia?municipio=${s}`, icone: Megaphone, t: "Fazer denúncia", d: "Converse com o Assistente Ambiental ou use o formulário (pode ser anônima)." },
     { href: `/login?orgao=${s}`, icone: LogIn, t: "Entrar", d: "Área do requerente e da equipe do órgão." },
   ];

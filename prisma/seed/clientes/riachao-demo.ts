@@ -10,7 +10,8 @@
 // Os módulos de lib/ importam "server-only": rodar com `tsx --conditions=react-server` (ver package.json).
 import path from "node:path";
 import { readFileSync } from "node:fs";
-import type { StatusProcesso } from "@prisma/client";
+import type { PrismaClient, StatusProcesso } from "@prisma/client";
+import { dataIso, gerarCpf as cpfDemanda, semearDemandas } from "../demandas-demo";
 
 try {
   process.loadEnvFile(path.resolve(__dirname, "../../../.env"));
@@ -176,7 +177,8 @@ async function main() {
     process.exit(1);
   }
   if (await prisma.empreendimento.findFirst({ where: { nome: MARCADOR, municipio_id: municipio.id } })) {
-    console.log(`Dados de demonstração de Riachão das Neves já existem (empreendimento "${MARCADOR}"). Nada a fazer.`);
+    console.log(`Dados de demonstração de Riachão das Neves já existem (empreendimento "${MARCADOR}").`);
+    await demandasUrbanas(prisma); // bloco acrescentado depois: idempotente por demanda (marcador = nome do local)
     await prisma.$disconnect();
     return;
   }
@@ -339,6 +341,9 @@ async function main() {
   const alertas = await gerarAlertas(new Date(), { organizacao_id: org.id });
   const alertasTec = await prisma.alerta.count({ where: { usuario_id: tec.id, lido: false } });
 
+  // ── Demandas urbanas (depois dos alertas: não altera os alertas do técnico gerados acima) ──
+  await demandasUrbanas(prisma);
+
   const porStatus = await prisma.processo.groupBy({ by: ["status"], where: { municipio_id: municipio.id }, _count: true, orderBy: { status: "asc" } });
   const docs = await prisma.documentoOficial.groupBy({ by: ["tipo"], where: { municipio_id: municipio.id }, _count: true, orderBy: { tipo: "asc" } });
   console.log("\n══════════ Demonstração de Riachão das Neves concluída ══════════");
@@ -348,6 +353,39 @@ async function main() {
   console.log(`Denúncias: ${DENUNCIAS.length} · Vistorias: ${VISTORIAS.length} · Alertas criados: ${alertas.alertas_criados} (tecnico.rdn: ${alertasTec} não lido(s))`);
   console.log("Logins (senha do onboarding --demo): admin.rdn@ · tecnico.rdn@ · gestor.rdn@ · fiscal.rdn@ (licenciagov.demo)");
   await prisma.$disconnect();
+}
+
+// ───────────────────────── Demandas urbanas (append-only) ─────────────────────────
+// Poda na praça (concluída, com compensação) e evento com som (em análise). Pessoas, CPFs e locais FICTÍCIOS.
+async function demandasUrbanas(prisma: PrismaClient) {
+  const atos = await prisma.tipoAto.count({ where: { organizacao: { sigla: ORG_SIGLA }, sigla: { in: ["APC", "ASE"] } } });
+  if (atos < 2) {
+    console.log("[riachao] demandas urbanas puladas: catálogo sem APC/ASE – rode `npm run onboard -- riachao-das-neves --atualizar` antes.");
+    return;
+  }
+  const n = await semearDemandas(prisma, {
+    organizacaoSigla: ORG_SIGLA,
+    municipioSigla: MUN,
+    tecnicoEmail: EMAIL.tec,
+    requerentes: [
+      { chave: "paroquia", cpf: cpfDemanda("517924306"), nome: "Antônio Ferreira Lima", email: "zeladoria.praca@exemplo.com.br", telefone: "(77) 99000-4410", logradouro: "Praça da Matriz, 10", bairro: "Centro" },
+      { chave: "festa", cpf: cpfDemanda("628035417"), nome: "Josefa Rodrigues Brito", email: "comissao.festa@exemplo.com.br", telefone: "(77) 99000-5521", logradouro: "Rua do Comércio, 77", bairro: "Centro" },
+    ],
+    demandas: [
+      {
+        local: "Praça da Matriz – poda das árvores", sigla: "APC", alvo: "CONCLUIDO", req: "paroquia", logradouro: "Praça da Matriz, s/n", bairro: "Centro", lat: -11.74638, lng: -44.91018, dias: 16,
+        dados: { especie: "Oiti", quantidade: "3", intervencao: "Poda", motivo: "Risco à rede elétrica", local_arvore: "Praça ou área pública" },
+        observacoes: "Copas encostando na rede elétrica e na iluminação da praça.",
+        checklist: { v1: "Oiti (Moquilea tomentosa)", v2: 35, v3: 8, v4: "Bom", v5: "Médio", v6: "SIM", v7: "Poda", v8: 0, v9: "Poda de adequação da copa; árvores sadias, sem necessidade de supressão." },
+      },
+      {
+        local: "Praça da Matriz – Festa do Padroeiro (som)", sigla: "ASE", alvo: "EM_ANALISE", req: "festa", logradouro: "Praça da Matriz, s/n", bairro: "Centro", lat: -11.74651, lng: -44.90995, dias: 3,
+        dados: { evento: "Festa do Padroeiro", data_inicio: dataIso(20), data_fim: dataIso(22), horario_inicio: "19:00", horario_fim: "23:00", publico: "900", equipamento: "Palco com 6 caixas de 1.000 W e mesa de som", area_residencial: "Não" },
+      },
+    ],
+    log: (...a) => console.log("[riachao demandas]", ...a),
+  });
+  if (n) console.log(`[riachao] ${n} demanda(s) urbana(s) criada(s).`);
 }
 
 main()

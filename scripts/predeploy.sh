@@ -4,6 +4,8 @@
 #   RESET_DB=true            → APAGA o banco e recria (prisma migrate reset). SOMENTE homologação/demonstração!
 #   (sempre)                 → prisma migrate deploy
 #   SEED_DEMO=true           → npm run seed:demo  (consórcio fictício CID-DEMO; idempotente)
+#   SEED_DEMANDAS_DEMO=true  → npm run seed:demandas-demo (demandas urbanas APC/ASE/ACS fictícias em Lagoa do Orvalho;
+#                               opcional, append-only, idempotente; exige o seed:demo – não altera as contagens dos E2E)
 #   SEED_ONBOARDING=<cliente> → npm run onboard -- <cliente> [--demo se DEMO_MODE=true]
 #                               (arquivo prisma/seed/clientes/<cliente>.json; idempotente; vários: separe por vírgula)
 #   SEED_RIACHAO_DEMO=true   → npm run seed:riachao-demo (dados fictícios de Riachão das Neves; exige o onboarding)
@@ -29,6 +31,11 @@ npx prisma migrate deploy
 if sim "${SEED_DEMO:-}"; then
   log "SEED_DEMO=true – seed de demonstração (CID-DEMO)"
   npm run seed:demo
+fi
+
+if sim "${SEED_DEMANDAS_DEMO:-}"; then
+  log "SEED_DEMANDAS_DEMO=true – demandas urbanas de demonstração (APC/ASE/ACS)"
+  npm run seed:demandas-demo
 fi
 
 if [ -n "${SEED_ONBOARDING:-}" ]; then

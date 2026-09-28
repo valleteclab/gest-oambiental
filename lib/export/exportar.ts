@@ -132,6 +132,8 @@ export function filtroTabela(modelo: string, e: EscopoExportacao): Record<string
     case "Conselho":
     case "Alerta":
     case "ChamadoSuporte":
+    case "AlertaDesmatamento":
+    case "MonitoramentoSync":
       return mun;
     case "EmpreendimentoRt": return { empreendimento: mun };
     case "Tramitacao":

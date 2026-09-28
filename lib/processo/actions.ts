@@ -40,6 +40,8 @@ function revalidar(processoId: string) {
   revalidatePath("/processos");
   revalidatePath("/meus-processos");
   revalidatePath("/caixa");
+  revalidatePath(`/demandas/${processoId}`);
+  revalidatePath("/demandas");
 }
 
 /** Executa uma ação da máquina de estados. O formulário envia `payload` (JSON). */

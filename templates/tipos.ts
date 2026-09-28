@@ -39,6 +39,8 @@ export type ContextoDocumento = {
   notificacao: { numero: string; exigencia: string; prazo_dias: number; prazo_ate: Date | null } | null;
   fiscalizacao: { data_hora: Date; latitude: string | null; longitude: string | null; relato: string | null; constatacao: string | null } | null;
   anexos: { nome: string; tipo: string; sha256: string }[];
+  /** tipo_ato.modelo_documento (ex.: AUTORIZACAO_PODA / AUTORIZACAO_SOM → modelo embutido específico – templates/index.ts). */
+  modelo_ato?: string | null;
   /** Dados livres enviados pelo módulo de origem (texto, motivo, observacoes, fundamentacao…) */
   dados: Record<string, unknown>;
 };

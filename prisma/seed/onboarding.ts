@@ -13,6 +13,9 @@
 //   ONBOARD_SENHA sem --demo: usa essa senha, mas mantém a troca obrigatória.
 // --atualizar: sobrescreve dados cadastrais da organização/municípios com os do JSON (padrão: só cria o que falta,
 //   preservando o que o órgão editou em /admin). --redefinir-senhas: gera nova senha para usuários já existentes.
+// Atualização de catálogo: toda execução (inclusive `--atualizar` em cliente já implantado) acrescenta os itens do
+//   catálogo-base que ainda faltam na organização (tipos de ato, documentos, tipologias, checklists – ex.: demandas
+//   urbanas APC/ASE/ACS) sem sobrescrever os existentes.
 // Nunca apaga nada. Um município/usuário que já pertença a OUTRA organização aborta o onboarding.
 import path from "node:path";
 import { existsSync, readFileSync } from "node:fs";
@@ -129,7 +132,9 @@ export async function onboarding(prisma: PrismaClient, cliente: ClienteOnboardin
 
   // ── Catálogo ──
   const cat = await aplicarCatalogo(prisma, org.id, { tipologias: c.catalogo.tipologias, documentos: c.catalogo.documentos });
-  log(`catálogo: +${cat.tipos_ato} tipos de ato, +${cat.documentos} documentos exigidos, +${cat.tipologias} tipologias, +${cat.prazos} prazos, +${cat.feriados} feriados nacionais${cat.checklist ? ", checklist padrão" : ""}`);
+  // Sempre idempotente: em organização EXISTENTE (com ou sem --atualizar) acrescenta apenas os itens do catálogo-base
+  // que faltam (ex.: novos tipos de ato das demandas urbanas APC/ASE/ACS) – nunca altera o que o órgão editou.
+  log(`catálogo: +${cat.tipos_ato} tipos de ato, +${cat.documentos} documentos exigidos, +${cat.tipologias} tipologias, +${cat.checklists} checklists, +${cat.prazos} prazos, +${cat.feriados} feriados nacionais${cat.checklist ? ", checklist padrão" : ""}`);
 
   // ── Usuários iniciais ──
   const senhaFixa = opts.senha ?? (opts.demo ? SENHA_DEMO_PADRAO : null);

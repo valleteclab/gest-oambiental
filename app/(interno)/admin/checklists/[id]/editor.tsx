@@ -5,7 +5,7 @@ import { Aviso } from "@/components/ui";
 import { salvarChecklist } from "../actions";
 import { useFormAcao } from "../../../pessoas/_form/campos";
 
-type Item = { id: string; texto: string; tipo: "SIM_NAO" | "TEXTO" | "NUMERO"; obrigatorio: boolean };
+type Item = { id: string; texto: string; tipo: "SIM_NAO" | "TEXTO" | "NUMERO"; obrigatorio: boolean; opcoes?: string[] };
 const TIPOS = [{ v: "SIM_NAO", r: "Sim/Não" }, { v: "TEXTO", r: "Texto" }, { v: "NUMERO", r: "Número" }] as const;
 
 export function EditorChecklist({ id, nome, itens: inicial }: { id?: string; nome?: string; itens: Item[] }) {
@@ -40,6 +40,12 @@ export function EditorChecklist({ id, nome, itens: inicial }: { id?: string; nom
                 <button type="button" className="btn-secundario btn-sm" disabled={i === itens.length - 1} onClick={() => mover(i, 1)} aria-label={`Descer item ${i + 1}`}><ArrowDown className="h-3 w-3" /></button>
                 <button type="button" className="btn-secundario btn-sm" onClick={() => setItens((l) => l.filter((_, j) => j !== i))} aria-label={`Remover item ${i + 1}`}><Trash2 className="h-3 w-3" /></button>
               </div>
+              {it.tipo === "TEXTO" && (
+                <div className="sm:col-span-5">
+                  <label className="text-xs text-slate-600" htmlFor={`ck-op-${it.id}`}>Opções de resposta (separadas por “;” – vazio = texto livre)</label>
+                  <input id={`ck-op-${it.id}`} className="input" defaultValue={(it.opcoes ?? []).join("; ")} onBlur={(e) => upd(i, { opcoes: e.target.value.split(";").map((x) => x.trim()).filter(Boolean) })} />
+                </div>
+              )}
             </li>
           ))}
         </ol>

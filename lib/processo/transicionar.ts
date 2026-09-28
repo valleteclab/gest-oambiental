@@ -13,6 +13,7 @@ import type { UsuarioSessao } from "../rbac";
 import { destino, ehTitular, ROTULO_STATUS_PROCESSO, itensChecklistPendentes, lerItensChecklist, normalizarAcao, permitido, proximoDoRodizio, ROTULO_ACAO, type AcaoProcesso } from "./maquina";
 import { podeVerProcesso, tecnicosElegiveis, UUID_RE } from "./consultas";
 import { emitirDocumentoDecisao, emitirPdfParecer, emitirRecibo, tentarEmitir, tipoDocumentoDoAto } from "./documentos";
+import { decisaoPeloTecnico, documentosCondicionais, ehDemandaUrbana, erroDecisaoDemanda, lerDadosDemanda, PRAZO_DIAS_UTEIS } from "../demandas/catalogo";
 
 // SPEC 6 – ÚNICA forma de mudar o status de um processo.
 // Cada transição: valida perfil/escopo, estado e pré-requisitos; grava tramitacao + log_auditoria;
@@ -21,6 +22,11 @@ import { emitirDocumentoDecisao, emitirPdfParecer, emitirRecibo, tentarEmitir, t
 type Tx = Prisma.TransactionClient;
 
 const texto = (min: number, msg: string) => z.string().trim().min(min, msg).max(20000);
+const CondicionantesSchema = z
+  .array(z.object({ descricao: texto(5, "Descreva a condicionante."), periodicidade: z.string().trim().max(100).optional().nullable(), prazo_dias: z.coerce.number().int().min(1).max(3650).optional().nullable() }))
+  .max(30)
+  .optional()
+  .default([]);
 const despachoOpc = z.string().trim().max(5000).optional().nullable();
 
 export const SCHEMAS = {
@@ -46,13 +52,11 @@ export const SCHEMAS = {
     .object({
       conclusao: z.enum(["FAVORAVEL", "DESFAVORAVEL", "FAVORAVEL_COM_CONDICIONANTES"]),
       texto: texto(20, "O texto do parecer deve ter pelo menos 20 caracteres."),
-      condicionantes: z
-        .array(z.object({ descricao: texto(5, "Descreva a condicionante."), periodicidade: z.string().trim().max(100).optional().nullable(), prazo_dias: z.coerce.number().int().min(1).max(3650).optional().nullable() }))
-        .optional()
-        .default([]),
+      condicionantes: CondicionantesSchema,
     })
     .refine((v) => v.conclusao !== "FAVORAVEL_COM_CONDICIONANTES" || v.condicionantes.length > 0, { message: "Informe ao menos uma condicionante.", path: ["condicionantes"] }),
-  deferir: z.object({ despacho: despachoOpc }),
+  // `condicionantes`: decisão sem parecer (ex.: demandas urbanas) – registradas no deferimento e levadas ao documento.
+  deferir: z.object({ despacho: despachoOpc, condicionantes: CondicionantesSchema }),
   indeferir: z.object({ motivo: texto(10, "Informe a motivação do indeferimento (mín. 10 caracteres).") }),
   emitir_documento: z.object({}).passthrough(),
   arquivar: z.object({ justificativa: texto(10, "A justificativa do arquivamento é obrigatória (mín. 10 caracteres).") }),
@@ -103,6 +107,19 @@ export function textoParaHtml(t: string): string {
 async function origemPendencia(tx: Tx, processoId: string): Promise<StatusProcesso | null> {
   const t = await tx.tramitacao.findFirst({ where: { processo_id: processoId, para_status: "AGUARDANDO_REQUERENTE" }, orderBy: { created_at: "desc" } });
   return t?.de_status ?? null;
+}
+
+/**
+ * Prazo da etapa de análise. Demandas urbanas usam o prazo do próprio tipo de ato (`prazo_analise_dias`, editável em
+ * /admin) contado em dias corridos/úteis conforme lib/demandas; demais atos, a etapa configurada (prazo_config).
+ */
+async function prazoAnalise(tx: Tx, p: ProcessoTx, dias?: number | null) {
+  const base = { organizacao_id: p.organizacao_id, municipio_id: p.municipio_id };
+  const etapa = etapaAnalise(p.tipo_ato);
+  if (ehDemandaUrbana(p.tipo_ato.sigla)) {
+    return { etapa, prazo: await calcularPrazo(tx, { ...base, etapa, dias: dias ?? p.tipo_ato.prazo_analise_dias, uteis: PRAZO_DIAS_UTEIS[p.tipo_ato.sigla] }) };
+  }
+  return { etapa, prazo: await calcularPrazo(tx, { ...base, etapa, dias: dias ?? undefined }) };
 }
 
 async function escolherTecnico(tx: Tx, municipioId: string) {
@@ -160,6 +177,16 @@ async function montarPassos(tx: Tx, p: ProcessoTx, acao: AcaoProcesso, payload: 
       const anexados = new Set((await tx.anexo.findMany({ where: { processo_id: p.id, documento_exigido_id: { in: exigidos.map((d) => d.id) } }, select: { documento_exigido_id: true } })).map((a) => a.documento_exigido_id));
       const faltando = exigidos.filter((d) => !anexados.has(d.id));
       if (faltando.length) throw invalido(`Anexe os documentos obrigatórios antes de protocolar: ${faltando.map((d) => d.nome).join("; ")}.`, { faltando });
+      // Demandas urbanas: documentos opcionais que se tornam obrigatórios pelos dados do pedido (ex.: anuência da vizinhança)
+      const demanda = ehDemandaUrbana(p.tipo_ato.sigla) ? lerDadosDemanda(p.descricao_atividade) : null;
+      if (demanda) {
+        const todos = await tx.documentoExigido.findMany({ where: { tipo_ato_id: p.tipo_ato_id }, select: { id: true, nome: true } });
+        const comAnexo = new Set((await tx.anexo.findMany({ where: { processo_id: p.id, documento_exigido_id: { not: null } }, select: { documento_exigido_id: true } })).map((a) => a.documento_exigido_id));
+        const exigir = documentosCondicionais(demanda.sigla, demanda.dados)
+          .map((c) => ({ ...c, docs: todos.filter((d) => d.nome.startsWith(c.prefixo)) }))
+          .filter((c) => c.docs.length && !c.docs.some((d) => comAnexo.has(d.id)));
+        if (exigir.length) throw invalido(`Anexe os documentos exigidos para este pedido: ${exigir.map((c) => `${c.docs[0].nome} (${c.motivo})`).join("; ")}.`, { faltando: exigir.map((c) => c.docs[0]) });
+      }
       const numero = await numeroProcesso(tx, p.municipio);
       const prazo = await calcularPrazo(tx, { ...base, etapa: "TRIAGEM" });
       pos.recibo = true;
@@ -176,7 +203,8 @@ async function montarPassos(tx: Tx, p: ProcessoTx, acao: AcaoProcesso, payload: 
           extra: balcao ? { numero, balcao: true, protocolado_por: u.nome } : { numero },
         },
       ];
-      if (p.municipio.distribuicao_auto) {
+      // Distribuição automática (rodízio): configuração do município ou fluxo simplificado das demandas urbanas.
+      if (p.municipio.distribuicao_auto || ehDemandaUrbana(p.tipo_ato.sigla)) {
         const tecnico = await escolherTecnico(tx, p.municipio_id);
         if (tecnico) passos.push(await passoDistribuir(tx, p, "PROTOCOLADO", tecnico.id, null, true));
       }
@@ -227,9 +255,9 @@ async function montarPassos(tx: Tx, p: ProcessoTx, acao: AcaoProcesso, payload: 
         await auditar({ usuario_id: u.id, acao: "RESPONDER", entidade: "pendencia", entidade_id: pend.id, antes: pend, depois: nova }, tx);
       }
       const origem = (await origemPendencia(tx, p.id)) === "EM_ANALISE" ? "EM_ANALISE" : "EM_TRIAGEM";
-      const etapa: Etapa = origem === "EM_ANALISE" ? etapaAnalise(p.tipo_ato) : "TRIAGEM";
       // Relógio retoma do saldo restante
-      const prazo = await calcularPrazo(tx, { ...base, etapa, dias: p.prazo_saldo_dias ?? undefined });
+      const { etapa, prazo }: { etapa: Etapa; prazo: Awaited<ReturnType<typeof calcularPrazo>> } =
+        origem === "EM_ANALISE" ? await prazoAnalise(tx, p, p.prazo_saldo_dias) : { etapa: "TRIAGEM", prazo: await calcularPrazo(tx, { ...base, etapa: "TRIAGEM", dias: p.prazo_saldo_dias ?? undefined }) };
       return [
         {
           acao: "responder",
@@ -244,8 +272,7 @@ async function montarPassos(tx: Tx, p: ProcessoTx, acao: AcaoProcesso, payload: 
 
     case "aceitar": {
       const pl = payload as Payloads["aceitar"];
-      const etapa = etapaAnalise(p.tipo_ato);
-      const prazo = await calcularPrazo(tx, { ...base, etapa });
+      const { etapa, prazo } = await prazoAnalise(tx, p);
       return [{ acao: "aceitar", para: "EM_ANALISE", data: { prazo_etapa_ate: prazo.ate, etapa_atual: etapa, prazo_saldo_dias: null, ...(p.tecnico_id ? {} : { tecnico_id: u.id }) }, despacho: pl.despacho || "Documentação aceita na triagem. Processo encaminhado para análise técnica.", publico: true }];
     }
 
@@ -297,8 +324,7 @@ async function montarPassos(tx: Tx, p: ProcessoTx, acao: AcaoProcesso, payload: 
           await auditar({ usuario_id: u.id, acao: "EDITAR", entidade: "fiscalizacao", entidade_id: agendada.id, antes: agendada, depois: nova }, tx);
         }
       }
-      const etapa = etapaAnalise(p.tipo_ato);
-      const prazo = await calcularPrazo(tx, { ...base, etapa, dias: p.prazo_saldo_dias ?? undefined });
+      const { etapa, prazo } = await prazoAnalise(tx, p, p.prazo_saldo_dias);
       return [{ acao: "concluir_vistoria", para: "EM_ANALISE", data: { prazo_etapa_ate: prazo.ate, etapa_atual: etapa, prazo_saldo_dias: null }, despacho: pl.despacho || "Vistoria concluída. Análise retomada.", para_usuario_id: p.tecnico_id, publico: true }];
     }
 
@@ -342,6 +368,30 @@ async function montarPassos(tx: Tx, p: ProcessoTx, acao: AcaoProcesso, payload: 
     case "indeferir": {
       if (acao === "deferir" && p.tipo_ato.exige_parecer && (await tx.parecer.count({ where: { processo_id: p.id } })) === 0) {
         throw invalido(`Não é possível deferir sem parecer técnico: ${p.tipo_ato.nome} exige parecer.`);
+      }
+      if (ehDemandaUrbana(p.tipo_ato.sigla)) {
+        const modelo = p.tipo_ato.checklist_modelo;
+        const preenchido = modelo ? await tx.checklistPreenchido.findFirst({ where: { processo_id: p.id, checklist_modelo_id: modelo.id }, orderBy: { updated_at: "desc" } }) : null;
+        const respostas = (preenchido?.respostas as Record<string, unknown>) ?? {};
+        const erro = erroDecisaoDemanda({
+          sigla: p.tipo_ato.sigla,
+          acao,
+          exige_vistoria: p.tipo_ato.exige_vistoria,
+          exige_parecer: p.tipo_ato.exige_parecer,
+          temChecklist: !!modelo,
+          checklistPendente: modelo ? itensChecklistPendentes(lerItensChecklist(modelo.itens), respostas).map((i) => i.texto) : [],
+          vistoriasRealizadas: await tx.fiscalizacao.count({ where: { processo_id: p.id, status: "REALIZADA" } }),
+          respostas,
+        });
+        if (erro) throw invalido(erro);
+      }
+      if (acao === "deferir") {
+        for (const c of (payload as Payloads["deferir"]).condicionantes) {
+          const cond = await tx.condicionante.create({
+            data: { processo_id: p.id, descricao: c.descricao, periodicidade: c.periodicidade || null, prazo_ate: c.prazo_dias ? somarDias(agora, c.prazo_dias, false) : null, created_by: u.id },
+          });
+          await auditar({ usuario_id: u.id, acao: "CRIAR", entidade: "condicionante", entidade_id: cond.id, depois: cond }, tx);
+        }
       }
       pos.decisao = true;
       const despacho = acao === "deferir" ? (payload as Payloads["deferir"]).despacho || `Requerimento deferido. Emissão de ${p.tipo_ato.nome} autorizada.` : (payload as Payloads["indeferir"]).motivo;
@@ -446,7 +496,7 @@ export async function transicionar(processoId: string, acaoBruta: string, payloa
   if (!podeVerProcesso(usuario, previa)) throw proibido("Você não tem acesso a este processo.");
 
   if (acao === "emitir_documento") {
-    const ctx = { status: previa.status, municipio_id: previa.municipio_id, requerente_id: previa.requerente_id, rt_pessoa_id: previa.rt?.pessoa_id, delega_decisao: previa.municipio.delega_decisao, exige_parecer: previa.tipo_ato.exige_parecer };
+    const ctx = { status: previa.status, municipio_id: previa.municipio_id, requerente_id: previa.requerente_id, rt_pessoa_id: previa.rt?.pessoa_id, delega_decisao: previa.municipio.delega_decisao, exige_parecer: previa.tipo_ato.exige_parecer, decisao_tecnico: decisaoPeloTecnico(previa.tipo_ato) };
     if (!permitido(usuario, acao, ctx)) throw proibido("Seu perfil não pode emitir o documento deste processo.");
     if (!destino(acao, previa.status)) throw conflito(`Ação "${ROTULO_ACAO[acao]}" não permitida em "${ROTULO_STATUS_PROCESSO[previa.status]}".`);
     const r = await tentarEmitir(() => emitirDocumentoDecisao(processoId, usuario));
@@ -462,7 +512,7 @@ export async function transicionar(processoId: string, acaoBruta: string, payloa
     async (tx) => {
       await tx.$queryRaw`SELECT id FROM processo WHERE id = ${processoId}::uuid FOR UPDATE`;
       let p = await tx.processo.findUniqueOrThrow({ where: { id: processoId }, include: INCLUDE });
-      const ctx = { status: p.status, municipio_id: p.municipio_id, requerente_id: p.requerente_id, rt_pessoa_id: p.rt?.pessoa_id, delega_decisao: p.municipio.delega_decisao, exige_parecer: p.tipo_ato.exige_parecer };
+      const ctx = { status: p.status, municipio_id: p.municipio_id, requerente_id: p.requerente_id, rt_pessoa_id: p.rt?.pessoa_id, delega_decisao: p.municipio.delega_decisao, exige_parecer: p.tipo_ato.exige_parecer, decisao_tecnico: decisaoPeloTecnico(p.tipo_ato) };
       if (!permitido(usuario, acao, ctx)) throw proibido(`Seu perfil não pode executar "${ROTULO_ACAO[acao]}" neste processo.`);
       if (!destino(acao, p.status)) throw conflito(`Ação "${ROTULO_ACAO[acao]}" não permitida no status "${ROTULO_STATUS_PROCESSO[p.status]}".`);
       const passos = await montarPassos(tx, p, acao, payload, usuario, pos);

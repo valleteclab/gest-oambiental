@@ -26,6 +26,6 @@ export function CompararImagens(props: PropsComparar) {
   );
 }
 
-export type { PontoMapa, PropsMapa } from "./mapa-leaflet";
+export type { FeicaoMapa, PontoMapa, PropsMapa } from "./mapa-leaflet";
 export type { PropsComparar } from "./comparar-leaflet";
 export type { PoligonoGeo } from "@/lib/geo/validar";

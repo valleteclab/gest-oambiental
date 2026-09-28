@@ -36,6 +36,9 @@ export async function salvarChecklist(processoId: string, respostasBrutas: Recor
     } else if (i.tipo === "SIM_NAO") {
       if (!["SIM", "NAO", "NA"].includes(s)) throw invalido(`Resposta inválida em "${i.texto}".`);
       respostas[i.id] = s;
+    } else if (i.opcoes?.length) {
+      if (!i.opcoes.includes(s)) throw invalido(`Escolha uma das opções em "${i.texto}".`);
+      respostas[i.id] = s;
     } else respostas[i.id] = s.slice(0, 5000);
   }
   return prisma.$transaction(async (tx) => {

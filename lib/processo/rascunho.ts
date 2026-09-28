@@ -9,6 +9,7 @@ import { podeVerPessoa } from "../cadastros/pessoas";
 import { EnderecoSchema } from "../cadastros/validacao";
 import { calcularPorte } from "./porte";
 import { obterProcessoAutorizado, UUID_RE } from "./consultas";
+import { DadosDemandaSchema, ehDemandaUrbana, grandezaDaDemanda, serializarDadosDemanda, TIPOLOGIA_DEMANDA, validarDadosDemanda } from "../demandas/catalogo";
 
 // Requerimento em RASCUNHO (wizard do requerente, SPEC 10): empreendimento → tipologia/porte → tipo de ato.
 // Documentos (passo 4) são anexados ao rascunho; protocolo (passo 5) via transicionar("protocolar").
@@ -49,6 +50,9 @@ export const RascunhoSchema = z
     grandeza: num(0, 1e12, "Informe a grandeza (número ≥ 0)."),
     tipo_ato_id: uuid("Selecione o tipo de ato."),
     descricao_atividade: z.string().trim().max(5000).optional().nullable(),
+    // Demandas urbanas (APC/ASE/ACS): campos específicos do serviço – gravados como texto estruturado em
+    // descricao_atividade (não há coluna JSON no processo; ver lib/demandas/catalogo.ts).
+    dados_demanda: DadosDemandaSchema,
   })
   .refine((v) => !!v.empreendimento_id || !!v.empreendimento, { message: "Escolha um empreendimento existente ou cadastre um novo.", path: ["empreendimento"] });
 
@@ -88,6 +92,18 @@ export async function salvarRascunho(entrada: unknown, u: UsuarioSessao) {
   const [tipologia, tipoAto] = await Promise.all([prisma.tipologia.findUnique({ where: { id: e.tipologia_id } }), prisma.tipoAto.findUnique({ where: { id: e.tipo_ato_id } })]);
   if (!tipologia?.ativo) throw invalido("Tipologia inválida.");
   if (!tipoAto?.ativo) throw invalido("Tipo de ato inválido.");
+  // Demandas urbanas: valida os campos do serviço; na tipologia genérica do serviço a grandeza vem dos campos
+  // (nº de árvores, público estimado, 1 veículo).
+  let descricao = e.descricao_atividade || null;
+  if (ehDemandaUrbana(tipoAto.sigla)) {
+    const v = validarDadosDemanda(tipoAto.sigla, e.dados_demanda ?? {});
+    if (!v.ok) {
+      const [campo, msg] = Object.entries(v.erros)[0];
+      throw invalido(msg, { campo: `dados_demanda.${campo}`, erros: v.erros });
+    }
+    descricao = serializarDadosDemanda(tipoAto.sigla, v.dados, e.descricao_atividade);
+    if (tipologia.codigo === TIPOLOGIA_DEMANDA[tipoAto.sigla]) e.grandeza = grandezaDaDemanda(tipoAto.sigla, v.dados) ?? e.grandeza;
+  }
   const porte = calcularPorte(tipologia.faixas_porte, e.grandeza);
   if (!porte) throw invalido("Não foi possível calcular o porte para a grandeza informada.");
 
@@ -147,7 +163,7 @@ export async function salvarRascunho(entrada: unknown, u: UsuarioSessao) {
       requerente_id: requerenteId,
       rt_id: rtEscolhido ?? emp.rts[0]?.rt_id ?? null,
       tipo_ato_id: tipoAto.id,
-      descricao_atividade: e.descricao_atividade || null,
+      descricao_atividade: descricao,
     };
     if (existente) {
       const p = await tx.processo.update({ where: { id: existente.id }, data: dadosProc });

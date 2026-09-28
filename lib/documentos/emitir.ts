@@ -12,7 +12,7 @@ import { salvarArquivo, removerArquivo } from "../storage";
 import { numeroAto, numeroDocumento } from "../numeracao";
 import { can, type UsuarioSessao } from "../rbac";
 import { invalido, naoEncontrado, proibido } from "../http";
-import { rodape, type ContextoDocumento } from "@/templates";
+import { chaveModeloEspecifico, rodape, type ContextoDocumento } from "@/templates";
 import type { EmitirInput } from "./index";
 import { carregarContexto, ehUuid } from "./contexto";
 import { renderizarDocumento } from "./modelo";
@@ -115,7 +115,7 @@ async function emitirUmaVez(input: EmitirInput): Promise<DocumentoOficial> {
           ...input.dados,
           _contexto: {
             titulo: ctx.titulo,
-            modelo: modelo ? `modelo_documento:${modelo.id}:v${modelo.versao}` : "embutido",
+            modelo: chaveModeloEspecifico(ctx) ? `embutido:${chaveModeloEspecifico(ctx)}` : modelo ? `modelo_documento:${modelo.id}:v${modelo.versao}` : "embutido",
             titular: base.titular ? { nome: base.titular.nome, tipo: base.titular.tipo, documento: base.titular_mascara } : null,
             empreendimento: base.empreendimento ? { nome: base.empreendimento.nome, endereco: base.empreendimento.endereco } : null,
             processo: base.processo ? { numero: base.processo.numero, tipo_ato: base.processo.tipo_ato_nome, sigla: base.processo.tipo_ato_sigla } : null,

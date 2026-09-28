@@ -9,6 +9,8 @@ import { lerFiltros, municipioPermitido, queryFiltros } from "@/lib/indicadores/
 import { CabecalhoPagina, Card, ROTULO_STATUS } from "@/components/ui";
 import { BarrasHorizontais, LicencasEmpilhadas, TabelaDados } from "@/components/graficos";
 import { FiltrosGlobais } from "./filtros";
+import { contarNovos } from "@/lib/monitoramento/servico";
+import { podeVerMonitoramento } from "@/lib/monitoramento/regras";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Painel – LicenciaGov" };
@@ -42,7 +44,7 @@ export default async function PaginaDashboard({ searchParams }: { searchParams: 
     forbidden();
   }
 
-  const [ind, opcoes] = await Promise.all([calcularIndicadores(u, filtros), opcoesFiltros(u)]);
+  const [ind, opcoes, satelite] = await Promise.all([calcularIndicadores(u, filtros), opcoesFiltros(u), podeVerMonitoramento(u) ? contarNovos(u, filtros.municipio_id) : null]);
   const t = ind.totais;
   const mostrarTodos = temEscopoOrganizacao(u) || opcoes.municipios.length > 1;
   const qPrazos = (aba: string) => `/prazos${queryFiltros({ municipio_id: filtros.municipio_id, tecnico_id: filtros.tecnico_id }, { ...(filtros.municipio_id ? {} : { municipio: "" }), aba })}`;
@@ -84,6 +86,19 @@ export default async function PaginaDashboard({ searchParams }: { searchParams: 
         <Kpi rotulo="Autos de infração" valor={fmtNumero(t.autos)} detalhe={`multas: ${fmtMoeda(t.multas_total)}`} testId="kpi-autos" />
         <Kpi rotulo="Notificações" valor={fmtNumero(t.notificacoes)} testId="kpi-notificacoes" />
       </div>
+
+      {satelite && (
+        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Kpi
+            rotulo="Alertas de desmatamento novos (satélite)"
+            valor={fmtNumero(satelite.novos)}
+            detalhe={`${fmtNumero(satelite.area_ha, 1)} ha sem tratamento · ver Monitoramento`}
+            href={`/monitoramento?status=NOVO&de=${filtros.municipio_id ? `&municipio=${filtros.municipio_id}` : ""}`}
+            testId="kpi-desmatamento-novos"
+            alerta={satelite.novos > 0 ? "vermelho" : undefined}
+          />
+        </div>
+      )}
 
       <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card titulo="Processos por status">

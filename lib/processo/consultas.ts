@@ -4,6 +4,7 @@ import { prisma } from "../db";
 import { naoEncontrado, proibido } from "../http";
 import { can, isInterno, podeVerMunicipio, whereProcessoEscopo, type UsuarioSessao } from "../rbac";
 import { acoesDisponiveis, ehTitular, type ContextoAcao } from "./maquina";
+import { decisaoPeloTecnico } from "../demandas/catalogo";
 
 // Consultas de processo sempre com escopo (SPEC 4.1): interno por município, requerente por titularidade.
 
@@ -44,6 +45,7 @@ export function contextoAcao(p: ProcessoCompleto): ContextoAcao {
     rt_pessoa_id: p.rt?.pessoa_id ?? null,
     delega_decisao: p.municipio.delega_decisao,
     exige_parecer: p.tipo_ato.exige_parecer,
+    decisao_tecnico: decisaoPeloTecnico(p.tipo_ato),
   };
 }
 

@@ -12,7 +12,11 @@ import { salvarTipoAto } from "../actions";
 export const metadata = { title: "Tipo de ato – Administração" };
 
 const CATEGORIAS = [{ valor: "LICENCA", rotulo: "Licença" }, { valor: "AUTORIZACAO", rotulo: "Autorização" }, { valor: "CERTIDAO", rotulo: "Certidão" }, { valor: "DECLARACAO", rotulo: "Declaração" }];
-const MODELOS = ["LICENCA", "AUTORIZACAO", "CERTIDAO", "OFICIO"].map((v) => ({ valor: v, rotulo: v }));
+const MODELOS = [
+  ...["LICENCA", "AUTORIZACAO", "CERTIDAO", "OFICIO"].map((v) => ({ valor: v, rotulo: v })),
+  { valor: "AUTORIZACAO_PODA", rotulo: "AUTORIZACAO_PODA (poda/corte de árvore)" },
+  { valor: "AUTORIZACAO_SOM", rotulo: "AUTORIZACAO_SOM (emissão sonora)" },
+];
 
 export default async function EditarTipoAto({ params }: { params: Promise<{ id: string }> }) {
   const { u: admin, ok } = await usuarioAdminPagina();

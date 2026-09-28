@@ -5,6 +5,7 @@ import { auditar } from "../audit";
 import { emitirDocumento } from "../documentos";
 import type { UsuarioSessao } from "../rbac";
 import { formatarEndereco } from "../cadastros/validacao";
+import { ehDemandaUrbana, lerDadosDemanda, paresDemanda, resumoVistoriaPoda, validadeDemanda } from "../demandas/catalogo";
 
 // Emissão dos documentos oficiais do processo – SEMPRE fora da transação (geração de PDF é lenta).
 // Falhas não desfazem a transição: o processo fica no estado e a ação "Emitir documento" permite nova tentativa.
@@ -133,7 +134,9 @@ export async function emitirDocumentoDecisao(processoId: string, usuario: Usuari
   const tipo = tipoDocumentoDoAto(p.tipo_ato.categoria);
   const ja = await existente(p.id, [tipo]);
   if (ja) return ja;
-  const validade = p.tipo_ato.validade_meses_padrao ? somarMeses(new Date(), p.tipo_ato.validade_meses_padrao) : null;
+  let validade = p.tipo_ato.validade_meses_padrao ? somarMeses(new Date(), p.tipo_ato.validade_meses_padrao) : null;
+  const demanda = await dadosDemandaDocumento(p);
+  if (demanda?.validade) validade = demanda.validade;
   const doc = await emitirDocumento({
     tipo,
     municipio_id: p.municipio_id,
@@ -141,7 +144,7 @@ export async function emitirDocumentoDecisao(processoId: string, usuario: Usuari
     titular_id: p.requerente_id,
     sigla_ato: p.tipo_ato.sigla,
     validade_ate: validade,
-    dados: { ...dados, parecer: parecerDados, validade_meses: p.tipo_ato.validade_meses_padrao },
+    dados: { ...dados, parecer: parecerDados, validade_meses: p.tipo_ato.validade_meses_padrao, ...(demanda ? { demanda: demanda.dados } : {}) },
     usuario,
   });
   // Condicionantes passam a integrar o documento emitido
@@ -150,6 +153,33 @@ export async function emitirDocumentoDecisao(processoId: string, usuario: Usuari
     await auditar({ usuario_id: usuario.id, acao: "VINCULAR_DOCUMENTO", entidade: "condicionante", entidade_id: p.id, depois: { documento_id: doc.id, quantidade: p.condicionantes.length } });
   }
   return doc;
+}
+
+/**
+ * Demandas urbanas (APC/ASE/ACS): campos do pedido (texto estruturado em descricao_atividade), resultado da vistoria
+ * (checklist – espécie, DAP, recomendação, nº de mudas da compensação) e validade específica (fim do evento / 30–90 dias).
+ * Vai em `dados.demanda` do documento (templates/autorizacao-poda.ts e autorizacao-som.ts).
+ */
+async function dadosDemandaDocumento(p: Awaited<ReturnType<typeof carregar>>) {
+  const sigla = p.tipo_ato.sigla;
+  if (!ehDemandaUrbana(sigla)) return null;
+  const lido = lerDadosDemanda(p.descricao_atividade);
+  const campos = lido?.sigla === sigla ? lido.dados : {};
+  const preenchido = p.tipo_ato.checklist_modelo_id
+    ? await prisma.checklistPreenchido.findFirst({ where: { processo_id: p.id, checklist_modelo_id: p.tipo_ato.checklist_modelo_id }, orderBy: { updated_at: "desc" } })
+    : null;
+  const respostas = (preenchido?.respostas as Record<string, unknown>) ?? {};
+  return {
+    validade: validadeDemanda(sigla, campos, new Date()),
+    dados: {
+      sigla,
+      campos,
+      pares: paresDemanda(sigla, campos),
+      descricao_livre: lido?.livre ?? p.descricao_atividade ?? null,
+      vistoria: sigla === "APC" ? resumoVistoriaPoda(respostas) : null,
+      limite_db: sigla !== "APC" && respostas.s5 !== null && respostas.s5 !== undefined && String(respostas.s5).trim() !== "" ? Number(respostas.s5) : null,
+    },
+  };
 }
 
 /** Executa uma emissão sem propagar erro (o stub/Chromium podem falhar). */

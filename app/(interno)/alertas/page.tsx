@@ -17,6 +17,7 @@ const COR: Record<string, "vermelho" | "amarelo" | "azul" | "roxo" | "cinza"> = 
   LICENCA_RENOVACAO: "azul",
   CONDICIONANTE: "roxo",
   NOTIFICACAO: "roxo",
+  DESMATAMENTO: "vermelho",
 };
 
 export default async function PaginaAlertas({ searchParams }: { searchParams: Promise<{ page?: string; filtro?: string }> }) {

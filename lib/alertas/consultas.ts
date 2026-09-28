@@ -29,6 +29,8 @@ export async function marcarTodosLidos(usuarioId: string): Promise<number> {
 /** Link interno da referência de um alerta. */
 export function linkAlerta(a: { referencia_tipo: string; referencia_id: string }, processoId?: string | null): string {
   if (a.referencia_tipo === "PROCESSO") return `/processos/${a.referencia_id}`;
+  if (a.referencia_tipo === "ALERTA_DESMATAMENTO") return `/monitoramento/${a.referencia_id}`;
+  if (a.referencia_tipo === "MONITORAMENTO") return `/monitoramento?status=NOVO&de=`;
   if (processoId) return `/processos/${processoId}`;
   if (a.referencia_tipo === "DOCUMENTO") return `/documentos`;
   if (a.referencia_tipo === "NOTIFICACAO") return `/fiscalizacao`;

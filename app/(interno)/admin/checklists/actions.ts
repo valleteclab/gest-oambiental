@@ -10,9 +10,11 @@ import { organizacaoDoAdmin } from "@/lib/admin/escopo";
 import { naoEncontrado } from "@/lib/http";
 
 const Itens = z
-  .array(z.object({ id: z.string().min(1).max(40), texto: z.string().trim().min(3, "Texto do item muito curto."), tipo: z.enum(["SIM_NAO", "TEXTO", "NUMERO"]), obrigatorio: z.boolean() }))
+  .array(z.object({ id: z.string().min(1).max(40), texto: z.string().trim().min(3, "Texto do item muito curto."), tipo: z.enum(["SIM_NAO", "TEXTO", "NUMERO"]), obrigatorio: z.boolean(), opcoes: z.array(z.string().trim().min(1).max(80)).max(20).optional() }))
   .min(1, "Inclua ao menos um item.")
-  .refine((l) => new Set(l.map((i) => i.id)).size === l.length, "IDs de item repetidos.");
+  .refine((l) => new Set(l.map((i) => i.id)).size === l.length, "IDs de item repetidos.")
+  // Opções só valem para itens de texto (resposta única entre as opções); lista vazia = texto livre.
+  .transform((l) => l.map(({ opcoes, ...i }) => (i.tipo === "TEXTO" && opcoes?.length ? { ...i, opcoes } : i)));
 
 export async function salvarChecklist(_: EstadoAcao, f: FormData): Promise<EstadoAcao> {
   return acaoAdmin("/admin/checklists", async (u) => {

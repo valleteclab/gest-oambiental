@@ -4,6 +4,7 @@
 //                    ou o último teste de restauração tem > 31 dias (SPEC 9.2)
 //   exportacao     – fila das exportações completas (SPEC 9.2); a varredura a cada 10 s enfileira as PENDENTES
 //   canal-mensagem / canais-manutencao – agente de denúncias (WhatsApp, chat do site, e-mail)
+//   monitoramento-sync – diário 06:30 (America/Bahia): alertas de desmatamento DETER/PRODES por satélite (lib/monitoramento)
 //
 // O web detecta o worker pelo application_name das conexões (pg_stat_activity) e, sem worker,
 // processa a exportação em segundo plano no próprio processo Next.
@@ -119,6 +120,20 @@ async function main() {
     return setInterval(varrerCanais, Number(process.env.JOBS_VARREDURA_CANAIS_MS ?? 2000));
   })();
 
+  // ── Monitoramento por satélite (lib/monitoramento – docs/monitoramento.md) ──
+  //   monitoramento-sync  diário (JOBS_CRON_MONITORAMENTO, padrão 06:30): DETER/PRODES (+ MapBiomas com token) de cada
+  //                       município com código IBGE real, cruzamento com CAR/licenças e aviso no sino. Longo (rede): 4 h de validade.
+  if (process.env.MONITORAMENTO_DESATIVADO !== "true") {
+    const { sincronizarTodos } = await import("../lib/monitoramento/sync");
+    await boss.createQueue("monitoramento-sync", { expireInSeconds: 4 * 3600, retryLimit: 1 }).catch(() => {});
+    await boss.schedule("monitoramento-sync", process.env.JOBS_CRON_MONITORAMENTO ?? "30 6 * * *", null, { tz });
+    await boss.work("monitoramento-sync", async () => {
+      const r = await sincronizarTodos({ origem: "agendado" });
+      log("monitoramento-sync", JSON.stringify(r.map((x) => ({ municipio: x.municipio, status: x.status, fontes: x.fontes.map((f) => `${f.fonte}:${f.status}:${f.recebidos}/${f.novos}`), cruzados: x.cruzados, notificados: x.notificados }))));
+      return { municipios: r.length };
+    });
+  }
+
   // Varredura: exportações PENDENTES (solicitadas pelo web) → fila `exportacao`
   const varrer = async () => {
     try {
@@ -133,7 +148,7 @@ async function main() {
   // Primeira rodada de alertas na subida (idempotente)
   if (process.env.JOBS_ALERTAS_NA_SUBIDA !== "false") await boss.send("alertas", null, { singletonKey: "subida" });
 
-  log(`worker no ar (fuso ${tz}). Filas: alertas (1 h), backup-check (diário), exportacao.`);
+  log(`worker no ar (fuso ${tz}). Filas: alertas (1 h), backup-check (diário), exportacao, monitoramento-sync (diário).`);
 
   const parar = async () => {
     log("encerrando…");

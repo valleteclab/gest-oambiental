@@ -586,6 +586,10 @@ async function main() {
   // Backup (T10): NENHUM registro é fabricado aqui. /admin/backup mostra apenas execuções reais do job
   // `backup` do worker (lib/backup/executar.ts) ou do botão "Executar backup agora".
 
+  // ── Monitoramento por satélite: alertas de desmatamento FICTÍCIOS (sem aviso no sino – não interfere no T3) ──
+  const { seedMonitoramentoDemo } = await import("./monitoramento-demo");
+  await seedMonitoramentoDemo({ log });
+
   // ── Alertas (T3) ──
   const alertas = await gerarAlertas(new Date(), { organizacao_id: orgDemo.id });
   log(`Alertas: ${alertas.alertas_criados} criados, ${alertas.emails_enviados} e-mails na caixa de teste.${alertas.erros.length ? " Erros: " + alertas.erros.join("; ") : ""}`);

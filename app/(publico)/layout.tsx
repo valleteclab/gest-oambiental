@@ -18,6 +18,7 @@ export default function LayoutPublico({ children }: { children: React.ReactNode 
             <Link href="/consulta" className="rounded hover:text-white hover:underline focus-visible:outline-2 focus-visible:outline-white">Consultar processo</Link>
             <Link href="/licencas" className="rounded hover:text-white hover:underline focus-visible:outline-2 focus-visible:outline-white">Licenças emitidas</Link>
             <Link href="/validar" className="rounded hover:text-white hover:underline focus-visible:outline-2 focus-visible:outline-white">Validar documento</Link>
+            <Link href="/servicos" className="rounded hover:text-white hover:underline focus-visible:outline-2 focus-visible:outline-white">Serviços</Link>
             <Link href="/denuncia" className="rounded hover:text-white hover:underline focus-visible:outline-2 focus-visible:outline-white">Fazer denúncia</Link>
           </nav>
           <Link href="/login" className="ml-auto rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-primaria-800 hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Entrar</Link>

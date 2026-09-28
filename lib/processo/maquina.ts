@@ -105,6 +105,8 @@ export type ContextoAcao = {
   delega_decisao?: boolean;
   /** tipo_ato.exige_parecer */
   exige_parecer?: boolean;
+  /** Demanda urbana com decisão simplificada (lib/demandas decisaoPeloTecnico): o técnico do município também decide. */
+  decisao_tecnico?: boolean;
 };
 
 export function ehTitular(u: UsuarioSessao, p: Pick<ContextoAcao, "requerente_id" | "rt_pessoa_id">): boolean {
@@ -141,6 +143,7 @@ export function permitido(u: UsuarioSessao, acao: AcaoProcesso, p: ContextoAcao)
   const semRequerente: UsuarioSessao = { ...u, papeis: u.papeis.filter((x) => x.papel !== "REQUERENTE") };
   if (acao === "deferir" || acao === "indeferir") {
     if (can(semRequerente, "decidir", "processo", p.municipio_id)) return true;
+    if (p.decisao_tecnico && can(semRequerente, "analisar", "processo", p.municipio_id)) return true;
     return !!p.delega_decisao && temPapel(semRequerente, "TEC_CONSORCIO");
   }
   if (acao === "emitir_documento") return can(semRequerente, "emitir_documento", "processo", p.municipio_id) || can(semRequerente, "decidir", "processo", p.municipio_id);
@@ -178,13 +181,18 @@ export function etapaDoStatus(s: StatusProcesso, etapaAnalise: "ANALISE_CURTA" |
 
 // ───────────── Checklist ─────────────
 
-export type ItemChecklist = { id: string; texto: string; tipo: "SIM_NAO" | "TEXTO" | "NUMERO"; obrigatorio?: boolean };
+/** `opcoes` (opcional, itens TEXTO): resposta deve ser uma das opções (ex.: recomendação poda/corte/indeferir). */
+export type ItemChecklist = { id: string; texto: string; tipo: "SIM_NAO" | "TEXTO" | "NUMERO"; obrigatorio?: boolean; opcoes?: string[] };
 
 export function lerItensChecklist(json: unknown): ItemChecklist[] {
   if (!Array.isArray(json)) return [];
   return json
     .filter((i): i is Record<string, unknown> => !!i && typeof i === "object")
-    .map((i) => ({ id: String(i.id ?? ""), texto: String(i.texto ?? ""), tipo: (["SIM_NAO", "TEXTO", "NUMERO"].includes(String(i.tipo)) ? i.tipo : "TEXTO") as ItemChecklist["tipo"], obrigatorio: !!i.obrigatorio }))
+    .map((i) => {
+      const tipo = (["SIM_NAO", "TEXTO", "NUMERO"].includes(String(i.tipo)) ? i.tipo : "TEXTO") as ItemChecklist["tipo"];
+      const opcoes = tipo === "TEXTO" && Array.isArray(i.opcoes) ? i.opcoes.map(String).filter(Boolean) : [];
+      return { id: String(i.id ?? ""), texto: String(i.texto ?? ""), tipo, obrigatorio: !!i.obrigatorio, ...(opcoes.length ? { opcoes } : {}) };
+    })
     .filter((i) => i.id);
 }
 
@@ -196,6 +204,7 @@ export function itensChecklistPendentes(itens: ItemChecklist[], respostas: Recor
     const vazio = v === undefined || v === null || String(v).trim() === "";
     if (i.tipo === "NUMERO" && !vazio && !Number.isFinite(Number(String(v).replace(",", ".")))) return true;
     if (i.tipo === "SIM_NAO" && !vazio && !["SIM", "NAO", "NA"].includes(String(v))) return true;
+    if (i.opcoes?.length && !vazio && !i.opcoes.includes(String(v))) return true;
     return !!i.obrigatorio && vazio;
   });
 }

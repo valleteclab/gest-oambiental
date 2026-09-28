@@ -9,7 +9,7 @@ import { EditorChecklist } from "./editor";
 
 export const metadata = { title: "Checklist – Administração" };
 
-type Item = { id: string; texto: string; tipo: "SIM_NAO" | "TEXTO" | "NUMERO"; obrigatorio: boolean };
+type Item = { id: string; texto: string; tipo: "SIM_NAO" | "TEXTO" | "NUMERO"; obrigatorio: boolean; opcoes?: string[] };
 
 export default async function EditarChecklist({ params }: { params: Promise<{ id: string }> }) {
   const { u: admin, ok } = await usuarioAdminPagina();
