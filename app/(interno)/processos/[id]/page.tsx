@@ -19,6 +19,7 @@ import { Proibido } from "../_componentes/proibido";
 import { LinhaDoTempo } from "../_componentes/linha-do-tempo";
 import { AcoesProcesso, FormParecer } from "../_componentes/acoes-processo";
 import { BotaoReemitir, FormChecklist, UploadAnexo } from "../_componentes/formularios";
+import { AbaTaxas, AvisoTaxaPendente } from "@/components/cobranca/aba-taxas";
 
 export const metadata = { title: "Processo" };
 
@@ -31,6 +32,7 @@ const ABAS = [
   ["parecer", "Parecer"],
   ["vistorias", "Vistorias"],
   ["emitidos", "Documentos emitidos"],
+  ["taxas", "Taxas"],
   ["log", "Log"],
 ] as const;
 type Aba = (typeof ABAS)[number][0];
@@ -123,6 +125,7 @@ export default async function PaginaProcesso({ params, searchParams }: { params:
             <AcoesProcesso processoId={p.id} acoes={acoes} tecnicos={tecnicos} parecerDesfavoravel={pareceres[0]?.conclusao === "DESFAVORAVEL"} />
           </div>
         )}
+        <AvisoTaxaPendente processo={p} />
       </div>
 
       {/* Abas */}
@@ -341,6 +344,8 @@ export default async function PaginaProcesso({ params, searchParams }: { params:
           )}
         </Card>
       )}
+
+      {aba === "taxas" && <AbaTaxas processo={p} usuario={u} somenteLeitura={somenteLeitura} />}
 
       {aba === "log" && (
         <Card titulo="Log de auditoria">

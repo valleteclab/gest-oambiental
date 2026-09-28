@@ -1,7 +1,7 @@
 import "server-only";
 import type { Prisma, TipoDocumento } from "@prisma/client";
 import { prisma } from "../db";
-import { hashBusca, somenteDigitos } from "../crypto";
+import { hashBusca, mascararCpfCnpj, somenteDigitos } from "../crypto";
 import { urlValidacao } from "./emitir";
 import { normalizarCodigo, ROTULO_TIPO_DOCUMENTO, statusPublico, TIPOS_PUBLICOS, titularPublico, type StatusPublico } from "./render";
 
@@ -30,8 +30,42 @@ export type DocumentoPublico = {
   url_validacao: string;
   /** Link de download do PDF (somente licenças/autorizações/certidões válidas). */
   pdf_publico: boolean;
+  /** Assinatura do PDF (certificado digital ICP-Brasil/teste ou eletrônica avançada). Documento sempre mascarado. */
+  assinatura: AssinaturaPublica;
   id: string;
 };
+
+export type AssinaturaPublica = {
+  tipo: "ICP_BRASIL" | "CERTIFICADO_TESTE" | "ELETRONICA_AVANCADA";
+  nome: string;
+  cargo: string | null;
+  tipo_certificado: string | null;
+  documento: string | null;
+  emissor: string | null;
+  valido_ate: Date | null;
+  assinado_em: Date;
+};
+
+/** Assinatura exibida na validação pública (documentos antigos, sem registro → eletrônica pelo emissor). */
+export function assinaturaPublica(d: { assinatura_tipo: string | null; assinaturas: unknown; assinado_em: Date | null; emitido_em: Date; emitido_por_nome: string; emitido_por_cargo: string | null }): AssinaturaPublica {
+  const r = (Array.isArray(d.assinaturas) ? d.assinaturas[0] : null) as Record<string, unknown> | null;
+  const tipo = d.assinatura_tipo === "ICP_BRASIL" || d.assinatura_tipo === "CERTIFICADO_TESTE" ? d.assinatura_tipo : "ELETRONICA_AVANCADA";
+  const str = (v: unknown) => (typeof v === "string" && v ? v : null);
+  const data = (v: unknown) => (typeof v === "string" && !isNaN(Date.parse(v)) ? new Date(v) : null);
+  const digital = tipo !== "ELETRONICA_AVANCADA";
+  const doc = str(r?.documento_mascarado);
+  return {
+    tipo,
+    nome: (digital ? str(r?.nome) : null) ?? d.emitido_por_nome,
+    cargo: digital ? null : (str(r?.cargo) ?? d.emitido_por_cargo),
+    tipo_certificado: digital ? str(r?.tipo_certificado) : null,
+    // o registro já guarda o documento mascarado; se vier completo (dado legado), mascara aqui
+    documento: digital && doc ? (doc.includes("*") ? doc : mascararCpfCnpj(doc)) : null,
+    emissor: digital ? str(r?.emissor) : null,
+    valido_ate: digital ? data(r?.valido_ate) : null,
+    assinado_em: d.assinado_em ?? data(r?.assinado_em) ?? d.emitido_em,
+  };
+}
 
 type Ctx = { titulo?: string; empreendimento?: { nome?: string } | null };
 
@@ -72,6 +106,7 @@ export async function documentoPorCodigo(codigoBruto: string): Promise<Documento
     sha256_pdf: d.sha256_pdf,
     url_validacao: urlValidacao(d.codigo_verificador),
     pdf_publico: status === "VALIDO" && (TIPOS_PUBLICOS as readonly string[]).includes(d.tipo),
+    assinatura: assinaturaPublica(d),
   };
 }
 

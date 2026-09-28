@@ -11,10 +11,11 @@ export type TipoAlerta =
   | "LICENCA_RENOVACAO"
   | "CONDICIONANTE"
   | "NOTIFICACAO"
-  | "DESMATAMENTO";
+  | "DESMATAMENTO"
+  | "CERTIFICADO_VENCENDO";
 
 /** ALERTA_DESMATAMENTO / MONITORAMENTO: avisos do monitoramento por satélite (lib/monitoramento/sync.ts). */
-export type ReferenciaTipo = "PROCESSO" | "PENDENCIA" | "DOCUMENTO" | "CONDICIONANTE" | "NOTIFICACAO" | "ALERTA_DESMATAMENTO" | "MONITORAMENTO";
+export type ReferenciaTipo = "PROCESSO" | "PENDENCIA" | "DOCUMENTO" | "CONDICIONANTE" | "NOTIFICACAO" | "ALERTA_DESMATAMENTO" | "MONITORAMENTO" | "CERTIFICADO";
 
 export const ROTULO_TIPO_ALERTA: Record<TipoAlerta, string> = {
   PRAZO_VENCENDO: "Prazo vencendo",
@@ -25,7 +26,11 @@ export const ROTULO_TIPO_ALERTA: Record<TipoAlerta, string> = {
   CONDICIONANTE: "Condicionante",
   NOTIFICACAO: "Notificação",
   DESMATAMENTO: "Desmatamento (satélite)",
+  CERTIFICADO_VENCENDO: "Certificado digital",
 };
+
+/** Marcos de aviso de vencimento do certificado digital A1 (dias antes). */
+export const MARCOS_CERTIFICADO = [30, 15, 7, 1] as const;
 
 /** Status em que o relógio da etapa corre (SPEC 6). AGUARDANDO_REQUERENTE fica pausado. */
 export const STATUS_COM_PRAZO: StatusProcesso[] = ["PROTOCOLADO", "EM_TRIAGEM", "EM_ANALISE", "AGUARDANDO_VISTORIA", "AGUARDANDO_DECISAO"];

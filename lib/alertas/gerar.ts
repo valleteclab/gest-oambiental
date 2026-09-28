@@ -17,6 +17,7 @@ import {
   marcoPrazo,
   marcoRenovacao,
   mensagemPrazo,
+  MARCOS_CERTIFICADO,
   type ReferenciaTipo,
   type TipoAlerta,
 } from "./regras";
@@ -315,6 +316,44 @@ async function alertasNotificacoes(ex: Execucao) {
   }
 }
 
+/**
+ * Certificados digitais A1 ATIVOS a 30/15/7/1 dia(s) do vencimento (ou vencidos há até 7 dias) → administradores da
+ * organização + o servidor dono do e-CPF. Vencido deixa de assinar (emissão cai no próximo certificado ou na
+ * assinatura eletrônica avançada) – por isso o aviso antecipado.
+ */
+async function alertasCertificados(ex: Execucao) {
+  const certs = await prisma.certificadoDigital.findMany({
+    where: {
+      ativo: true,
+      ...(ex.organizacaoId ? { organizacao_id: ex.organizacaoId } : {}),
+      valido_ate: { lte: new Date(ex.agora.getTime() + 31 * DIA), gte: new Date(ex.agora.getTime() - 7 * DIA) },
+    },
+    select: { id: true, organizacao_id: true, municipio_id: true, usuario_id: true, titular: true, nome_titular: true, valido_ate: true },
+  });
+  const admins = new Map<string, string[]>();
+  const munOrg = new Map<string, string | null>();
+  for (const c of certs) {
+    const marco = marcoRenovacao(c.valido_ate, ex.agora, MARCOS_CERTIFICADO);
+    if (marco === null) continue;
+    if (!admins.has(c.organizacao_id)) {
+      const ps = await prisma.usuarioPapel.findMany({ where: { papel: "ADMIN", usuario: { ativo: true, organizacao_id: c.organizacao_id } }, select: { usuario_id: true } });
+      admins.set(c.organizacao_id, [...new Set(ps.map((p) => p.usuario_id))]);
+      munOrg.set(c.organizacao_id, (await prisma.municipio.findFirst({ where: { organizacao_id: c.organizacao_id }, orderBy: { nome: "asc" }, select: { id: true } }))?.id ?? null);
+    }
+    const municipio_id = c.municipio_id ?? munOrg.get(c.organizacao_id);
+    if (!municipio_id) continue;
+    const dias = diasRestantes(c.valido_ate, false, new Set(), ex.agora);
+    const quem = `${c.titular === "ORGAO" ? "e-CNPJ" : "e-CPF"} de ${c.nome_titular}`;
+    const msg =
+      marco === "VENCIDA"
+        ? `Certificado digital (${quem}) venceu em ${c.valido_ate.toLocaleDateString("pt-BR", { timeZone: "America/Bahia" })}: os documentos deixaram de ser assinados com ele. Envie o certificado renovado.`
+        : `Certificado digital (${quem}) vence ${dias <= 0 ? "hoje" : `em ${dias} dia(s)`}. Renove-o na Autoridade Certificadora e envie o novo arquivo.`;
+    const base = { municipio_id, tipo: "CERTIFICADO_VENCENDO" as const, referencia_tipo: "CERTIFICADO" as const, referencia_id: c.id, marco, ate: c.valido_ate };
+    const ids = [...(admins.get(c.organizacao_id) ?? []), ...(c.usuario_id ? [c.usuario_id] : [])];
+    await ex.emitirPara(await Promise.all(ids.map((id) => ex.usuario(id))), { ...base, mensagem: msg, link: c.usuario_id ? "/minha-conta/certificado" : "/admin/certificados" });
+  }
+}
+
 // ───────────────────────── Arquivamento automático ─────────────────────────
 
 /**
@@ -388,6 +427,7 @@ export async function gerarAlertas(agora = new Date(), opts: { organizacao_id?: 
     ["licencas", alertasLicencas],
     ["condicionantes", alertasCondicionantes],
     ["notificacoes", alertasNotificacoes],
+    ["certificados", alertasCertificados],
   ];
   for (const [nome, fn] of etapas) {
     try {

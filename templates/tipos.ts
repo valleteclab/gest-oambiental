@@ -1,6 +1,17 @@
 // Contexto de renderização dos modelos de documento oficial (SPEC 7). Montado por lib/documentos/contexto.ts.
 export type TipoDoc = "LICENCA" | "AUTORIZACAO" | "CERTIDAO" | "AUTO_INFRACAO" | "NOTIFICACAO" | "PARECER" | "OFICIO" | "RECIBO";
 
+export type AssinaturaContexto = {
+  tipo: "ICP_BRASIL" | "CERTIFICADO_TESTE" | "ELETRONICA_AVANCADA";
+  /** Titular do certificado (ou o servidor, na eletrônica avançada). */
+  nome: string;
+  /** e-CPF / e-CNPJ */
+  tipo_certificado?: string | null;
+  /** CPF/CNPJ mascarado */
+  documento?: string | null;
+  emissor?: string | null;
+};
+
 export type ContextoDocumento = {
   tipo: TipoDoc;
   titulo: string;
@@ -10,6 +21,11 @@ export type ContextoDocumento = {
   dominio: string;
   emitido_em: Date;
   signatario: { nome: string; cargo: string | null };
+  /**
+   * Assinatura aplicada ao PDF (lib/assinatura): certificado digital (ICP-Brasil ou de teste) ou, sem certificado,
+   * assinatura eletrônica avançada (Lei 14.063/2020). Ausente = eletrônica avançada do signatário.
+   */
+  assinatura?: AssinaturaContexto | null;
   municipio: { nome: string; sigla: string; orgao: string; endereco: string | null; email: string | null; telefone: string | null; brasao: string; organizacao: string | null; /** logo horizontal da organização (data URI), quando houver */ logo?: string | null };
   titular: { nome: string; tipo: "PF" | "PJ"; documento: string; endereco: string } | null;
   processo: { numero: string | null; data_protocolo: Date | null; tipo_ato_nome: string | null; tipo_ato_sigla: string | null; descricao_atividade: string | null } | null;

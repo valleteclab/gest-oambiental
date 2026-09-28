@@ -9,10 +9,10 @@ import { renderParecer } from "./parecer";
 import { renderRecibo } from "./recibo";
 import { renderAutorizacaoPoda } from "./autorizacao-poda";
 import { renderAutorizacaoSom } from "./autorizacao-som";
-import type { ContextoDocumento, TipoDoc } from "./tipos";
+import type { AssinaturaContexto, ContextoDocumento, TipoDoc } from "./tipos";
 
-export type { ContextoDocumento, TipoDoc };
-export { pagina, rodape, BRASAO_GENERICO_URI } from "./base";
+export type { AssinaturaContexto, ContextoDocumento, TipoDoc };
+export { pagina, rodape, textoAssinatura, BRASAO_GENERICO_URI } from "./base";
 export { listaCondicionantes } from "./licenca";
 
 export const MODELOS: Record<TipoDoc, (ctx: ContextoDocumento) => string> = {

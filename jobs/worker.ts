@@ -5,6 +5,7 @@
 //   exportacao     – fila das exportações completas (SPEC 9.2); a varredura a cada 10 s enfileira as PENDENTES
 //   canal-mensagem / canais-manutencao – agente de denúncias (WhatsApp, chat do site, e-mail)
 //   monitoramento-sync – diário 06:30 (America/Bahia): alertas de desmatamento DETER/PRODES por satélite (lib/monitoramento)
+//   cobranca-sync – diário 07:00 (America/Bahia): situação das cobranças de taxas no Asaas (fallback do webhook – lib/cobranca)
 //
 // O web detecta o worker pelo application_name das conexões (pg_stat_activity) e, sem worker,
 // processa a exportação em segundo plano no próprio processo Next.
@@ -134,6 +135,20 @@ async function main() {
     });
   }
 
+  // ── Cobrança de taxas (lib/cobranca – docs/cobranca.md) ──
+  //   cobranca-sync  diário (JOBS_CRON_COBRANCA, padrão 07:00): fallback do webhook do Asaas – consulta as cobranças em
+  //                  aberto (GET /payments/{id}), registra as que falharam no gateway e marca VENCIDA as vencidas.
+  if (process.env.COBRANCA_SYNC_DESATIVADO !== "true") {
+    const { sincronizarPendentes } = await import("../lib/cobranca/servico");
+    await boss.createQueue("cobranca-sync", { expireInSeconds: 2 * 3600, retryLimit: 1 }).catch(() => {});
+    await boss.schedule("cobranca-sync", process.env.JOBS_CRON_COBRANCA ?? "0 7 * * *", null, { tz });
+    await boss.work("cobranca-sync", async () => {
+      const r = await sincronizarPendentes();
+      log("cobranca-sync", JSON.stringify(r));
+      return r;
+    });
+  }
+
   // Varredura: exportações PENDENTES (solicitadas pelo web) → fila `exportacao`
   const varrer = async () => {
     try {
@@ -148,7 +163,7 @@ async function main() {
   // Primeira rodada de alertas na subida (idempotente)
   if (process.env.JOBS_ALERTAS_NA_SUBIDA !== "false") await boss.send("alertas", null, { singletonKey: "subida" });
 
-  log(`worker no ar (fuso ${tz}). Filas: alertas (1 h), backup-check (diário), exportacao, monitoramento-sync (diário).`);
+  log(`worker no ar (fuso ${tz}). Filas: alertas (1 h), backup-check (diário), exportacao, monitoramento-sync (diário), cobranca-sync (diário).`);
 
   const parar = async () => {
     log("encerrando…");

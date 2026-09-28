@@ -55,10 +55,11 @@ Sem as variáveis `BACKUP_S3_*`, os dumps vão para o storage da própria aplica
 | `SEED_DEMO=true` | `npm run seed:demo` – consórcio fictício CID-DEMO (idempotente). Só homologação. |
 | `SEED_ONBOARDING=riachao-das-neves` | `npm run onboard -- riachao-das-neves` (arquivo `prisma/seed/clientes/<cliente>.json`; vários clientes separados por vírgula). Com `DEMO_MODE=true` roda com `--demo` (senha demo `Demo@2026licencia`, sem troca obrigatória). Idempotente: cria só o que falta. |
 | `SEED_RIACHAO_DEMO=true` | `npm run seed:riachao-demo` – empreendimentos, processos, licenças, denúncias e vistorias **fictícios** de Riachão das Neves (exige o onboarding acima; idempotente). |
+| `SEED_CERTIFICADO_DEMO=true` | `npm run seed:certificado-demo` – certificado A1 de **teste** (sem valor legal) para Lagoa do Orvalho e Riachão das Neves: os documentos saem assinados digitalmente (PAdES) com o selo "certificado de teste". Idempotente. Nunca em produção – ver `docs/assinatura-digital.md`. |
 | `SEED_CDS_POC=true` | **Somente no projeto da PoC** (`licenciagov-poc`, `DEMO_MODE=false`): onboarding `cds-piemonte --demo` (senha = `ONBOARD_SENHA`) + `npm run seed:cds-poc` (CDS Piemonte do Paraguaçu, 8 municípios reais, cenários T1–T10). Aborta com `DEMO_MODE=true`/`SEED_DEMO=true` ou com `cds-piemonte` em `SEED_ONBOARDING`. Ver `docs/poc-cds.md`. |
 | `ONBOARD_SENHA` | (opcional) senha fixa dos usuários criados pelo onboarding. Sem ela e sem `--demo`, cada usuário novo recebe uma senha temporária **impressa uma única vez no log do pré-deploy** (troca obrigatória no 1º acesso). |
 
-Ambiente de apresentação para Riachão das Neves (exemplo): `DEMO_MODE=true`, `SEED_DEMO=true`, `SEED_ONBOARDING=riachao-das-neves`, `SEED_RIACHAO_DEMO=true`.
+Ambiente de apresentação para Riachão das Neves (exemplo): `DEMO_MODE=true`, `SEED_DEMO=true`, `SEED_ONBOARDING=riachao-das-neves`, `SEED_RIACHAO_DEMO=true` (opcional: `SEED_CERTIFICADO_DEMO=true` para PDFs assinados digitalmente).
 Produção de um cliente: apenas `SEED_ONBOARDING=<cliente>` no primeiro deploy (sem `DEMO_MODE`/`SEED_DEMO`/`SEED_RIACHAO_DEMO`); guarde as senhas temporárias do log e depois remova a variável.
 
 Manual: `railway run --service worker npm run onboard -- <cliente> [--demo] [--atualizar]` (`--atualizar` sobrescreve os dados cadastrais do órgão com os do JSON; `--redefinir-senhas` gera novas senhas).

@@ -14,6 +14,8 @@ import { destino, ehTitular, ROTULO_STATUS_PROCESSO, itensChecklistPendentes, le
 import { podeVerProcesso, tecnicosElegiveis, UUID_RE } from "./consultas";
 import { emitirDocumentoDecisao, emitirPdfParecer, emitirRecibo, tentarEmitir, tipoDocumentoDoAto } from "./documentos";
 import { decisaoPeloTecnico, documentosCondicionais, ehDemandaUrbana, erroDecisaoDemanda, lerDadosDemanda, PRAZO_DIAS_UTEIS } from "../demandas/catalogo";
+import { efeitosCobrancaTransicao, exigirPagamento, pagamentoPendente, posCommitCobranca, type EfeitosCobranca } from "../cobranca/servico";
+import { rotuloTaxa } from "../cobranca/regras";
 
 // SPEC 6 – ÚNICA forma de mudar o status de um processo.
 // Cada transição: valida perfil/escopo, estado e pré-requisitos; grava tramitacao + log_auditoria;
@@ -499,6 +501,8 @@ export async function transicionar(processoId: string, acaoBruta: string, payloa
     const ctx = { status: previa.status, municipio_id: previa.municipio_id, requerente_id: previa.requerente_id, rt_pessoa_id: previa.rt?.pessoa_id, delega_decisao: previa.municipio.delega_decisao, exige_parecer: previa.tipo_ato.exige_parecer, decisao_tecnico: decisaoPeloTecnico(previa.tipo_ato) };
     if (!permitido(usuario, acao, ctx)) throw proibido("Seu perfil não pode emitir o documento deste processo.");
     if (!destino(acao, previa.status)) throw conflito(`Ação "${ROTULO_ACAO[acao]}" não permitida em "${ROTULO_STATUS_PROCESSO[previa.status]}".`);
+    // Taxa de emissão (lib/cobranca): bloqueia a emissão enquanto não quitada, se o município exigir.
+    await exigirPagamento(prisma, previa, acao);
     const r = await tentarEmitir(() => emitirDocumentoDecisao(processoId, usuario));
     if (!r.ok) throw new ErroApi(502, "FALHA_EMISSAO", `Não foi possível emitir o documento: ${r.erro}`);
     documentos.push(r.valor);
@@ -508,6 +512,7 @@ export async function transicionar(processoId: string, acaoBruta: string, payloa
   }
 
   const pos: PosCommit = {};
+  let cobranca: EfeitosCobranca = { geradas: [], canceladas: [] };
   const final = await prisma.$transaction(
     async (tx) => {
       await tx.$queryRaw`SELECT id FROM processo WHERE id = ${processoId}::uuid FOR UPDATE`;
@@ -515,6 +520,8 @@ export async function transicionar(processoId: string, acaoBruta: string, payloa
       const ctx = { status: p.status, municipio_id: p.municipio_id, requerente_id: p.requerente_id, rt_pessoa_id: p.rt?.pessoa_id, delega_decisao: p.municipio.delega_decisao, exige_parecer: p.tipo_ato.exige_parecer, decisao_tecnico: decisaoPeloTecnico(p.tipo_ato) };
       if (!permitido(usuario, acao, ctx)) throw proibido(`Seu perfil não pode executar "${ROTULO_ACAO[acao]}" neste processo.`);
       if (!destino(acao, p.status)) throw conflito(`Ação "${ROTULO_ACAO[acao]}" não permitida no status "${ROTULO_STATUS_PROCESSO[p.status]}".`);
+      // Cobrança de taxas (lib/cobranca – docs/cobranca.md): etapa bloqueada até o pagamento, se o município exigir.
+      await exigirPagamento(tx, p, acao);
       const passos = await montarPassos(tx, p, acao, payload, usuario, pos);
       let atual = p.status;
       for (const passo of passos) {
@@ -522,6 +529,7 @@ export async function transicionar(processoId: string, acaoBruta: string, payloa
         atual = passo.para;
         p = await tx.processo.findUniqueOrThrow({ where: { id: processoId }, include: INCLUDE });
       }
+      cobranca = await efeitosCobrancaTransicao(tx, p, acao, usuario);
       return p;
     },
     { timeout: 30000, maxWait: 10000 },
@@ -529,6 +537,7 @@ export async function transicionar(processoId: string, acaoBruta: string, payloa
 
   // ── Pós-commit: documentos (lentos) e notificações ──
   let resultado = { id: final.id, numero: final.numero, status: final.status };
+  await posCommitCobranca(cobranca, usuario, avisos);
   if (pos.recibo) {
     const r = await tentarEmitir(() => emitirRecibo(final.id, usuario));
     if (r.ok) documentos.push(r.valor);
@@ -539,7 +548,10 @@ export async function transicionar(processoId: string, acaoBruta: string, payloa
     if (r.ok) documentos.push(r.valor);
     else avisos.push(`Parecer registrado, mas o PDF não pôde ser gerado agora (${r.erro}). Use "Gerar PDF do parecer" na aba Parecer.`);
   }
-  if (pos.decisao) {
+  const taxaEmissao = pos.decisao ? await pagamentoPendente(final, ["EMISSAO"]) : null;
+  if (taxaEmissao) {
+    avisos.push(`Decisão registrada. O documento será emitido após o pagamento da ${rotuloTaxa(taxaEmissao.fase).toLowerCase()} (${taxaEmissao.numero}) – use "Emitir documento" quando a taxa estiver quitada.`);
+  } else if (pos.decisao) {
     const concl = await executarEmissaoDecisao(final.id, usuario, pos.motivo, avisos, documentos);
     if (concl) {
       resultado = { id: concl.id, numero: concl.numero, status: concl.status };

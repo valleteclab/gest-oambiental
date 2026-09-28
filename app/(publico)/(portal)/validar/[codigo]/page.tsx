@@ -87,6 +87,42 @@ export default async function ValidarCodigoPage({ params }: { params: Promise<{ 
         )}
       </section>
 
+      <section className="card" aria-labelledby="assinatura-doc" data-testid="assinatura-documento" data-tipo={d.assinatura.tipo}>
+        <h2 id="assinatura-doc" className="border-b border-slate-100 px-4 py-3 text-base font-semibold">Assinatura</h2>
+        <div className="space-y-2 px-4 py-3 text-sm">
+          {d.assinatura.tipo === "ELETRONICA_AVANCADA" ? (
+            <>
+              <p>
+                <strong>Assinatura eletrônica avançada</strong> – {d.assinatura.nome}
+                {d.assinatura.cargo ? `, ${d.assinatura.cargo}` : ""}, em {fmtDataHora(d.assinatura.assinado_em)}.
+              </p>
+              <p className="text-slate-600">
+                Usuário autenticado no sistema, com código verificador, hash SHA-256 do arquivo e trilha de auditoria (Lei nº 14.063/2020, art. 4º, II).
+              </p>
+            </>
+          ) : (
+            <>
+              <p>
+                <strong>Assinatura digital: {d.assinatura.tipo === "ICP_BRASIL" ? "ICP-Brasil" : "certificado de teste (sem valor legal)"}</strong> – {d.assinatura.nome}
+                {d.assinatura.documento ? ` (${d.assinatura.documento})` : ""}
+                {d.assinatura.tipo_certificado ? ` · ${d.assinatura.tipo_certificado}` : ""}
+              </p>
+              <dl className="grid gap-1 text-slate-700 sm:grid-cols-3">
+                {d.assinatura.emissor && (<><dt className="font-medium text-slate-600">Emissor do certificado</dt><dd className="sm:col-span-2">{d.assinatura.emissor}</dd></>)}
+                {d.assinatura.valido_ate && (<><dt className="font-medium text-slate-600">Certificado válido até</dt><dd className="sm:col-span-2">{fmtData(d.assinatura.valido_ate)}</dd></>)}
+                <dt className="font-medium text-slate-600">Assinado em</dt>
+                <dd className="sm:col-span-2">{fmtDataHora(d.assinatura.assinado_em)}</dd>
+              </dl>
+              <p className="text-slate-600">
+                Assinatura no padrão PAdES (MP nº 2.200-2/2001 e Lei nº 14.063/2020). Para conferir a assinatura do arquivo, abra o PDF no
+                Adobe Acrobat Reader ou envie-o ao validador oficial do ITI:{" "}
+                <a className="font-medium text-primaria-700 underline" href="https://validar.iti.gov.br" target="_blank" rel="noopener noreferrer">validar.iti.gov.br</a>.
+              </p>
+            </>
+          )}
+        </div>
+      </section>
+
       <section className="card p-4">
         <CompararPdf hashEsperado={d.sha256_pdf} />
       </section>

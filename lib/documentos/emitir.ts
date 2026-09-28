@@ -17,6 +17,9 @@ import type { EmitirInput } from "./index";
 import { carregarContexto, ehUuid } from "./contexto";
 import { renderizarDocumento } from "./modelo";
 import { dominioDe } from "./render";
+import { mascararCpfCnpj } from "../crypto";
+import { assinarComCertificado, certificadoParaEmissao, registroAssinaturaDigital, tipoAssinatura, type RegistroAssinatura } from "../assinatura/servico";
+import type { AssinaturaContexto } from "@/templates";
 
 export function urlValidacao(codigo: string): string {
   return `${(process.env.APP_URL ?? "http://localhost:3000").replace(/\/+$/, "")}/validar/${codigo}`;
@@ -71,6 +74,19 @@ async function emitirUmaVez(input: EmitirInput): Promise<DocumentoOficial> {
   const storageKey = `${base.sigla_municipio}/documentos/${ano}/${id}.pdf`;
   let gravou = false;
 
+  // Assinatura: certificado A1 aplicável (e-CPF do servidor → e-CNPJ do órgão → e-CNPJ da organização), senão
+  // assinatura eletrônica avançada (Lei 14.063/2020). Falha ao abrir um certificado vigente interrompe a emissão.
+  const cert = await certificadoParaEmissao(input.municipio_id, input.usuario.id, emitidoEm);
+  const assinaturaCtx: AssinaturaContexto = cert
+    ? {
+        tipo: tipoAssinatura(cert.registro),
+        nome: cert.lido.nome,
+        tipo_certificado: cert.rotulo,
+        documento: cert.lido.documento ? mascararCpfCnpj(cert.lido.documento) : null,
+        emissor: cert.lido.emissor,
+      }
+    : { tipo: "ELETRONICA_AVANCADA", nome: input.usuario.nome };
+
   try {
     return await prisma.$transaction(
       async (tx) => {
@@ -102,11 +118,16 @@ async function emitirUmaVez(input: EmitirInput): Promise<DocumentoOficial> {
 
         // 3) HTML → PDF (rodapé com QR em todas as páginas)
         const url = urlValidacao(codigo);
-        const ctx: ContextoDocumento = { ...base, numero, codigo, url_validacao: url, dominio: dominioDe(process.env.APP_URL ?? url), emitido_em: emitidoEm, validade_ate: validade };
+        const ctx: ContextoDocumento = { ...base, numero, codigo, url_validacao: url, dominio: dominioDe(process.env.APP_URL ?? url), emitido_em: emitidoEm, validade_ate: validade, assinatura: assinaturaCtx };
         const html = renderizarDocumento(ctx, modelo?.html);
         const qr = await QRCode.toDataURL(url, { margin: 1, width: 240, errorCorrectionLevel: "M" });
-        const pdf = await htmlParaPdf(html, { rodapeHtml: rodape(ctx, qr), margem: "14mm" });
+        let pdf = await htmlParaPdf(html, { rodapeHtml: rodape(ctx, qr), margem: "14mm" });
+        // PAdES sobre o PDF final; o hash registrado é o do arquivo ASSINADO (o que o cidadão recebe).
+        if (cert) pdf = await assinarComCertificado(pdf, cert, { motivo: `${ctx.titulo} nº ${numero}`, local: `${base.municipio.nome}/BA`, contato: url, quando: emitidoEm });
         const hash = sha256(pdf);
+        const assinaturas: RegistroAssinatura[] = [
+          cert ? registroAssinaturaDigital(cert, emitidoEm) : { tipo: "ELETRONICA_AVANCADA", nome: input.usuario.nome, cargo: ctx.signatario.cargo, assinado_em: emitidoEm.toISOString() },
+        ];
         await salvarArquivo(storageKey, pdf, "application/pdf");
         gravou = true;
 
@@ -144,6 +165,10 @@ async function emitirUmaVez(input: EmitirInput): Promise<DocumentoOficial> {
             emitido_por_cargo: ctx.signatario.cargo,
             emitido_em: emitidoEm,
             dados,
+            assinatura_tipo: assinaturaCtx.tipo,
+            assinaturas: assinaturas as unknown as Prisma.InputJsonArray,
+            certificado_id: cert?.registro.id ?? null,
+            assinado_em: emitidoEm,
           },
         });
 
@@ -166,7 +191,7 @@ async function emitirUmaVez(input: EmitirInput): Promise<DocumentoOficial> {
             acao: "EMITIR_DOCUMENTO",
             entidade: "documento_oficial",
             entidade_id: doc.id,
-            depois: { tipo: doc.tipo, numero: doc.numero, codigo_verificador: doc.codigo_verificador, sha256_pdf: doc.sha256_pdf, processo_id: doc.processo_id, fiscalizacao_id: doc.fiscalizacao_id, validade_ate: doc.validade_ate, storage_key: doc.storage_key },
+            depois: { tipo: doc.tipo, numero: doc.numero, codigo_verificador: doc.codigo_verificador, sha256_pdf: doc.sha256_pdf, processo_id: doc.processo_id, fiscalizacao_id: doc.fiscalizacao_id, validade_ate: doc.validade_ate, storage_key: doc.storage_key, assinatura_tipo: doc.assinatura_tipo, certificado_id: doc.certificado_id },
           },
           tx,
         );

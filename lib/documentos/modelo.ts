@@ -1,6 +1,6 @@
 // Renderização do HTML final: modelo_documento ativo (placeholders) ou modelo embutido (templates/).
 import { fmtData, fmtDataHora } from "../format";
-import { chaveModeloEspecifico, listaCondicionantes, MODELOS, MODELOS_ESPECIFICOS, pagina, type ContextoDocumento } from "@/templates";
+import { chaveModeloEspecifico, listaCondicionantes, MODELOS, MODELOS_ESPECIFICOS, pagina, textoAssinatura, type ContextoDocumento } from "@/templates";
 import { aplicarPlaceholders, sanitizarHtml } from "./render";
 
 /** Variáveis disponíveis em `modelo_documento.html` ({{x}} escapado; {{{x_html}}} HTML sanitizado). */
@@ -17,6 +17,7 @@ export const VARIAVEIS_MODELO: [string, string][] = [
   ["empreendimento.nome / empreendimento.endereco / empreendimento.tipologia / empreendimento.porte", "Empreendimento"],
   ["rt.nome / rt.registro", "Responsável técnico"],
   ["signatario.nome / signatario.cargo", "Quem assina"],
+  ["assinatura_texto", "Declaração de assinatura (certificado digital ICP-Brasil ou assinatura eletrônica avançada)"],
   ["{{{condicionantes_html}}}", "Lista numerada de condicionantes"],
   ["{{{parecer_html}}}", "Texto do parecer técnico"],
   ["auto.* / notificacao.* / dados.*", "Dados específicos (auto de infração, notificação, dados livres)"],
@@ -30,6 +31,7 @@ export function variaveisModelo(ctx: ContextoDocumento): Record<string, unknown>
     validade: ctx.validade_ate ? fmtData(ctx.validade_ate) : "",
     processo: ctx.processo ? { ...ctx.processo, data_protocolo: ctx.processo.data_protocolo ? fmtData(ctx.processo.data_protocolo) : "" } : null,
     condicionantes_html: listaCondicionantes(ctx),
+    assinatura_texto: textoAssinatura(ctx),
     parecer_html: ctx.parecer ? sanitizarHtml(ctx.parecer.texto_html) : "",
   };
 }

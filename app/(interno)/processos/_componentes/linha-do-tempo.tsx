@@ -5,9 +5,12 @@ import { ROTULO_ACAO, normalizarAcao } from "@/lib/processo/maquina";
 
 export type ItemLinha = { id: string; acao: string; de_status: StatusProcesso | null; para_status: StatusProcesso; despacho: string | null; publico: boolean; created_at: Date; de_usuario?: string | null; para_usuario?: string | null };
 
+/** Entradas que não são transições da máquina de estados (ex.: taxas – lib/cobranca). */
+const ROTULO_EXTRA: Record<string, string> = { taxa_paga: "Taxa paga", taxa_isenta: "Taxa isenta" };
+
 const rotuloAcao = (a: string) => {
   const n = normalizarAcao(a);
-  return n ? ROTULO_ACAO[n] : a === "criar" ? "Rascunho criado" : a;
+  return n ? ROTULO_ACAO[n] : a === "criar" ? "Rascunho criado" : ROTULO_EXTRA[a] ?? a;
 };
 
 /** Rótulos para o requerente / portal público (sem jargão interno). */
@@ -25,6 +28,8 @@ export const ROTULO_PUBLICO: Record<string, string> = {
   indeferir: "Requerimento indeferido",
   emitir_documento: "Documento oficial emitido",
   arquivar: "Processo arquivado",
+  taxa_paga: "Pagamento de taxa confirmado",
+  taxa_isenta: "Taxa isenta",
 };
 
 /** Linha do tempo: interna (data, usuário, despacho) ou pública/requerente (status amigável, sem despachos internos). */

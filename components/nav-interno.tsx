@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { can, temPapel, type UsuarioSessao } from "@/lib/rbac";
+import { can, isSomenteLeitura, temPapel, type UsuarioSessao } from "@/lib/rbac";
 
 type Item = { href: string; rotulo: string; visivel: (u: UsuarioSessao) => boolean };
 
@@ -19,7 +19,10 @@ export const ITENS_MENU: Item[] = [
   { href: "/monitoramento", rotulo: "Monitoramento", visivel: (u) => can(u, "ver", "fiscalizacao") },
   { href: "/atendimento", rotulo: "Atendimento", visivel: (u) => can(u, "ver", "denuncia") },
   { href: "/documentos", rotulo: "Documentos emitidos", visivel: (u) => can(u, "ver", "documento") },
+  { href: "/financeiro", rotulo: "Financeiro", visivel: (u) => can(u, "ver", "cobranca") },
   { href: "/relatorios", rotulo: "Relatórios", visivel: (u) => can(u, "ver", "relatorio") },
+  // mesmo critério de podeTerCertificadoProprio (lib/assinatura/servico.ts)
+  { href: "/minha-conta/certificado", rotulo: "Meu certificado digital", visivel: (u) => !!u.organizacao_id && !isSomenteLeitura(u) && can({ ...u, papeis: u.papeis.filter((p) => p.papel !== "REQUERENTE") }, "emitir_documento", "documento") },
   { href: "/admin", rotulo: "Administração", visivel: (u) => can(u, "ver", "admin") || can(u, "exportar", "exportacao") },
 ];
 

@@ -35,6 +35,8 @@ ol.cond li, ul.lista li { margin-bottom: 4px; }
 .assinatura .linha { width: 60%; margin: 0 auto 4px; border-top: 1px solid #111827; }
 .assinatura .nome { font-weight: 700; }
 .assinatura .obs { font-size: 8pt; color: #4b5563; margin-top: 4px; }
+.selo-assinatura { display: inline-block; margin: 8px auto 0; padding: 6px 12px; border: 1.5px solid #065f46; border-radius: 6px; background: #f0fdf4; font-size: 8.5pt; line-height: 1.35; text-align: left; }
+.selo-assinatura .selo-titulo { font-weight: 700; color: #064e3b; text-transform: uppercase; font-size: 8pt; letter-spacing: .03em; }
 .texto p { margin: 0 0 8px; text-align: justify; }
 .pequeno { font-size: 8.5pt; color: #4b5563; }
 table { page-break-inside: auto; } tr { page-break-inside: avoid; }
@@ -95,12 +97,42 @@ export function blocoProcesso(ctx: ContextoDocumento): string {
   ]);
 }
 
+/** Assinatura por certificado digital (ICP-Brasil ou de teste)? */
+export function assinadoDigitalmente(ctx: Pick<ContextoDocumento, "assinatura">): boolean {
+  return !!ctx.assinatura && ctx.assinatura.tipo !== "ELETRONICA_AVANCADA";
+}
+
+/**
+ * Declaração de assinatura (rodapé de todas as páginas e selo do corpo):
+ *  - certificado digital → MP 2.200-2/2001 + Lei 14.063/2020, com links de verificação (sistema e ITI);
+ *  - sem certificado → assinatura eletrônica avançada (Lei 14.063/2020, art. 4º, II).
+ */
+export function textoAssinatura(ctx: Pick<ContextoDocumento, "assinatura" | "signatario" | "emitido_em" | "url_validacao" | "codigo">): string {
+  const a = ctx.assinatura;
+  if (a && a.tipo !== "ELETRONICA_AVANCADA") {
+    const cadeia = a.tipo === "ICP_BRASIL" ? "ICP-Brasil" : "certificado de teste, sem valor legal";
+    return `Documento assinado digitalmente por ${a.nome}${a.tipo_certificado ? ` – ${a.tipo_certificado}` : ""} (${cadeia}) em ${fmtDataHora(ctx.emitido_em)}, conforme MP 2.200-2/2001 e Lei 14.063/2020. Verifique em ${ctx.url_validacao} e em https://validar.iti.gov.br`;
+  }
+  const s = ctx.signatario;
+  return `Assinado eletronicamente por ${s.nome}${s.cargo ? `, ${s.cargo}` : ""}, em ${fmtDataHora(ctx.emitido_em)} – assinatura eletrônica avançada (Lei 14.063/2020, art. 4º, II): usuário autenticado, código verificador ${ctx.codigo} e hash SHA-256 registrados com trilha de auditoria. Verifique em ${ctx.url_validacao}`;
+}
+
 export function assinatura(ctx: ContextoDocumento): string {
+  const a = ctx.assinatura;
+  const selo = a && assinadoDigitalmente(ctx)
+    ? `<div class="selo-assinatura">
+    <div class="selo-titulo">${a.tipo === "ICP_BRASIL" ? "Assinado digitalmente – ICP-Brasil" : "Assinado digitalmente – certificado de teste (sem valor legal)"}</div>
+    <div><b>${esc(a.nome)}</b>${a.tipo_certificado ? ` · ${esc(a.tipo_certificado)}` : ""}${a.documento ? ` · ${esc(a.documento)}` : ""}</div>
+    ${a.emissor ? `<div>Emissor: ${esc(a.emissor)}</div>` : ""}
+    <div>${esc(fmtDataHora(ctx.emitido_em))} · MP 2.200-2/2001 e Lei 14.063/2020 · validar.iti.gov.br</div>
+  </div>`
+    : "";
   return `<div class="assinatura">
   <div class="linha"></div>
   <div class="nome">${esc(ctx.signatario.nome)}</div>
   <div>${esc(ctx.signatario.cargo ?? "")}</div>
-  <div class="obs">Documento assinado eletronicamente (assinatura eletrônica simples – usuário autenticado, com registro em trilha de auditoria) em ${esc(fmtDataHora(ctx.emitido_em))}.<br>
+  ${selo}
+  <div class="obs">${selo ? "" : `${esc(textoAssinatura(ctx))}.<br>`}
   ${esc(ctx.municipio.nome)}/BA, ${esc(fmtData(ctx.emitido_em))}.</div>
 </div>`;
 }
@@ -131,7 +163,7 @@ export function rodape(ctx: ContextoDocumento, qrDataUri: string): string {
     <div style="flex:1;line-height:1.35;">
       <div style="font-size:8.5px;font-weight:bold;color:#064e3b;">${esc(ctx.titulo)} nº ${esc(ctx.numero)} · Código verificador: ${esc(ctx.codigo)}</div>
       <div>Verifique a autenticidade em <b>${esc(ctx.dominio)}/validar</b> informando o código <b>${esc(ctx.codigo)}</b>, ou leia o QR Code.</div>
-      <div>Emitido em ${esc(fmtDataHora(ctx.emitido_em))} por ${esc(ctx.signatario.nome)}${ctx.signatario.cargo ? ` – ${esc(ctx.signatario.cargo)}` : ""} (assinatura eletrônica simples).</div>
+      <div${assinadoDigitalmente(ctx) ? ' style="color:#064e3b;"' : ""}>${esc(textoAssinatura(ctx))}.</div>
       <div>${esc(ctx.municipio.orgao)} – ${esc(ctx.municipio.nome)}/BA</div>
     </div>
     <div style="white-space:nowrap;">Página <span class="pageNumber"></span> de <span class="totalPages"></span></div>

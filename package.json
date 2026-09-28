@@ -26,6 +26,9 @@
     "monitoramento:sync": "tsx --conditions=react-server jobs/monitoramento.ts",
     "seed:monitoramento-demo": "tsx --conditions=react-server prisma/seed/monitoramento-demo.ts",
     "seed:demandas-demo": "tsx --conditions=react-server prisma/seed/demandas-demo.ts",
+    "seed:certificado-demo": "tsx --conditions=react-server prisma/seed/certificado-demo.ts",
+    "seed:cobranca-demo": "tsx --conditions=react-server prisma/seed/cobranca-demo.ts",
+    "cobranca:sync": "tsx --conditions=react-server jobs/cobranca.ts",
     "seed:riachao-demo": "tsx --conditions=react-server prisma/seed/clientes/riachao-demo.ts",
     "seed:cds-poc": "tsx --conditions=react-server prisma/seed/clientes/cds-poc-demo.ts",
     "test:e2e:poc-cds": "E2E_DATASET=poc-cds playwright test"

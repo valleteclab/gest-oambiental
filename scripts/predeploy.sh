@@ -9,6 +9,12 @@
 #   SEED_ONBOARDING=<cliente> → npm run onboard -- <cliente> [--demo se DEMO_MODE=true]
 #                               (arquivo prisma/seed/clientes/<cliente>.json; idempotente; vários: separe por vírgula)
 #   SEED_RIACHAO_DEMO=true   → npm run seed:riachao-demo (dados fictícios de Riachão das Neves; exige o onboarding)
+#   SEED_CERTIFICADO_DEMO=true → npm run seed:certificado-demo (certificado A1 de TESTE, sem valor legal, para Lagoa do
+#                               Orvalho e Riachão das Neves – documentos saem assinados digitalmente (PAdES) com o selo
+#                               "certificado de teste"; idempotente; nunca usar em produção – docs/assinatura-digital.md)
+#   SEED_COBRANCA_DEMO=true  → npm run seed:cobranca-demo (cobrança de taxas SIMULADA – Pix/boleto fictícios e "Simular
+#                               pagamento" – e tabela de taxas fictícia em Riachão das Neves e Alto do Umbuzeiro; rodar
+#                               depois do seed:demo/onboarding; não toca os municípios dos E2E; docs/cobranca.md)
 #   SEED_CDS_POC=true        → SOMENTE no ambiente da PoC (CDS Piemonte – docs/poc-cds.md): onboarding
 #                               cds-piemonte --demo (senha = ONBOARD_SENHA) + npm run seed:cds-poc. Recusa rodar com
 #                               DEMO_MODE=true ou SEED_DEMO=true (a demonstração pública nunca recebe esses dados).
@@ -50,6 +56,16 @@ fi
 if sim "${SEED_RIACHAO_DEMO:-}"; then
   log "SEED_RIACHAO_DEMO=true – dados de demonstração de Riachão das Neves"
   npm run seed:riachao-demo
+fi
+
+if sim "${SEED_CERTIFICADO_DEMO:-}"; then
+  log "SEED_CERTIFICADO_DEMO=true – certificado digital de TESTE (sem valor legal) para os órgãos de demonstração"
+  npm run seed:certificado-demo
+fi
+
+if sim "${SEED_COBRANCA_DEMO:-}"; then
+  log "SEED_COBRANCA_DEMO=true – cobrança de taxas SIMULADA + tabela de taxas fictícia (RDN e Alto do Umbuzeiro)"
+  npm run seed:cobranca-demo
 fi
 
 # ── Ambiente da PoC – CDS Piemonte do Paraguaçu (Pregão SRP 005/2026) – ver docs/poc-cds.md ──

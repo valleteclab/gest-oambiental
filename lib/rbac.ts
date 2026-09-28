@@ -54,7 +54,9 @@ export type Recurso =
   | "dashboard"
   | "admin"
   | "auditoria"
-  | "exportacao";
+  | "exportacao"
+  /** Cobranças de taxas (docs/cobranca.md): "ver" servidores do município; "editar" (baixa manual, isenção, cancelamento) ADMIN e GESTOR_MUNICIPAL. */
+  | "cobranca";
 
 const TECNICO: Acao[] = ["ver", "criar", "editar", "triar", "analisar", "pendencia", "parecer", "emitir_documento", "fiscalizar"];
 
@@ -71,6 +73,7 @@ const MATRIZ: Record<Papel, Partial<Record<Recurso, Acao[]>>> = {
     admin: ["ver", "configurar"],
     auditoria: ["ver"],
     exportacao: ["ver", "exportar"],
+    cobranca: ["ver", "editar"],
   },
   TEC_CONSORCIO: {
     processo: TECNICO,
@@ -81,6 +84,7 @@ const MATRIZ: Record<Papel, Partial<Record<Recurso, Acao[]>>> = {
     documento: ["ver", "emitir_documento"],
     relatorio: ["ver", "exportar"],
     dashboard: ["ver"],
+    cobranca: ["ver"],
   },
   TEC_MUNICIPAL: {
     processo: TECNICO,
@@ -91,6 +95,7 @@ const MATRIZ: Record<Papel, Partial<Record<Recurso, Acao[]>>> = {
     documento: ["ver", "emitir_documento"],
     relatorio: ["ver", "exportar"],
     dashboard: ["ver"],
+    cobranca: ["ver"],
   },
   GESTOR_MUNICIPAL: {
     // "criar" processo/pessoa: protocolo no balcão (podeProtocolarNoBalcao)
@@ -102,6 +107,7 @@ const MATRIZ: Record<Papel, Partial<Record<Recurso, Acao[]>>> = {
     documento: ["ver", "emitir_documento", "cancelar_documento"],
     relatorio: ["ver", "exportar"],
     dashboard: ["ver"],
+    cobranca: ["ver", "editar"],
   },
   FISCAL: {
     processo: ["ver"],
@@ -111,6 +117,7 @@ const MATRIZ: Record<Papel, Partial<Record<Recurso, Acao[]>>> = {
     denuncia: ["ver", "criar", "editar"],
     documento: ["ver", "emitir_documento"],
     dashboard: ["ver"],
+    cobranca: ["ver"],
   },
   SEMA_INEMA: {
     processo: ["ver"],
@@ -122,6 +129,7 @@ const MATRIZ: Record<Papel, Partial<Record<Recurso, Acao[]>>> = {
     relatorio: ["ver", "exportar"],
     dashboard: ["ver"],
     exportacao: ["ver", "exportar"],
+    cobranca: ["ver"],
   },
   REQUERENTE: {
     processo: ["ver", "criar", "requerer"],

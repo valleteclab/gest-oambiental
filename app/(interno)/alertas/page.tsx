@@ -18,6 +18,7 @@ const COR: Record<string, "vermelho" | "amarelo" | "azul" | "roxo" | "cinza"> = 
   CONDICIONANTE: "roxo",
   NOTIFICACAO: "roxo",
   DESMATAMENTO: "vermelho",
+  CERTIFICADO_VENCENDO: "amarelo",
 };
 
 export default async function PaginaAlertas({ searchParams }: { searchParams: Promise<{ page?: string; filtro?: string }> }) {

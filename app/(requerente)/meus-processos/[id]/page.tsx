@@ -11,6 +11,7 @@ import { LinhaDoTempo } from "../../../(interno)/processos/_componentes/linha-do
 import { Proibido } from "../../../(interno)/processos/_componentes/proibido";
 import { BotaoReemitir } from "../../../(interno)/processos/_componentes/formularios";
 import { ResponderPendencias } from "./responder";
+import { TaxasRequerente } from "@/components/cobranca/taxas-requerente";
 
 export const metadata = { title: "Meu processo" };
 
@@ -73,6 +74,8 @@ export default async function MeuProcesso({ params, searchParams }: { params: Pr
           <ResponderPendencias processoId={p.id} pendencias={abertas.map((x) => ({ id: x.id, descricao: x.descricao, prazo: fmtData(x.prazo_ate), anexos: x.anexos.map((a) => ({ id: a.id, nome: a.nome_arquivo })) }))} />
         </section>
       )}
+
+      <TaxasRequerente processoId={p.id} />
 
       <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
         <Card titulo="Andamento">
