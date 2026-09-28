@@ -83,10 +83,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma generate
-      - name: Migrações + seed demo
+      - name: Migrações + seed demo (+ cliente Riachão das Neves para o T12 – isolamento)
         run: |
           npx prisma migrate deploy
           npm run seed:demo
+          npm run onboard -- riachao-das-neves --demo
+          npm run seed:riachao-demo
       - name: Playwright (Chromium)
         run: npx playwright install --with-deps chromium
       - name: Build
