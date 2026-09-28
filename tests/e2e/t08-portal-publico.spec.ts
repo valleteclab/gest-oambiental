@@ -55,7 +55,7 @@ test("T8 – consulta pública do processo de T1: linha do tempo pública e docu
 
 test("T8b – landing lista os órgãos e o portal do órgão leva aos serviços com o município pré-selecionado", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("link", { name: /Solicitar demonstração/ }).first()).toHaveAttribute("href", /^mailto:contato@valleteclab\.com\.br/);
+  await expect(page.getByRole("link", { name: /Solicitar demonstração/ }).first()).toHaveAttribute("href", /^https:\/\/wa\.me\/5577998755764\?text=/);
   await page.getByTestId("lista-orgaos").getByRole("link", { name: P.nome }).click();
   await expect(page).toHaveURL(new RegExp(`/orgao/${P.sigla}$`));
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(`Secretaria Municipal de Meio Ambiente de ${P.nome}`);

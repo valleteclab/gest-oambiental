@@ -13,6 +13,7 @@ import {
   LogIn,
   Mail,
   Megaphone,
+  MessageCircle,
   Network,
   QrCode,
   Search,
@@ -22,7 +23,7 @@ import {
 } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { Brasao, demoAtivo } from "@/components/orgao";
-import { MAILTO_DEMONSTRACAO } from "@/lib/site";
+import { CONTATO_COMERCIAL, MAILTO_DEMONSTRACAO, WHATSAPP_DEMONSTRACAO } from "@/lib/site";
 
 // Landing do produto. Consulta o banco (órgãos ativos) → renderização dinâmica (o build da imagem não tem banco).
 export const dynamic = "force-dynamic";
@@ -145,8 +146,8 @@ export default async function Inicio() {
               pronta para prefeituras, secretarias de meio ambiente e consórcios públicos.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <a href={MAILTO_DEMONSTRACAO} className="inline-flex items-center justify-center gap-2 rounded-md bg-white px-5 py-3 text-sm font-semibold text-primaria-800 shadow-sm hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
-                <Mail className="h-4 w-4" aria-hidden /> Solicitar demonstração
+              <a href={WHATSAPP_DEMONSTRACAO} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 rounded-md bg-white px-5 py-3 text-sm font-semibold text-primaria-800 shadow-sm hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                <MessageCircle className="h-4 w-4" aria-hidden /> Solicitar demonstração
               </a>
               <Link href="/login" className="inline-flex items-center justify-center gap-2 rounded-md px-5 py-3 text-sm font-semibold text-white ring-1 ring-white/40 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
                 <LogIn className="h-4 w-4" aria-hidden /> Entrar
@@ -378,7 +379,8 @@ export default async function Inicio() {
             <p className="mt-2 max-w-xl text-slate-600">Agende uma demonstração com a equipe da VALLETECLAB e veja o fluxo completo funcionando.</p>
           </div>
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
-            <a href={MAILTO_DEMONSTRACAO} className="btn-primario px-5 py-3"><Mail className="h-4 w-4" aria-hidden /> Solicitar demonstração</a>
+            <a href={WHATSAPP_DEMONSTRACAO} target="_blank" rel="noopener noreferrer" className="btn-primario px-5 py-3"><MessageCircle className="h-4 w-4" aria-hidden /> Solicitar demonstração pelo WhatsApp</a>
+            <a href={MAILTO_DEMONSTRACAO} className="btn-secundario px-5 py-3" title={CONTATO_COMERCIAL}><Mail className="h-4 w-4" aria-hidden /> Por e-mail</a>
             <Link href="/login" className="btn-secundario px-5 py-3"><FileCheck2 className="h-4 w-4" aria-hidden /> Entrar no sistema</Link>
           </div>
         </div>
