@@ -235,6 +235,62 @@ export default async function Inicio() {
         </div>
       </section>
 
+      {/* ── Agente de IA no WhatsApp ── */}
+      <section aria-labelledby="titulo-agente" className="bg-primaria-800 text-white">
+        <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-16 sm:py-20 lg:grid-cols-2">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-wide text-emerald-200">Atendimento com inteligência artificial</p>
+            <h2 id="titulo-agente" className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Denúncias ambientais pelo WhatsApp, 24 horas por dia</h2>
+            <p className="mt-3 text-emerald-50/90">
+              O Assistente Ambiental conversa com o cidadão no WhatsApp, no chat do site e por e-mail: entende texto, áudio e fotos, pede a localização,
+              monta o resumo e registra a denúncia com protocolo — direto na fila da fiscalização.
+            </p>
+            <ul className="mt-6 space-y-2.5 text-sm">
+              {[
+                "WhatsApp oficial (API da Meta) ou número próprio da prefeitura, chat no site e e-mail",
+                "Entende mensagens de voz, fotos e localização enviada pelo celular",
+                "Protocolo na hora e consulta do andamento pelo próprio cidadão",
+                "Aviso automático ao cidadão quando a denúncia muda de situação",
+                "Equipe assume a conversa quando precisar — a IA pausa sozinha",
+                "Denúncia anônima, consentimento LGPD e dados protegidos",
+              ].map((t) => (
+                <li key={t} className="flex gap-2">
+                  <span aria-hidden className="mt-0.5 text-emerald-300">✓</span>
+                  <span>{t}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <figure className="mx-auto w-full max-w-sm">
+            <div className="overflow-hidden rounded-[2rem] border-8 border-slate-900 bg-[#efeae2] shadow-2xl" role="img" aria-label="Exemplo de conversa com o Assistente Ambiental no WhatsApp">
+              <div className="flex items-center gap-3 bg-[#075e54] px-4 py-3 text-white">
+                <span className="grid h-9 w-9 place-items-center rounded-full bg-emerald-100 text-lg" aria-hidden>🌿</span>
+                <div>
+                  <p className="text-sm font-semibold">Assistente Ambiental</p>
+                  <p className="text-xs text-emerald-100">Secretaria de Meio Ambiente</p>
+                </div>
+              </div>
+              <div className="space-y-2 p-3 text-[13px] leading-snug text-slate-900" aria-hidden>
+                <p className="ml-auto max-w-[80%] rounded-lg rounded-tr-none bg-[#d9fdd3] px-3 py-2">Tem gente queimando lixo no terreno ao lado da escola 😷</p>
+                <p className="max-w-[85%] rounded-lg rounded-tl-none bg-white px-3 py-2">Obrigado por avisar! 🌿 Pode me enviar a <b>localização</b> e, se possível, uma <b>foto</b>?</p>
+                <p className="ml-auto max-w-[80%] rounded-lg rounded-tr-none bg-[#d9fdd3] px-3 py-2">📍 Localização enviada<br />📷 Foto</p>
+                <p className="max-w-[85%] rounded-lg rounded-tl-none bg-white px-3 py-2">
+                  📋 <b>Resumo</b><br />Tipo: queimada / fumaça<br />Local: ao lado da escola<br />Fotos: 1 · Anônima<br />Posso registrar?
+                </p>
+                <p className="ml-auto max-w-[80%] rounded-lg rounded-tr-none bg-[#d9fdd3] px-3 py-2">Sim</p>
+                <p className="max-w-[85%] rounded-lg rounded-tl-none bg-white px-3 py-2">✅ Denúncia registrada! Protocolo <b>DEN-XXX-001/2026</b>. Você será avisado quando a fiscalização atuar.</p>
+              </div>
+            </div>
+            <figcaption className="mt-3 text-center text-xs text-emerald-100">Exemplo ilustrativo de conversa</figcaption>
+          </figure>
+          <figure className="lg:col-span-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/apresentacao/atendimento.webp" alt="Captura de tela: painel de atendimento com a conversa e a denúncia sendo montada" loading="lazy" className="w-full rounded-xl border border-white/10 shadow-xl" />
+            <figcaption className="mt-3 text-sm text-emerald-100">Painel de atendimento: a equipe acompanha as conversas, vê os dados coletados e pode assumir o atendimento a qualquer momento.</figcaption>
+          </figure>
+        </div>
+      </section>
+
       {/* ── Como funciona ── */}
       <section aria-labelledby="titulo-como" className="bg-slate-50">
         <div className="mx-auto max-w-6xl px-4 py-16 sm:py-20">
