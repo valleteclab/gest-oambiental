@@ -158,7 +158,8 @@ test("T13 – webhook Evolution: segredo, dedup, resposta via provedor simulado,
   // protocolo de OUTRA pessoa → não revela
   await request.post(url, { headers: comSegredo, data: msg(`E2E-${Date.now()}-c`, { conversation: `qual a situação da DEN-${P.sigla}-001/${new Date().getFullYear()}?` }) });
   await expect.poll(async () => (await detalhe(request, token, conversaId)).mensagens.some((m) => m.direcao === "OUT" && (m.texto ?? "").includes("vinculada a este contato")), { timeout: 20_000 }).toBe(true);
-  expect((await detalhe(request, token, conversaId)).mensagens.at(-1)?.texto).toContain("Onde"); // e retoma a pergunta pendente
+  // e retoma a pergunta pendente (a mensagem seguinte pode sair alguns segundos depois: ritmo de envio do provedor)
+  await expect.poll(async () => (await detalhe(request, token, conversaId)).mensagens.at(-1)?.texto ?? "", { timeout: 30_000 }).toContain("Onde");
 
   // atendente responde pelo celular do órgão (fromMe, não enviado pela API) → HUMANO, IA pausada
   await request.post(url, { headers: comSegredo, data: msg(`E2E-${Date.now()}-d`, { conversation: "Aqui é o fiscal, vou verificar." }, true) });

@@ -21,6 +21,8 @@ env:
   HASH_PEPPER: ci-only-pepper
   STORAGE_DRIVER: local
   STORAGE_LOCAL_DIR: ./storage
+  # Agente de denúncias: não chama provedores de WhatsApp reais nos testes (docs/agente-denuncias.md)
+  CANAIS_ENVIO_SIMULADO: "true"
 
 jobs:
   check:
