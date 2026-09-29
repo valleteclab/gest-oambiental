@@ -4,7 +4,8 @@ import type { Conversa, EstadoConversa, MensagemConversa } from "@prisma/client"
 import { prisma } from "../db";
 import { decifrar, sha256 } from "../crypto";
 import { hashContato } from "../canais/contato";
-import { nomeSeguro, salvarArquivo } from "../storage";
+import { nomeSeguro, salvarUpload } from "../storage";
+import { ErroApi } from "../http";
 import { tipoImagem } from "../fiscalizacao/regras";
 import { criarDenunciaCanal } from "../fiscalizacao/servico";
 import { fmtData } from "../format";
@@ -29,11 +30,11 @@ export const urlsPublicas = () => ({ privacidade: `${urlBase()}/privacidade`, ac
 
 type Conv = Conversa;
 
-/** Grava mídia recebida no storage: {sigla}/conversas/{conversa}/{uuid}-{nome}. */
+/** Grava mídia recebida no storage: {sigla}/conversas/{conversa}/{uuid}-{nome} (passa pelo antivírus opcional). */
 async function gravarMidia(conv: Conv, sigla: string, dados: Buffer, mime: string, nome: string) {
   const id = randomUUID();
   const key = `${sigla}/conversas/${conv.id}/${id}-${nomeSeguro(nome)}`;
-  await salvarArquivo(key, dados, mime);
+  await salvarUpload(key, dados, mime, { nome, contexto: "midia_conversa", entidade_id: conv.id });
   return { key, sha: sha256(dados) };
 }
 
@@ -92,7 +93,7 @@ export async function processarMensagemCidadao(canal: CanalRuntime, convInicial:
       }
     } catch (e) {
       console.error(`[agente] mídia conversa ${conv.id}:`, (e as Error).message);
-      extras.push({ texto: "Não consegui baixar o arquivo enviado. 😕 Pode tentar de novo?" });
+      extras.push({ texto: e instanceof ErroApi && e.code === "ARQUIVO_INFECTADO" ? "O arquivo enviado foi recusado pela verificação de segurança (antivírus). Envie outro arquivo, por favor." : "Não consegui baixar o arquivo enviado. 😕 Pode tentar de novo?" });
     }
   }
 

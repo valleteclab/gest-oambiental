@@ -7,7 +7,8 @@ import { auditar } from "../audit";
 import { sha256 } from "../crypto";
 import { invalido, naoEncontrado, proibido } from "../http";
 import { can, isInterno, isSomenteLeitura, podeProtocolarNoBalcao, podeVerMunicipio, type UsuarioSessao } from "../rbac";
-import { lerArquivo, nomeSeguro, removerArquivo, salvarArquivo, urlUploadPreAssinada, validarUpload } from "../storage";
+import { lerArquivo, nomeSeguro, removerArquivo, salvarUpload, urlUploadPreAssinada, validarUpload } from "../storage";
+import { exigirArquivoLimpo } from "../antivirus";
 import { ehTitular, STATUS_FINAIS } from "./maquina";
 import { obterProcessoAutorizado, podeVerProcesso, UUID_RE, type ProcessoCompleto } from "./consultas";
 
@@ -97,7 +98,7 @@ export async function anexarArquivo(processoId: string, arquivo: { nome: string;
   await validarMeta(p, meta, arquivo.nome);
   const mime = arquivo.mime && arquivo.mime !== "application/octet-stream" ? arquivo.mime : mimeDoNome(arquivo.nome);
   const storage_key = chaveAnexo(p.municipio.sigla, p.id, arquivo.nome);
-  await salvarArquivo(storage_key, arquivo.dados, mime);
+  await salvarUpload(storage_key, arquivo.dados, mime, { nome: arquivo.nome, contexto: "anexo_processo", usuario_id: u.id, entidade_id: p.id });
   try {
     return await registrar(p, meta, { nome: arquivo.nome, mime, tamanho: arquivo.dados.length, sha256: sha256(arquivo.dados), storage_key }, u);
   } catch (e) {
@@ -134,6 +135,12 @@ export async function confirmarUpload(processoId: string, info: { storage_key: s
   if (erro) {
     await removerArquivo(info.storage_key);
     throw invalido(erro);
+  }
+  try {
+    await exigirArquivoLimpo(dados, { nome: info.nome, contexto: "anexo_processo", usuario_id: u.id, entidade_id: p.id });
+  } catch (e) {
+    await removerArquivo(info.storage_key);
+    throw e;
   }
   return registrar(p, meta, { nome: info.nome, mime: info.mime || mimeDoNome(info.nome), tamanho: dados.length, sha256: sha256(dados), storage_key: info.storage_key }, u);
 }

@@ -45,6 +45,15 @@ Defina no **app e no worker** (o botão "Executar backup agora" roda no app; o a
 
 Sem as variáveis `BACKUP_S3_*`, os dumps vão para o storage da própria aplicação (`backups/` no `S3_BUCKET`) e /admin/backup mostra "cópia fora do provedor não configurada".
 
+### Antivírus nos uploads (opcional – ClamAV)
+1. No projeto: *New → Docker Image* `clamav/clamav:stable` e nomeie o serviço `clamav` (sem domínio público; ≥ 2 GB de RAM – a base de assinaturas ocupa ~1,2 GB; o `freshclam` embutido atualiza as assinaturas sozinho). Opcional: volume em `/var/lib/clamav` para não baixar a base a cada restart.
+2. No **app e no worker** (o worker processa a mídia dos canais): `CLAMAV_HOST=clamav.railway.internal` (rede privada), `CLAMAV_PORT=3310`.
+3. `CLAMAV_OBRIGATORIO=true` em produção se a política exigir recusar uploads com o antivírus fora do ar; padrão `false` (aceita e registra aviso no log).
+4. O clamd leva alguns minutos para subir na 1ª vez (download das assinaturas). Teste com o arquivo EICAR (ver `docs/operacao.md` §10).
+
+### Limite de login por IP
+Padrão: 20 falhas por IP em 15 min (`LOGIN_LIMITE_IP`, `LOGIN_LIMITE_IP_JANELA_MIN`). Contagem em memória por réplica – mantenha 1 réplica do app ou limite também no proxy.
+
 ## 3. Pré-deploy do worker: migrações, seeds e onboarding de clientes
 `scripts/predeploy.sh` roda, nesta ordem, conforme as variáveis do serviço **worker**:
 

@@ -163,7 +163,29 @@ const schemas: Obj = {
   }),
   ExportacaoSolicitar: obj({ escopo: { type: "string", enum: ["COMPLETA", "MUNICIPIO"], default: "COMPLETA" }, municipio_id: uuid }),
   Exportacao: obj({ id: uuid, escopo: str, status: enumStr("PENDENTE", "PROCESSANDO", "CONCLUIDA", "ERRO"), created_at: dataHora, concluida_em: { type: ["string", "null"] }, url_download: { type: ["string", "null"], format: "uri", description: "ZIP (CSV+JSON por tabela, anexos, manifest.json)" }, tamanho_bytes: { type: ["integer", "null"] }, sha256: strN }),
-  SeiaProcesso: obj({ numero: str, municipio_ibge: str, tipo_ato: str, tipologia: str, porte: str, potencial_poluidor: str, status: str, atualizado_em: dataHora, cnpj_cpf_hash: str, latitude: num, longitude: num, documentos: arr(obj({ numero: str, codigo_verificador: str, validade_ate: { type: ["string", "null"] } })) }),
+  SeiaProcesso: obj({
+    numero: str,
+    status: enumStr("PROTOCOLADO", "EM_TRIAGEM", "AGUARDANDO_REQUERENTE", "EM_ANALISE", "AGUARDANDO_VISTORIA", "AGUARDANDO_DECISAO", "DEFERIDO", "INDEFERIDO", "CONCLUIDO", "ARQUIVADO"),
+    municipio: obj({ codigo_ibge: str, nome: str, sigla: str }),
+    tipo_ato: obj({ sigla: str, nome: str }),
+    tipologia: { type: ["object", "null"], properties: { codigo: str, nome: str } },
+    porte: enumStr("MICRO", "PEQUENO", "MEDIO", "GRANDE", "EXCEPCIONAL"),
+    potencial_poluidor: enumStr("BAIXO", "MEDIO", "ALTO"),
+    datas: obj({ protocolo: { type: ["string", "null"], format: "date-time" }, conclusao: { type: ["string", "null"], format: "date-time" }, atualizado_em: dataHora }),
+    empreendimento: obj({ nome: str, latitude: { type: ["number", "null"] }, longitude: { type: ["number", "null"] }, numero_car: strN }),
+    requerente: obj({ nome: str, tipo: enumStr("PF", "PJ"), documento: { type: "string", description: "CPF/CNPJ sempre mascarado (***.456.789-** / 12.345.678/****-**)", examples: ["***.456.789-**"] } }),
+    documentos: arr(obj({
+      tipo: enumStr("LICENCA", "AUTORIZACAO", "CERTIDAO", "NOTIFICACAO", "AUTO_INFRACAO"),
+      numero: str, sigla_ato: strN, emitido_em: dataHora, validade_ate: { type: ["string", "null"], format: "date-time" },
+      status: enumStr("VALIDO", "CANCELADO", "SUBSTITUIDO"),
+      url_validacao: { type: "string", format: "uri", description: "Página pública de validação (/validar/{codigo})" },
+      sha256: { type: "string", description: "SHA-256 do PDF (assinado) emitido" },
+    })),
+  }),
+  PaginaSeiaProcesso: obj({
+    formato: { type: "string", examples: ["LicenciaGov-SEIA v0 (provisório – a confirmar com SEMA/INEMA)"] },
+    gerado_em: dataHora, page: { type: "integer" }, size: { type: "integer" }, total: { type: "integer" }, items: arr(ref("SeiaProcesso")),
+  }, ["formato", "page", "size", "total", "items"]),
 };
 
 for (const n of ["Pessoa", "ResponsavelTecnico", "Empreendimento", "Processo", "Denuncia", "Fiscalizacao", "AutoInfracao", "Notificacao", "LicencaPublica"]) {
@@ -177,13 +199,13 @@ const paths: Obj = {
   "/api/v1/auth/login": {
     post: op({
       tags: ["Autenticação"], summary: "Login (e-mail + senha)", ...publico,
-      description: "Retorna access token (15 min) e refresh token (8 h); também grava cookies HttpOnly. Rate limit e bloqueio após 5 falhas. `orgao` (opcional): sigla ou id do município em que o usuário vai atuar – usuários municipais só nos municípios dos seus papéis; ADMIN, TEC_CONSORCIO, SEMA_INEMA e requerentes em qualquer órgão.",
+      description: "Retorna access token (15 min) e refresh token (8 h); também grava cookies HttpOnly. Bloqueio da conta após 5 falhas (15 min) e limite por IP: 20 falhas em 15 min → 429 `MUITAS_TENTATIVAS` (só falhas contam; `LOGIN_LIMITE_IP`/`LOGIN_LIMITE_IP_JANELA_MIN`). `orgao` (opcional): sigla ou id do município em que o usuário vai atuar – usuários municipais só nos municípios dos seus papéis; ADMIN, TEC_CONSORCIO, SEMA_INEMA e requerentes em qualquer órgão.",
       requestBody: corpo(obj({ email: { type: "string", format: "email" }, senha: str, orgao: { type: "string", examples: ["LOR"] } }, ["email", "senha"])),
       responses: { "200": ok(ref("Tokens")), "401": erroResp("Credenciais inválidas", { code: "CREDENCIAIS_INVALIDAS", message: "E-mail ou senha inválidos.", details: null }), "403": erroResp("Sem acesso ao órgão", { code: "ORGAO_SEM_ACESSO", message: "Seu usuário não tem acesso a este órgão.", details: null }), ...erros(422, 429, 500) },
     }),
   },
   "/api/v1/auth/refresh": {
-    post: op({ tags: ["Autenticação"], summary: "Renova tokens", ...publico, description: "Aceita `refresh_token` no corpo ou o cookie `lg_refresh`.", requestBody: corpo(obj({ refresh_token: str }), false), responses: { "200": ok(ref("Tokens")), ...erros(401, 500) } }),
+    post: op({ tags: ["Autenticação"], summary: "Renova tokens", ...publico, description: "Aceita `refresh_token` no corpo ou o cookie `lg_refresh`. Tokens inválidos contam para o limite por IP (429 `MUITAS_TENTATIVAS`).", requestBody: corpo(obj({ refresh_token: str }), false), responses: { "200": ok(ref("Tokens")), ...erros(401, 429, 500) } }),
   },
   "/api/v1/auth/logout": {
     post: op({ tags: ["Autenticação"], summary: "Encerra a sessão (auditado)", responses: { "200": ok(obj({ ok: bool })), ...erros(401, 500) } }),
@@ -280,7 +302,17 @@ const paths: Obj = {
 
   // ───────────── Integração (P2) ─────────────
   "/api/v1/integracao/seia/processos": {
-    get: op({ tags: ["Integração"], summary: "(P2) Feed de processos para SEMA/INEMA (SEIA)", parameters: [{ ...q("desde", "Alterados desde (ISO 8601)", dataHora), required: true }, ...paginacao], responses: { "200": ok(obj({ items: arr(ref("SeiaProcesso")), page: { type: "integer" }, size: { type: "integer" }, total: { type: "integer" } })), ...errosInternos } }),
+    get: op({
+      tags: ["Integração"], summary: "(P2) Feed de processos para SEMA/INEMA (SEIA) – somente leitura",
+      description: "Formato **provisório** `LicenciaGov-SEIA v0` (a confirmar com SEMA/INEMA; também no cabeçalho `X-LicenciaGov-Formato`). Usuários internos com permissão de ver processos (consumidor previsto: SEMA_INEMA; também ADMIN), sempre no escopo de municípios do usuário. Somente processos protocolados, ordenados por `datas.atualizado_em` (sincronização incremental: guarde o maior valor recebido e use-o em `desde`). Não inclui despachos, pareceres nem observações internas; CPF/CNPJ do requerente sempre mascarado. Documentos: licenças, autorizações, certidões, notificações e autos (sem pareceres/ofícios/recibos).",
+      parameters: [
+        q("desde", "Processos alterados (ou com documento alterado) desde esta data/hora ISO 8601", dataHora),
+        q("municipio", "Sigla do município (ex.: LOR). Fora do escopo → 403; inexistente → 422."),
+        q("status", "Status do processo", enumStr("PROTOCOLADO", "EM_TRIAGEM", "AGUARDANDO_REQUERENTE", "EM_ANALISE", "AGUARDANDO_VISTORIA", "AGUARDANDO_DECISAO", "DEFERIDO", "INDEFERIDO", "CONCLUIDO", "ARQUIVADO")),
+        ...paginacao,
+      ],
+      responses: { "200": ok(ref("PaginaSeiaProcesso")), ...errosInternos },
+    }),
   },
 
   // ───────────── Operação ─────────────

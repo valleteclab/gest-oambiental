@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile, stat, unlink, readdir } from "node:fs/promi
 import path from "node:path";
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadBucketCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { exigirArquivoLimpo, type ContextoUpload } from "./antivirus";
 
 // Storage S3-compatível (AWS S3 / R2 / MinIO) ou disco local em dev. Chave: {municipio}/{contexto}/{id}/{arquivo}
 const driver = () => process.env.STORAGE_DRIVER ?? "local";
@@ -44,6 +45,15 @@ export async function salvarArquivo(key: string, dados: Buffer, mime = "applicat
   const p = caminhoSeguro(key);
   await mkdir(path.dirname(p), { recursive: true });
   await writeFile(p, dados);
+}
+
+/**
+ * Grava um arquivo ENVIADO POR USUÁRIO/CIDADÃO (anexos, fotos, comprovantes, mídia dos canais): passa antes
+ * pelo antivírus opcional (lib/antivirus.ts – CLAMAV_HOST). Arquivos gerados pelo sistema usam salvarArquivo().
+ */
+export async function salvarUpload(key: string, dados: Buffer, mime: string, ctx: ContextoUpload) {
+  await exigirArquivoLimpo(dados, ctx);
+  await salvarArquivo(key, dados, mime);
 }
 
 export async function lerArquivo(key: string): Promise<Buffer> {

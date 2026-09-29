@@ -8,6 +8,7 @@ import { prisma } from "./db";
 import { registrarAuditoria } from "./audit";
 import { isInterno, podeAcessarOrgao, type UsuarioSessao } from "./rbac";
 import { sessaoPorId } from "./sessao";
+import { ipBloqueado, ipDaRequisicao, MENSAGEM_MUITAS_TENTATIVAS, registrarFalhaIp } from "./limite-login";
 
 // Sessão: JWT curto de acesso (15 min) + refresh (8 h), cookies Secure/HttpOnly/SameSite=Lax (SPEC 3 / 9.3).
 export const COOKIE_ACESSO = "lg_access";
@@ -146,7 +147,20 @@ export async function contextoRequisicao() {
   };
 }
 
-type ResultadoLogin = { ok: true; usuario: UsuarioSessao } | { ok: false; erro: string; motivo?: "orgao_sem_acesso" };
+type ResultadoLogin = { ok: true; usuario: UsuarioSessao } | { ok: false; erro: string; motivo?: "orgao_sem_acesso" | "limite_ip" };
+
+/** Chave do limite de falhas por IP (lib/limite-login.ts) da requisição atual. */
+async function chaveIp(prefixo: string) {
+  return `${prefixo}:${ipDaRequisicao(await headers())}`;
+}
+
+/** Limite por IP do /auth/refresh (true = bloqueado). Chame `falhaRefreshIp()` quando o token for inválido. */
+export async function refreshBloqueadoPorIp(): Promise<boolean> {
+  return ipBloqueado(await chaveIp("refresh"));
+}
+export async function falhaRefreshIp() {
+  registrarFalhaIp(await chaveIp("refresh"));
+}
 
 export const ERRO_ORGAO_SEM_ACESSO = "Seu usuário não tem acesso a este órgão.";
 
@@ -156,14 +170,22 @@ export const ERRO_ORGAO_SEM_ACESSO = "Seu usuário não tem acesso a este órgã
  */
 export async function autenticar(email: string, senha: string, orgao?: OrgaoResumo | null): Promise<ResultadoLogin> {
   const ctx = await contextoRequisicao();
+  // Limite por IP (conta só falhas): barra força bruta distribuída entre várias contas a partir do mesmo IP.
+  const ipChave = await chaveIp("login");
+  if (ipBloqueado(ipChave)) {
+    await registrarAuditoria({ usuario_id: null, acao: "LOGIN_BLOQUEADO_IP", entidade: "usuario", depois: { email }, ...ctx });
+    return { ok: false, erro: MENSAGEM_MUITAS_TENTATIVAS, motivo: "limite_ip" };
+  }
   const u = await prisma.usuario.findUnique({ where: { email: email.trim().toLowerCase() } });
   const falha = async (motivo: string, usuarioId?: string) => {
+    registrarFalhaIp(ipChave);
     await registrarAuditoria({ usuario_id: usuarioId ?? null, acao: "LOGIN_FALHA", entidade: "usuario", entidade_id: usuarioId ?? null, depois: { email, motivo }, ...ctx });
     return { ok: false as const, erro: "E-mail ou senha inválidos." };
   };
   if (!u) return falha("usuario_inexistente");
   if (!u.ativo) return falha("usuario_inativo", u.id);
   if (u.bloqueado_ate && u.bloqueado_ate > new Date()) {
+    registrarFalhaIp(ipChave);
     await registrarAuditoria({ usuario_id: u.id, acao: "LOGIN_BLOQUEADO", entidade: "usuario", entidade_id: u.id, ...ctx });
     return { ok: false, erro: `Conta bloqueada temporariamente após ${MAX_FALHAS} tentativas. Tente novamente em alguns minutos.` };
   }

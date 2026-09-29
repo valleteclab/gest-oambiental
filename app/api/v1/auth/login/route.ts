@@ -12,6 +12,7 @@ export const POST = rota(async (req: Request) => {
   if (orgaoPedido && !orgao) throw new ErroApi(422, "ORGAO_INVALIDO", "Órgão não encontrado ou inativo.", { campo: "orgao" });
   const r = await autenticar(email, senha, orgao);
   if (!r.ok) {
+    if (r.motivo === "limite_ip") throw new ErroApi(429, "MUITAS_TENTATIVAS", r.erro);
     if (r.motivo === "orgao_sem_acesso") throw new ErroApi(403, "ORGAO_SEM_ACESSO", r.erro);
     throw new ErroApi(401, "CREDENCIAIS_INVALIDAS", r.erro);
   }

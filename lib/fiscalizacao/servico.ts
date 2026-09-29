@@ -6,7 +6,7 @@ import { auditar } from "../audit";
 import { cifrar, decifrar, formatarCpfCnpj, hashBusca, mascararCpfCnpj, sha256, somenteDigitos } from "../crypto";
 import { hashContato } from "../canais/contato";
 import { numeroDocumento } from "../numeracao";
-import { nomeSeguro, removerArquivo, salvarArquivo, validarUpload } from "../storage";
+import { nomeSeguro, removerArquivo, salvarUpload, validarUpload } from "../storage";
 import { emitirDocumento } from "../documentos";
 import { invalido, naoEncontrado, proibido } from "../http";
 import { podeVerMunicipio, whereMunicipio, type UsuarioSessao } from "../rbac";
@@ -194,13 +194,13 @@ function validarFotos(fotos: FotoUpload[]) {
 }
 
 /** Grava fotos no storage (antes da transação) e devolve dados para as linhas de `anexo`. */
-async function gravarFotos(sigla: string, fiscalizacaoId: string, fotos: ReturnType<typeof validarFotos>, padrao: { latitude: number | null; longitude: number | null }) {
+async function gravarFotos(sigla: string, fiscalizacaoId: string, fotos: ReturnType<typeof validarFotos>, padrao: { latitude: number | null; longitude: number | null }, usuarioId: string) {
   const gravadas: { id: string; storage_key: string; nome: string; mime: string; tamanho: number; sha256: string; latitude: number | null; longitude: number | null }[] = [];
   try {
     for (const f of fotos) {
       const id = randomUUID();
       const storage_key = `${sigla}/fiscalizacoes/${fiscalizacaoId}/${id}-${f.nome}`;
-      await salvarArquivo(storage_key, f.dados, f.mime);
+      await salvarUpload(storage_key, f.dados, f.mime, { nome: f.nome, contexto: "foto_fiscalizacao", usuario_id: usuarioId, entidade_id: fiscalizacaoId });
       gravadas.push({ id, storage_key, nome: f.nome, mime: f.mime, tamanho: f.dados.length, sha256: sha256(f.dados), latitude: f.latitude ?? padrao.latitude, longitude: f.longitude ?? padrao.longitude });
     }
   } catch (e) {
@@ -233,7 +233,7 @@ export async function criarFiscalizacao(u: UsuarioSessao, d: FiscalizacaoInput, 
 
   const fotos = validarFotos(fotosEntrada);
   const id = randomUUID();
-  const gravadas = await gravarFotos(mun.sigla, id, fotos, { latitude: d.latitude, longitude: d.longitude });
+  const gravadas = await gravarFotos(mun.sigla, id, fotos, { latitude: d.latitude, longitude: d.longitude }, u.id);
 
   const equipe = [{ usuario_id: u.id, nome: u.nome }, ...d.equipe.filter((m) => m.usuario_id !== u.id)];
   try {
@@ -272,7 +272,7 @@ export async function adicionarFotos(u: UsuarioSessao, fiscalizacaoId: string, f
   if (!f) throw naoEncontrado("Fiscalização não encontrada.");
   if (!podeVerMunicipio(u, f.municipio_id) || !podeRegistrarVistoria(u, f.municipio_id)) throw proibido();
   if (!fotosEntrada.length) throw invalido("Nenhuma foto enviada.");
-  const gravadas = await gravarFotos(f.municipio.sigla, f.id, validarFotos(fotosEntrada), { latitude: num(f.latitude), longitude: num(f.longitude) });
+  const gravadas = await gravarFotos(f.municipio.sigla, f.id, validarFotos(fotosEntrada), { latitude: num(f.latitude), longitude: num(f.longitude) }, u.id);
   try {
     await prisma.$transaction(async (tx) => {
       await tx.anexo.createMany({ data: gravadas.map((g) => ({ id: g.id, fiscalizacao_id: f.id, tipo: "FOTO", nome_arquivo: g.nome, storage_key: g.storage_key, mime: g.mime, tamanho: g.tamanho, sha256: g.sha256, latitude: g.latitude, longitude: g.longitude, enviado_por: u.id })) });

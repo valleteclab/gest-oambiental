@@ -13,7 +13,7 @@ import { proximoNumero } from "../numeracao";
 import { can, isInterno, isSomenteLeitura, type UsuarioSessao } from "../rbac";
 import { ehTitular } from "../processo/maquina";
 import { ehDemandaUrbana } from "../demandas/catalogo";
-import { nomeSeguro, salvarArquivo, validarUpload } from "../storage";
+import { nomeSeguro, salvarUpload, validarUpload } from "../storage";
 import { consultarPagamento, criarCobranca as criarNoAsaas, ErroAsaas, garantirCliente, removerCobranca, runtimeAsaas } from "./asaas";
 import {
   calcularTaxa,
@@ -335,7 +335,7 @@ export async function baixaManual(cobrancaId: string, u: UsuarioSessao, entrada:
     const erro = validarUpload(arq.name, arq.size);
     if (erro) throw invalido(erro, { campo: "comprovante" });
     comprovante_key = `${c.municipio_id}/cobrancas/${c.id}/${Date.now()}-${nomeSeguro(arq.name)}`;
-    await salvarArquivo(comprovante_key, Buffer.from(await arq.arrayBuffer()), arq.type || "application/octet-stream");
+    await salvarUpload(comprovante_key, Buffer.from(await arq.arrayBuffer()), arq.type || "application/octet-stream", { nome: arq.name, contexto: "comprovante_cobranca", usuario_id: u.id, entidade_id: c.id });
   }
   const r = await aplicarStatus(c.id, "PAGA", { baixa_manual: true, baixa_por: u.id, baixa_motivo: motivo, comprovante_key, forma_pagamento: entrada.forma || "MANUAL", pago_em: entrada.pago_em ?? new Date(), valor_pago: entrada.valor_pago ?? null }, u, "baixa_manual");
   if (!r.alterado) throw invalido("A cobrança não pôde receber baixa (status mudou). Atualize a página.");

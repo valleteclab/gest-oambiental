@@ -25,6 +25,9 @@ Backups e restauração: [`backup.md`](backup.md) (e checklist mensal em `restor
 | `TZ` | recomendado | não | `America/Bahia` (prazos e datas em documentos) |
 | `DEMO_MODE` | não | não | `true` exibe a faixa "Ambiente de demonstração – dados fictícios" e rotula os órgãos da landing como de demonstração (lido em tempo de execução). Padrão `false` |
 | `ARQUIVAMENTO_AUTO`, `ARQUIVAMENTO_AUTO_CARENCIA_DIAS`, `ALERTAS_MODULO_TRANSICIONAR` | não | não | Parâmetros dos jobs de prazo (ver módulo de prazos/alertas e `.env.example`) |
+| `CLAMAV_HOST` / `CLAMAV_PORT` | não | não | Antivírus opcional nos uploads (clamd, porta padrão 3310) – ver §10. Vazio = sem verificação |
+| `CLAMAV_OBRIGATORIO` | não | não | `true` = clamd indisponível recusa o upload (503 `ANTIVIRUS_INDISPONIVEL`); padrão `false` = aceita e loga aviso |
+| `LOGIN_LIMITE_IP` / `LOGIN_LIMITE_IP_JANELA_MIN` | não | não | Limite de **falhas** de login/refresh por IP (padrão 20 em 15 min → 429 `MUITAS_TENTATIVAS`) – ver §11 |
 | `E2E_BASE_URL`, `E2E_SENHA`, `E2E_IGNORE_HTTPS` | testes | – | Playwright contra homolog/prod |
 
 Modelo completo: [`.env.example`](../.env.example). Em homolog/prod os segredos vêm do **AWS Secrets Manager** (nunca em arquivo versionado).
@@ -90,6 +93,8 @@ Procedimentos, retenção (30 dias, outra região, criptografado), teste de rest
 | E-mails não chegam | `SMTP_URL`; SES fora do sandbox; caixa de teste `/admin/emails` |
 | Alertas não aparecem | serviço `worker` rodando? erros no log; fila `pgboss.job` |
 | Muitos 401 após deploy | `AUTH_SECRET` mudou (sessões invalidadas – esperado) |
+| Uploads recusados com "Não foi possível verificar o arquivo no antivírus" | `CLAMAV_OBRIGATORIO=true` e clamd fora do ar/inacessível: serviço ClamAV, `CLAMAV_HOST`/`CLAMAV_PORT`, `StreamMaxLength` ≥ 26M |
+| Usuários de um mesmo prédio recebem "Muitas tentativas" | limite por IP de falhas de login (§11): aguardar a janela ou reiniciar o app; ajustar `LOGIN_LIMITE_IP` |
 
 ## 9. Testes E2E contra um ambiente
 ```bash
@@ -97,3 +102,15 @@ E2E_BASE_URL=https://homolog.licenciagov.com.br npm run test:e2e         # deskt
 E2E_BASE_URL=http://localhost:3107 CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run test:e2e:smoke   # container de dev
 ```
 Relatório HTML em `playwright-report/`. Documentação da API: `/api/docs` (JSON em `/api/docs/openapi.json`).
+
+## 10. Antivírus nos uploads (ClamAV, opcional – SPEC 9.3)
+Com `CLAMAV_HOST` definido, todo arquivo enviado por usuário ou cidadão (anexos de processo – multipart e confirmação do upload S3 –, fotos de vistoria, comprovantes de baixa manual e mídias recebidas pelos canais de denúncia) passa pelo clamd (protocolo `INSTREAM` via TCP, `lib/antivirus.ts`, ponto único `salvarUpload()` de `lib/storage.ts`) **antes** de ser gravado. Arquivos gerados pelo sistema (PDFs oficiais, backups, exportações) não são verificados.
+- **Ameaça detectada** → upload recusado com "Arquivo recusado: ameaça detectada (assinatura)" (422 `ARQUIVO_INFECTADO`) e evento `UPLOAD_BLOQUEADO_ANTIVIRUS` (entidade `upload`) no log de auditoria, com usuário, contexto, nome e assinatura.
+- **clamd indisponível** → `CLAMAV_OBRIGATORIO=false` (padrão): aceita e registra `[antivirus] verificação indisponível` no log; `true`: recusa (503 `ANTIVIRUS_INDISPONIVEL`).
+- O limite de upload é 25 MB: o clamd precisa de `StreamMaxLength` ≥ 26M (a imagem oficial `clamav/clamav` usa 100M por padrão).
+- Teste rápido: enviar o arquivo de teste EICAR renomeado para `.pdf` num rascunho – deve ser recusado e aparecer em /admin/auditoria.
+- Railway: ver `deploy/railway.md` (serviço `clamav`, rede privada). docker-compose (não incluído no `docker-compose.yml` padrão): acrescente um serviço `clamav` com a imagem `clamav/clamav:stable` e use `CLAMAV_HOST=clamav`.
+
+## 11. Limite de login por IP (SPEC 3)
+Além do bloqueio da conta (5 falhas → 15 min), cada IP pode acumular no máximo `LOGIN_LIMITE_IP` (20) **falhas** em `LOGIN_LIMITE_IP_JANELA_MIN` (15) minutos em `/login`, `POST /api/v1/auth/login` e `POST /api/v1/auth/refresh` (tokens inválidos); depois disso: "Muitas tentativas. Aguarde alguns minutos." (API: 429 `MUITAS_TENTATIVAS`; auditoria `LOGIN_BLOQUEADO_IP`). Logins bem-sucedidos não contam. IP = 1º item de `X-Forwarded-For` (proxy do Railway/ALB), senão `X-Real-IP`.
+Limitação: janela **em memória, por réplica** (`lib/limite-login.ts`) – zera no restart; com N réplicas o limite efetivo é N × 20. Com mais de uma réplica, aplique também limite no proxy/WAF (AWS WAF rate-based rule).
