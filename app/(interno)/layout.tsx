@@ -41,6 +41,7 @@ export default async function LayoutInterno({ children }: { children: React.Reac
             <div className="font-medium text-slate-800" data-testid="usuario-nome">{usuario.nome}</div>
             <div className="text-slate-500">{papeis}</div>
           </div>
+          <Link href="/trocar-senha" prefetch={false} className="text-xs text-slate-600 underline hover:text-slate-900">Alterar senha</Link>
           <Link href="/sair" prefetch={false} className="btn-secundario btn-sm">Sair</Link>
         </header>
         <main id="conteudo" className="mx-auto max-w-7xl p-4 sm:p-6">{children}</main>

@@ -22,6 +22,7 @@ export default async function LayoutRequerente({ children }: { children: React.R
           <div className="ml-auto flex items-center gap-2">
             <SinoAlertas usuarioId={usuario.id} />
             <span className="hidden text-sm sm:inline" data-testid="usuario-nome">{usuario.nome}</span>
+            <Link href="/trocar-senha" prefetch={false} className="text-xs text-slate-600 underline hover:text-slate-900">Alterar senha</Link>
             <Link href="/sair" prefetch={false} className="btn-secundario btn-sm">Sair</Link>
           </div>
         </div>
