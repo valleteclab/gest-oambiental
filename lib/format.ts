@@ -20,3 +20,10 @@ export function fmtNumero(v: number | string | { toString(): string } | null | u
   if (v === null || v === undefined) return "—";
   return Number(v.toString()).toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
 }
+
+/** Data "civil" de colunas @db.Date (meia-noite UTC, sem fuso) → dd/mm/aaaa sem deslocar o dia. */
+export function fmtDataCivil(d: Date | string | null | undefined): string {
+  if (!d) return "—";
+  const [a, m, dia] = new Date(d).toISOString().slice(0, 10).split("-");
+  return `${dia}/${m}/${a}`;
+}

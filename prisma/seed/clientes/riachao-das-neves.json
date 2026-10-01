@@ -1,0 +1,50 @@
+{
+  "$comentario": "Onboarding do cliente Prefeitura Municipal de Riachão das Neves (BA). Executar: npm run onboard -- riachao-das-neves [--demo]. Dados do órgão editáveis depois em /admin/municipios. Não inventar endereço/telefone/e-mail: preencher quando o órgão informar.",
+  "organizacao": {
+    "nome": "Prefeitura Municipal de Riachão das Neves",
+    "sigla": "PM-RDN",
+    "cnpj": null,
+    "logo_url": "/clientes/riachao-das-neves/logo.png"
+  },
+  "municipios": [
+    {
+      "nome": "Riachão das Neves",
+      "sigla": "RDN",
+      "codigo_ibge": "2926202",
+      "uf": "BA",
+      "orgao_ambiental_nome": "Secretaria Municipal de Meio Ambiente de Riachão das Neves",
+      "endereco": "Riachão das Neves – BA",
+      "email": null,
+      "telefone": null,
+      "lat": -11.7461,
+      "lng": -44.91,
+      "brasao_url": "/clientes/riachao-das-neves/brasao.png"
+    }
+  ],
+  "usuarios": [
+    { "email": "admin.rdn@licenciagov.demo", "nome": "Administrador(a) – Riachão das Neves", "cargo": "Administrador(a) do sistema", "papeis": [{ "papel": "ADMIN" }] },
+    { "email": "tecnico.rdn@licenciagov.demo", "nome": "Técnico(a) Ambiental – Riachão das Neves", "cargo": "Técnico Ambiental Municipal", "papeis": [{ "papel": "TEC_MUNICIPAL", "municipio": "RDN" }] },
+    { "email": "gestor.rdn@licenciagov.demo", "nome": "Gestor(a) Ambiental – Riachão das Neves", "cargo": "Secretário(a) Municipal de Meio Ambiente", "papeis": [{ "papel": "GESTOR_MUNICIPAL", "municipio": "RDN" }] },
+    { "email": "fiscal.rdn@licenciagov.demo", "nome": "Fiscal Ambiental – Riachão das Neves", "cargo": "Fiscal Ambiental", "papeis": [{ "papel": "FISCAL", "municipio": "RDN" }] }
+  ],
+  "catalogo": {
+    "$comentario": "Além do catálogo-base (prisma/seed/catalogo.ts): tipologias do agronegócio do Oeste baiano. Faixas de porte FICTÍCIAS-PORÉM-PLAUSÍVEIS – a validar com a legislação municipal/CEPRAM antes do uso em produção.",
+    "tipologias": [
+      { "codigo": "R1.1", "divisao": "Agronegócio – faixas a validar (legislação municipal/CEPRAM)", "descricao": "Agricultura irrigada por pivô central", "unidade": "área irrigada (ha)", "pp": "MEDIO", "faixas": [50, 200, 1000, 3000] },
+      { "codigo": "R1.2", "divisao": "Agronegócio – faixas a validar (legislação municipal/CEPRAM)", "descricao": "Armazenagem de grãos (silos e armazéns graneleiros)", "unidade": "capacidade estática (t)", "pp": "BAIXO", "faixas": [5000, 20000, 60000, 150000] },
+      { "codigo": "R1.3", "divisao": "Agronegócio – faixas a validar (legislação municipal/CEPRAM)", "descricao": "Confinamento bovino (engorda)", "unidade": "nº de cabeças", "pp": "MEDIO", "faixas": [500, 2000, 5000, 10000] },
+      { "codigo": "R1.4", "divisao": "Agronegócio – faixas a validar (legislação municipal/CEPRAM)", "descricao": "Aviação agrícola – pista de pouso e pátio de descontaminação", "unidade": "nº de aeronaves", "pp": "ALTO", "faixas": [1, 3, 6, 10] },
+      { "codigo": "R1.5", "divisao": "Agronegócio – faixas a validar (legislação municipal/CEPRAM)", "descricao": "Beneficiamento de algodão (algodoeira)", "unidade": "capacidade (t de algodão em caroço/dia)", "pp": "MEDIO", "faixas": [100, 400, 1000, 2500] },
+      { "codigo": "R1.6", "divisao": "Agronegócio – faixas a validar (legislação municipal/CEPRAM)", "descricao": "Revenda e armazenamento de agrotóxicos", "unidade": "área de armazenamento (m²)", "pp": "ALTO", "faixas": [100, 300, 1000, 3000] },
+      { "codigo": "R1.7", "divisao": "Agronegócio – faixas a validar (legislação municipal/CEPRAM)", "descricao": "Supressão de vegetação nativa (Cerrado) – ASV", "unidade": "área a suprimir (ha)", "pp": "MEDIO", "faixas": [5, 50, 200, 1000] }
+    ],
+    "documentos": [
+      { "tipo_ato": "ASV", "tipologia": "R1.7", "nome": "Inventário florestal/florístico da área a suprimir, com ART", "obrigatorio": true, "formatos": "pdf" },
+      { "tipo_ato": "ASV", "tipologia": "R1.7", "nome": "Recibo de inscrição do imóvel no CAR", "obrigatorio": true, "formatos": "pdf" },
+      { "tipo_ato": "ASV", "tipologia": "R1.7", "nome": "Poligonal georreferenciada da área de supressão (KML/KMZ)", "obrigatorio": true, "formatos": "pdf,kml,kmz" },
+      { "tipo_ato": "ASV", "tipologia": "R1.7", "nome": "Comprovação da Reserva Legal e das APPs do imóvel (mapa do CAR)", "obrigatorio": true, "formatos": "pdf" },
+      { "tipo_ato": "LO", "tipologia": "R1.1", "nome": "Outorga (ou dispensa) de direito de uso de recursos hídricos", "obrigatorio": true, "formatos": "pdf" },
+      { "tipo_ato": "LO", "tipologia": "R1.6", "nome": "Registro no órgão estadual de defesa agropecuária e plano de recolhimento de embalagens vazias", "obrigatorio": true, "formatos": "pdf" }
+    ]
+  }
+}
