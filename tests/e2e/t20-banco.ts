@@ -5,6 +5,15 @@
 //   imutavel             tenta UPDATE em ged_tramite e ged_comentario → mensagens de erro do banco
 //   protocolo-comunicacoes <protocoloId>  avisos ao interessado do protocolo (ged_comunicacao) com o e-mail enviado → [{…}]
 //   imutavel-protocolo <protocoloId>      tenta alterar/excluir o registro, o andamento e os anexos do protocolo → mensagens do banco
+//   codigo-compartilhamento <linkId>   código OTP mais recente do link (só existe com CANAIS_ENVIO_SIMULADO=true: ged_compartilhamento_otp.codigo_teste_cifrado)
+//   recuar-otp <linkId>                 "envelhece" 2 min os OTPs do link (vence o intervalo de 60 s entre envios sem esperar)
+//   expirar-compartilhamento <linkId>   vence a validade do link (created_at e expira_em no passado)
+//   expirar-sessoes <linkId>            vence o teto das sessões abertas do link
+//   compartilhamento <linkId>           estado do link (status, downloads, otp_falhas, bloqueado_ate, contagens) – sem token nem telefone
+//   eventos-compartilhamento <linkId>   eventos do link [{tipo, ip, user_agent, detalhe}]
+//   limpar-bloqueio <linkId>            zera falhas/bloqueio do link
+//   emails-para <email>                 assuntos dos e-mails enviados (caixa de teste) a um endereço
+//   whatsapp-claro <linkId>             o WhatsApp cifrado/hash do link NÃO contém o número em claro? → {cifrado_ok, hash_ok}
 // Última linha da saída: `__JSON__{…}`. Usa a DATABASE_URL do ambiente; "server-only" apontado para o stub do pacote.
 import Module from "node:module";
 import path from "node:path";
@@ -88,6 +97,39 @@ async function main() {
       const m = await prisma.gedMembro.findFirst({ where: { usuario_id: args[0] } });
       const pend = m ? lerPendente(decifrar(m.telefone_cifrado)) : null;
       saida({ codigo: m && pend ? codigoOptin(chaveOptinDoServidor(), pend.cid, args[0], pend.tel) : null });
+    } else if (cmd === "codigo-compartilhamento") {
+      const { decifrar } = await import("../../lib/crypto");
+      const o = await prisma.gedCompartilhamentoOtp.findFirst({ where: { compartilhamento_id: args[0], usado_em: null, invalidado_em: null }, orderBy: { created_at: "desc" } });
+      saida({ codigo: o?.codigo_teste_cifrado ? decifrar(o.codigo_teste_cifrado) : null, tem_hash: !!o?.codigo_hash });
+    } else if (cmd === "recuar-otp") {
+      const r = await prisma.$executeRawUnsafe("UPDATE ged_compartilhamento_otp SET created_at = created_at - interval '2 minutes' WHERE compartilhamento_id = $1::uuid", args[0]);
+      saida({ atualizados: r });
+    } else if (cmd === "expirar-compartilhamento") {
+      const r = await prisma.$executeRawUnsafe("UPDATE ged_compartilhamento SET created_at = now() - interval '3 days', expira_em = now() - interval '1 minute' WHERE id = $1::uuid", args[0]);
+      saida({ atualizados: r });
+    } else if (cmd === "expirar-sessoes") {
+      const r = await prisma.$executeRawUnsafe("UPDATE ged_compartilhamento_sessao SET teto_em = now() - interval '1 minute', expira_em = now() - interval '1 minute' WHERE compartilhamento_id = $1::uuid", args[0]);
+      saida({ atualizados: r });
+    } else if (cmd === "limpar-bloqueio") {
+      await prisma.gedCompartilhamento.update({ where: { id: args[0] }, data: { otp_falhas: 0, bloqueado_ate: null } });
+      saida({ ok: true });
+    } else if (cmd === "compartilhamento") {
+      const l = await prisma.gedCompartilhamento.findUnique({ where: { id: args[0] } });
+      const [otps, sessoes, eventos] = await Promise.all([
+        prisma.gedCompartilhamentoOtp.count({ where: { compartilhamento_id: args[0] } }),
+        prisma.gedCompartilhamentoSessao.count({ where: { compartilhamento_id: args[0], encerrada_em: null } }),
+        prisma.gedCompartilhamentoEvento.count({ where: { compartilhamento_id: args[0] } }),
+      ]);
+      saida(l && { status: l.status, downloads: l.downloads, otp_falhas: l.otp_falhas, bloqueado_ate: l.bloqueado_ate, primeiro_acesso_em: l.primeiro_acesso_em, token_hash_len: l.token_hash.length, otps, sessoes_abertas: sessoes, eventos });
+    } else if (cmd === "eventos-compartilhamento") {
+      saida((await prisma.gedCompartilhamentoEvento.findMany({ where: { compartilhamento_id: args[0] }, orderBy: { created_at: "asc" }, select: { tipo: true, ip: true, user_agent: true, detalhe: true, documento_id: true } })));
+    } else if (cmd === "emails-para") {
+      saida((await prisma.emailEnviado.findMany({ where: { para: args[0] }, orderBy: { created_at: "desc" }, take: 20, select: { assunto: true, corpo: true } })));
+    } else if (cmd === "whatsapp-claro") {
+      const l = await prisma.gedCompartilhamento.findUnique({ where: { id: args[0] } });
+      const { decifrar } = await import("../../lib/crypto");
+      const tel = l ? decifrar(l.destinatario_whatsapp_cifrado) : null;
+      saida({ cifrado_ok: !!l && !!tel && !l.destinatario_whatsapp_cifrado.includes(tel), hash_ok: !!l && !!tel && !l.destinatario_whatsapp_hash.includes(tel), mascarado_ok: !!l && !!tel && !l.destinatario_mascarado.includes(tel.slice(2, 9)) });
     } else if (cmd === "imutavel") {
       const tenta = async (sql: string) => {
         try {

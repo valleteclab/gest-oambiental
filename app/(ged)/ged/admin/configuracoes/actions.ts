@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { comoEstadoForm, type EstadoFormGed } from "@/lib/ged/acoes";
 import { salvarConfiguracoes } from "@/lib/ged/admin/configuracoes";
 import { ctxGedApi } from "@/lib/ged/escopo";
+import { salvarConfigCompartilhamento } from "@/lib/ged/compartilhamento/servico";
 import { atualizarAssunto, criarAssunto, definirAssuntoAtivo, excluirAssunto, salvarConfigProtocolo } from "@/lib/ged/protocolo/config";
 
 export async function salvarConfiguracoesAction(_: EstadoFormGed, f: FormData) {
@@ -68,5 +69,20 @@ export async function excluirAssuntoAction(_: EstadoFormGed, f: FormData) {
     await excluirAssunto(await ctxGedApi(), txt(f, "id"));
     revalidatePath("/ged/admin/configuracoes");
     return "Assunto excluído.";
+  });
+}
+
+/** Compartilhamento externo por link + OTP no WhatsApp: liga/desliga, validade padrão e teto (máx. 30 dias) e aviso no 1º acesso. */
+export async function salvarCompartilhamentoAction(_: EstadoFormGed, f: FormData) {
+  return comoEstadoForm(async () => {
+    const ctx = await ctxGedApi();
+    await salvarConfigCompartilhamento(ctx, {
+      ativo: f.get("ativo") === "on",
+      validade_padrao_dias: Number(String(f.get("validade_padrao_dias") ?? "")),
+      validade_max_dias: Number(String(f.get("validade_max_dias") ?? "")),
+      notificar_acesso: f.get("notificar_acesso") === "on",
+    });
+    revalidatePath("/ged/admin/configuracoes");
+    return "Configuração do compartilhamento externo salva.";
   });
 }

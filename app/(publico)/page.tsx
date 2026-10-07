@@ -122,7 +122,7 @@ function IlustracaoLicenca() {
 
 export default async function Inicio() {
   const orgaos = await prisma.municipio.findMany({
-    where: { ativo: true },
+    where: { ativo: true, organizacao: { status: "ATIVO", modulos: { has: "LICENCIAMENTO" } } },
     orderBy: { nome: "asc" },
     select: { sigla: true, nome: true, orgao_ambiental_nome: true, brasao_url: true },
   });

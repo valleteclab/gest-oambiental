@@ -486,7 +486,7 @@ export async function executarImportacao(organizacaoId: string, id: string, limi
 
 /** Lotes a processar em TODOS os clientes (PENDENTE, ou PROCESSANDO sem sinal de vida). Só ids; o job usa gedDb(organizacao_id). */
 export async function importacoesPendentes(limite = 20): Promise<{ id: string; organizacao_id: string }[]> {
-  const orgs = await gedDb(ID_NULO).organizacao.findMany({ where: { modulos: { has: "GED" } }, select: { id: true } });
+  const orgs = await gedDb(ID_NULO).organizacao.findMany({ where: { status: "ATIVO", modulos: { has: "GED" } }, select: { id: true } });
   const corte = new Date(Date.now() - STALE_MS);
   const out: { id: string; organizacao_id: string }[] = [];
   for (const o of orgs) {
@@ -504,7 +504,7 @@ export async function importacoesPendentes(limite = 20): Promise<{ id: string; o
 
 /** Descarta lotes RECEBENDO abandonados (nunca finalizados) e seus arquivos. Chamado pela varredura do job. */
 export async function limparImportacoesAbandonadas(): Promise<number> {
-  const orgs = await gedDb(ID_NULO).organizacao.findMany({ where: { modulos: { has: "GED" } }, select: { id: true } });
+  const orgs = await gedDb(ID_NULO).organizacao.findMany({ where: { status: "ATIVO", modulos: { has: "GED" } }, select: { id: true } });
   const corte = new Date(Date.now() - PRAZO_LOTE_ABANDONADO_MS);
   let n = 0;
   for (const o of orgs) {

@@ -11,6 +11,7 @@ import { exigirGed } from "@/lib/ged/escopo";
 import { lerFiltros } from "@/lib/ged/documentos/filtros";
 import { listarDocumentos } from "@/lib/ged/documentos/listar";
 import { exclusaoAtivaDoAlvo } from "@/lib/ged/exclusao/servico";
+import { podeCompartilharRecurso } from "@/lib/ged/compartilhamento/servico";
 import { podeCriarDocumento, podeExcluirGed, podeGerirEstruturaGed } from "@/lib/ged/papeis";
 import { exigirPasta } from "@/lib/ged/permissoes";
 import { listarPastas, montarArvore } from "@/lib/ged/pastas";
@@ -110,6 +111,7 @@ async function PainelPasta({ ctx, sel, acoes, todas, gerir }: {
   const podeEditar = gerir && acoes.includes("EDITAR");
   const podeAdmin = gerir && acoes.includes("ADMINISTRAR");
   const podeExcluir = podeExcluirGed(ctx) && acoes.includes("ADMINISTRAR") && !sel.arquivada;
+  const podeCompartilharPasta = !sel.arquivada && (await podeCompartilharRecurso(ctx, { tipo: "pasta", id: sel.id }));
   const exclusaoAtiva = podeExcluir ? await exclusaoAtivaDoAlvo(ctx, { tipo: "PASTA", id: sel.id }) : null;
   const destinos = todas.filter((p) => p.id !== sel.id && !p.caminho_nome.startsWith(`${sel.caminho_nome}/`));
   return (
@@ -122,6 +124,7 @@ async function PainelPasta({ ctx, sel, acoes, todas, gerir }: {
           {podeCriarDocumento(ctx) && acoes.includes("EDITAR") && <Link href={`/ged/documentos/novo?pasta=${sel.id}`} prefetch={false} className="btn-primario btn-sm">Novo documento nesta pasta</Link>}
           <Link href={`/ged/documentos?pasta=${sel.id}`} prefetch={false} className="btn-secundario btn-sm">Buscar nesta pasta</Link>
           {!sel.arquivada && <a href={`/api/v1/ged/pastas/${sel.id}/zip`} download className="btn-secundario btn-sm">Baixar pasta (ZIP)</a>}
+          {podeCompartilharPasta && <Link href={`/ged/compartilhamentos/novo?pasta=${sel.id}`} prefetch={false} className="btn-secundario btn-sm" data-testid="compartilhar-pasta">Compartilhar</Link>}
         </div>
         {!sel.arquivada && <p className="mt-2 text-xs text-slate-500">O ZIP leva esta pasta e as subpastas, na mesma organização, só com os documentos que você pode ver (versão atual), mais MANIFESTO.csv e LEIAME.txt. Acima de 20.000 documentos, baixe por subpasta.</p>}
         <h3 className="mb-2 mt-4 text-sm font-semibold">Documentos ({docs.total})</h3>

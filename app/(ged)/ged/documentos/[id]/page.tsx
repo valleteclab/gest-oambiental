@@ -17,6 +17,7 @@ import type { PropsAbaGed } from "@/components/ged/tipos-abas";
 import { ErroApi } from "@/lib/http";
 import { exigirGed } from "@/lib/ged/escopo";
 import { listarMarcadores, marcadoresDoDocumento } from "@/lib/ged/marcadores";
+import { podeCompartilharRecurso } from "@/lib/ged/compartilhamento/servico";
 import { podeExcluirGed, podeVerLogs } from "@/lib/ged/papeis";
 import { exigirDocumento } from "@/lib/ged/permissoes";
 import { apresentacaoOcr, ocrReprocessavel, podeReprocessarOcrPapel } from "@/lib/ged/ocr/decisao";
@@ -71,6 +72,7 @@ export default async function PaginaDocumento({ params, searchParams }: { params
   ]);
   const atual = versoes.find((v) => v.id === d.versao_atual_id) ?? versoes[0] ?? null;
   const arquivado = d.status === "ARQUIVADO";
+  const podeCompartilhar = !arquivado && d.sensibilidade !== "SIGILOSO" && !!atual && (await podeCompartilharRecurso(ctx, { tipo: "documento", id }));
   const propsAba: PropsAbaGed = { ctx, documento: { id: d.id, titulo: d.titulo, numero: d.numero, status: d.status, sensibilidade: d.sensibilidade, versao_atual_id: d.versao_atual_id, acoes } };
 
   return (
@@ -81,6 +83,7 @@ export default async function PaginaDocumento({ params, searchParams }: { params
         acoes={
           <>
             {atual && <a className="btn-secundario" href={`/api/v1/ged/documentos/${id}/arquivo?versao=${atual.id}`} download>Baixar PDF</a>}
+            {podeCompartilhar && <Link className="btn-secundario" href={`/ged/compartilhamentos/novo?documento=${id}`} prefetch={false} data-testid="compartilhar-documento">Compartilhar</Link>}
             {pode("EDITAR") && atual?.origem === "EDITOR" && d.status === "RASCUNHO" && <Link className="btn-primario" href={`/ged/editor/${id}`} prefetch={false}>Continuar no editor</Link>}
             <Link className="btn-secundario" href="/ged/documentos" prefetch={false}>Voltar à lista</Link>
           </>

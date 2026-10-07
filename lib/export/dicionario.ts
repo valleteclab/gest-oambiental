@@ -7,6 +7,11 @@ export const COLUNAS_EXCLUIDAS: Record<string, string[]> = {
   ConfigCobranca: ["asaas_api_key_cifrada", "asaas_webhook_token"],
   CertificadoDigital: ["pfx_cifrado", "senha_cifrada"],
   GedAssinante: ["otp_hash", "otp_expira_em", "otp_tentativas"], // segredo temporário de assinatura – nunca exportar
+  ConviteSenha: ["token_hash"], // hash do token do convite de senha – nunca exportar
+  // Compartilhamento externo: hash do token do link e segredos de OTP/sessão nunca saem
+  GedCompartilhamento: ["token_hash", "destinatario_whatsapp_hash"],
+  GedCompartilhamentoOtp: ["codigo_hash", "sal", "codigo_teste_cifrado", "ip_hash"],
+  GedCompartilhamentoSessao: ["token_hash", "ua_hash"],
 };
 
 /** Colunas exportadas CIFRADAS (AES-256-GCM, formato v1:iv:tag:dados). Decifrar exige a DATA_KEY do órgão. */
@@ -18,6 +23,7 @@ export const COLUNAS_CIFRADAS: Record<string, string[]> = {
   Conversa: ["destino_cifrado", "contato_cifrado"],
   CertificadoDigital: ["documento_titular"],
   GedMembro: ["telefone_cifrado"],
+  GedCompartilhamento: ["destinatario_whatsapp_cifrado"],
   GedProtocolo: ["interessado_nome_cifrado", "interessado_doc_cifrado", "interessado_email_cifrado", "interessado_telefone_cifrado"],
 };
 
@@ -95,7 +101,13 @@ export const DESCRICAO_TABELA: Record<string, string> = {
   GedProtocoloDocumento: "GED – anexos do protocolo (documento, versão, nome, tamanho e sha256 do arquivo no ato).",
   GedProtocoloAssunto: "GED – assuntos oferecidos no portal público de protocolo e o setor de destino de cada um.",
   GedExclusao: "GED – execuções de exclusão controlada (documento, pasta, conteúdo de importação): alvo, modo, situação e contadores. O histórico de cada item excluído fica na auditoria.",
+  GedCompartilhamento: "GED – links públicos de compartilhamento externo (documento ou pasta) protegidos por código no WhatsApp: destinatário (WhatsApp cifrado/mascarado), permissões, validade, limite de downloads e situação. O token não é guardado (só hash) e não é exportado.",
+  GedCompartilhamentoOtp: "GED – códigos de acesso (OTP) enviados ao WhatsApp do destinatário: só hash com sal, validade, tentativas e uso. Segredos não são exportados.",
+  GedCompartilhamentoSessao: "GED – sessões curtas do destinatário após o código (hash do token e do navegador não são exportados).",
+  GedCompartilhamentoEvento: "GED – registro dos eventos do compartilhamento externo (criação, código, visualização, download, ZIP, revogação), com IP truncado e navegador resumido.",
   GedSequencia: "GED – contador de numeração de documentos por cliente/tipo/ano.",
+  OperadorPlataforma: "Operadores da plataforma (painel /plataforma): nunca exportado por cliente; existe só para controle do dono do SaaS.",
+  ConviteSenha: "Convites de definição de senha enviados pelo operador da plataforma (uso único, com validade): usuário, validade e uso; o hash do token não é exportado.",
   CertificadoDigital: "Certificados digitais A1 (e-CNPJ do órgão / e-CPF do servidor) usados para assinar documentos: somente metadados; arquivo .pfx e senha NÃO são exportados.",
 };
 

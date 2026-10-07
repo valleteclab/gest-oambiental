@@ -325,6 +325,7 @@ async function alertasCertificados(ex: Execucao) {
   const certs = await prisma.certificadoDigital.findMany({
     where: {
       ativo: true,
+      organizacao: { status: "ATIVO" },
       ...(ex.organizacaoId ? { organizacao_id: ex.organizacaoId } : {}),
       valido_ate: { lte: new Date(ex.agora.getTime() + 31 * DIA), gte: new Date(ex.agora.getTime() - 7 * DIA) },
     },
@@ -420,6 +421,9 @@ export async function gerarAlertas(agora = new Date(), opts: { organizacao_id?: 
   const ex = new Execucao(agora, opts.organizacao_id ?? null);
   if (opts.organizacao_id !== undefined) {
     ex.municipiosOrg = opts.organizacao_id ? (await prisma.municipio.findMany({ where: { organizacao_id: opts.organizacao_id }, select: { id: true } })).map((m) => m.id) : [];
+  } else {
+    // Job do worker (todas as organizações): ignora clientes suspensos ou sem o módulo de licenciamento (painel /plataforma).
+    ex.municipiosOrg = (await prisma.municipio.findMany({ where: { organizacao: { status: "ATIVO", modulos: { has: "LICENCIAMENTO" } } }, select: { id: true } })).map((m) => m.id);
   }
   const etapas: [string, (e: Execucao) => Promise<void>][] = [
     ["processos", alertasProcessos],

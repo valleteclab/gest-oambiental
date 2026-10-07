@@ -19,6 +19,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ErroApi } from "@/lib/http";
+import { ORG_ATIVA, ORG_GED_ATIVA } from "@/lib/plataforma/situacao";
 
 // ───────────── Erros ─────────────
 
@@ -196,13 +197,13 @@ export async function proximoValorSequencia(tx: GedTx, organizacaoId: string, ti
  */
 export async function resolverCodigoVerificador(codigo: string): Promise<{ documento_id: string; organizacao_id: string } | null> {
   if (typeof codigo !== "string" || !/^[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}$/.test(codigo)) return null;
-  const d = await prisma.gedDocumento.findUnique({ where: { codigo_verificador: codigo }, select: { id: true, organizacao_id: true } });
+  const d = await prisma.gedDocumento.findUnique({ where: { codigo_verificador: codigo, organizacao: ORG_GED_ATIVA }, select: { id: true, organizacao_id: true } });
   return d ? { documento_id: d.id, organizacao_id: d.organizacao_id } : null;
 }
 
 /** Job de lembretes/expiração: solicitações ABERTAS de todos os clientes (somente ids). Use gedDb(organizacao_id) para o restante. */
 export async function solicitacoesAbertasEntreClientes(limite = 5000): Promise<{ id: string; organizacao_id: string }[]> {
-  return prisma.gedSolicitacaoAssinatura.findMany({ where: { status: "ABERTA" }, select: { id: true, organizacao_id: true }, orderBy: { prazo_em: "asc" }, take: limite });
+  return prisma.gedSolicitacaoAssinatura.findMany({ where: { status: "ABERTA", organizacao: ORG_ATIVA }, select: { id: true, organizacao_id: true }, orderBy: { prazo_em: "asc" }, take: limite });
 }
 
 // ───────────── Varreduras entre clientes (SOMENTE jobs; devolvem apenas ids) ─────────────
@@ -213,7 +214,7 @@ export async function solicitacoesAbertasEntreClientes(limite = 5000): Promise<{
 export async function comunicacoesPendentesEntreClientes(opc: { limite?: number; atualizadasAntesDe?: Date } = {}): Promise<{ id: string; organizacao_id: string }[]> {
   const limite = Math.min(Math.max(opc.limite ?? 50, 1), 500);
   return prisma.gedComunicacao.findMany({
-    where: { status: "PENDENTE", ...(opc.atualizadasAntesDe ? { updated_at: { lte: opc.atualizadasAntesDe } } : {}) },
+    where: { status: "PENDENTE", organizacao: ORG_ATIVA, ...(opc.atualizadasAntesDe ? { updated_at: { lte: opc.atualizadasAntesDe } } : {}) },
     select: { id: true, organizacao_id: true },
     orderBy: { created_at: "asc" },
     take: limite,
@@ -222,7 +223,7 @@ export async function comunicacoesPendentesEntreClientes(opc: { limite?: number;
 
 /** Ids das organizações com o módulo GED ativo (rotinas diárias por cliente, ex.: retenção do log de acesso). */
 export async function organizacoesGedAtivas(): Promise<string[]> {
-  return (await prisma.organizacao.findMany({ where: { modulos: { has: "GED" } }, select: { id: true } })).map((o) => o.id);
+  return (await prisma.organizacao.findMany({ where: ORG_GED_ATIVA, select: { id: true } })).map((o) => o.id);
 }
 
 // ───────────── Consultas entre clientes do PROTOCOLO PÚBLICO (somente ids) ─────────────
@@ -234,7 +235,7 @@ const RE_SLUG_PORTAL = /^[a-z0-9][a-z0-9-]{1,58}[a-z0-9]$/;
 /** Resolve o slug público do portal de protocolo em UMA organização com o módulo GED. Slug fora do formato → null sem consultar o banco. */
 export async function resolverSlugPortal(slug: string): Promise<{ organizacao_id: string } | null> {
   if (typeof slug !== "string" || !RE_SLUG_PORTAL.test(slug)) return null;
-  const o = await prisma.organizacao.findFirst({ where: { slug_publico: slug, modulos: { has: "GED" } }, select: { id: true } });
+  const o = await prisma.organizacao.findFirst({ where: { slug_publico: slug, ...ORG_GED_ATIVA }, select: { id: true } });
   return o ? { organizacao_id: o.id } : null;
 }
 
@@ -247,6 +248,17 @@ export async function slugPortalEmUso(slug: string, exceto: string): Promise<boo
 /** Resolve o código de verificação do comprovante (QR) em { protocolo_id, organizacao_id }. Formato XXXX-XXXX-XXXX. */
 export async function resolverCodigoVerificacaoProtocolo(codigo: string): Promise<{ protocolo_id: string; organizacao_id: string } | null> {
   if (typeof codigo !== "string" || !/^[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}$/.test(codigo)) return null;
-  const p = await prisma.gedProtocolo.findUnique({ where: { codigo_verificacao: codigo }, select: { id: true, organizacao_id: true } });
+  const p = await prisma.gedProtocolo.findUnique({ where: { codigo_verificacao: codigo, organizacao: ORG_GED_ATIVA }, select: { id: true, organizacao_id: true } });
   return p ? { protocolo_id: p.id, organizacao_id: p.organizacao_id } : null;
+}
+
+// ───────────── Consulta entre clientes do COMPARTILHAMENTO EXTERNO (somente ids) ─────────────
+// O link público /compartilhado/{token} não tem sessão: o token (hash) é que identifica o cliente. Devolve só ids; todo o resto
+// passa por gedDb(organizacao_id). Token fora do formato (43 caracteres base64url) → null sem consultar o banco.
+
+/** Resolve o token do link em { compartilhamento_id, organizacao_id } (o chamador confere status/validade com gedDb). */
+export async function resolverTokenCompartilhamento(hashDoToken: string): Promise<{ compartilhamento_id: string; organizacao_id: string } | null> {
+  if (typeof hashDoToken !== "string" || !/^[0-9a-f]{64}$/.test(hashDoToken)) return null;
+  const l = await prisma.gedCompartilhamento.findUnique({ where: { token_hash: hashDoToken, organizacao: ORG_GED_ATIVA }, select: { id: true, organizacao_id: true } });
+  return l ? { compartilhamento_id: l.id, organizacao_id: l.organizacao_id } : null;
 }

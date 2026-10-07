@@ -17,7 +17,7 @@ export async function municipioPublico(ref: string) {
   const v = ref.trim();
   if (!v) return null;
   const uuid = /^[0-9a-f-]{36}$/i.test(v);
-  return prisma.municipio.findFirst({ where: { ativo: true, ...(uuid ? { id: v } : { sigla: v.toUpperCase() }) }, select: { id: true, nome: true, sigla: true, organizacao_id: true, latitude: true, longitude: true } });
+  return prisma.municipio.findFirst({ where: { ativo: true, organizacao: { status: "ATIVO", modulos: { has: "LICENCIAMENTO" } }, ...(uuid ? { id: v } : { sigla: v.toUpperCase() }) }, select: { id: true, nome: true, sigla: true, organizacao_id: true, latitude: true, longitude: true } });
 }
 
 /** Canal WEBCHAT do município (cria se não existir). null se desativado pelo ADMIN. */

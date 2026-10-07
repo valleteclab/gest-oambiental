@@ -47,8 +47,8 @@ export async function ctxGedDeUsuario(usuario: UsuarioSessao): Promise<Resultado
   const orgId = usuario.organizacao_id;
   if (!orgId) return { ok: false, motivo: "SEM_ORGANIZACAO" };
   const db = gedDb(orgId);
-  const org = await db.organizacao.findUnique({ where: { id: orgId }, select: { id: true, nome: true, sigla: true, logo_url: true, modulos: true } });
-  if (!org || !org.modulos.includes("GED")) return { ok: false, motivo: "MODULO_INATIVO" };
+  const org = await db.organizacao.findUnique({ where: { id: orgId }, select: { id: true, nome: true, sigla: true, logo_url: true, modulos: true, status: true } });
+  if (!org || org.status !== "ATIVO" || !org.modulos.includes("GED")) return { ok: false, motivo: "MODULO_INATIVO" };
   const membro = await db.gedMembro.findFirst({ where: { usuario_id: usuario.id, ativo: true }, select: { id: true, papel: true } });
   if (!membro) return { ok: false, motivo: "SEM_MEMBRO" };
   const setores = await db.gedSetorMembro.findMany({ where: { usuario_id: usuario.id, setor: { ativo: true } }, select: { setor_id: true } });
@@ -101,7 +101,7 @@ export async function ctxGedApi(): Promise<CtxGed> {
 export async function usuarioTemGed(usuarioId: string, organizacaoId: string | null): Promise<boolean> {
   if (!organizacaoId) return false;
   const db = gedDb(organizacaoId);
-  const org = await db.organizacao.findUnique({ where: { id: organizacaoId }, select: { modulos: true } });
-  if (!org?.modulos.includes("GED")) return false;
+  const org = await db.organizacao.findUnique({ where: { id: organizacaoId }, select: { modulos: true, status: true } });
+  if (org?.status !== "ATIVO" || !org.modulos.includes("GED")) return false;
   return (await db.gedMembro.count({ where: { usuario_id: usuarioId, ativo: true } })) > 0;
 }

@@ -14,7 +14,7 @@ import type { GedExclusao, GedTipoExclusao, Prisma } from "@prisma/client";
 import { fmtDataHora } from "@/lib/format";
 import { ErroApi, invalido, proibido } from "@/lib/http";
 import { auditarGed } from "../auditoria";
-import { exigirEncontrado, gedDb, organizacoesGedAtivas } from "../db";
+import { exigirEncontrado, gedDb, organizacoesGedAtivas, type GedTx } from "../db";
 import { ctxGedPorUsuarioId, type CtxGed } from "../escopo";
 import { podeExcluirGed } from "../papeis";
 import { removerArquivoGed } from "../storage";
@@ -192,6 +192,7 @@ async function excluirBlocoDocumentos(ctx: CtxGed, ids: string[], ex: DadosExclu
       });
       await tx.gedImportacaoItem.updateMany({ where: { documento_id: { in: okIds } }, data: { documento_id: null } });
 
+      await revogarLinksDoRecurso(tx, { documentoIds: okIds }, ex.alvo_rotulo);
       await tx.gedConteudoTexto.deleteMany({ where: { documento_id: { in: okIds } } });
       if (versaoIds.length) await tx.gedDeteccaoDadoPessoal.deleteMany({ where: { versao_id: { in: versaoIds } } });
       await tx.gedVersaoDocumento.deleteMany({ where: { documento_id: { in: okIds } } });
@@ -209,6 +210,19 @@ async function excluirBlocoDocumentos(ctx: CtxGed, ids: string[], ex: DadosExclu
   );
 }
 
+/** Excluir o recurso invalida o link público dele (compartilhamento externo, docs/ged.md §18): revoga e encerra as sessões. */
+async function revogarLinksDoRecurso(tx: GedTx, alvo: { documentoIds?: string[]; pastaIds?: string[] }, origem: string): Promise<void> {
+  const ou = [...(alvo.documentoIds?.length ? [{ documento_id: { in: alvo.documentoIds } }] : []), ...(alvo.pastaIds?.length ? [{ pasta_id: { in: alvo.pastaIds } }] : [])];
+  if (!ou.length) return;
+  const links = await tx.gedCompartilhamento.findMany({ where: { status: "ATIVO", OR: ou }, select: { id: true } });
+  if (!links.length) return;
+  const agora = new Date();
+  const ids = links.map((l) => l.id);
+  await tx.gedCompartilhamento.updateMany({ where: { id: { in: ids } }, data: { status: "REVOGADO", revogado_em: agora, revogado_motivo: "Recurso excluído." } });
+  await tx.gedCompartilhamentoSessao.updateMany({ where: { compartilhamento_id: { in: ids }, encerrada_em: null }, data: { encerrada_em: agora } });
+  await tx.gedCompartilhamentoEvento.createMany({ data: ids.map((id) => ({ compartilhamento_id: id, tipo: "RECURSO_EXCLUIDO", detalhe: `exclusão: ${origem}`.slice(0, 300) })) as never });
+}
+
 /** Remove os arquivos DEPOIS do commit do banco. Falha (ou chave estranha) deixa só um arquivo órfão – nunca um registro sem arquivo. */
 async function removerArquivos(organizacaoId: string, chaves: string[]): Promise<void> {
   for (const k of chaves) await removerArquivoGed(organizacaoId, k).catch(() => {});
@@ -223,6 +237,7 @@ async function excluirBlocoPastas(ctx: CtxGed, ids: string[], ex: DadosExclusao)
         if (!p) continue;
         const [docs, filhas] = await Promise.all([tx.gedDocumento.count({ where: { pasta_id: id } }), tx.gedPasta.count({ where: { parent_id: id } })]);
         if (docs > 0 || filhas > 0) continue; // nunca esvazia por baixo: o FK faria o conteúdo "subir" para a raiz
+        await revogarLinksDoRecurso(tx, { pastaIds: [id] }, ex.alvo_rotulo);
         await tx.gedAcl.deleteMany({ where: { pasta_id: id } });
         await tx.gedImportacaoItem.updateMany({ where: { pasta_id: id }, data: { pasta_id: null } });
         await tx.gedImportacao.updateMany({ where: { pasta_destino_id: id }, data: { pasta_destino_id: null } });

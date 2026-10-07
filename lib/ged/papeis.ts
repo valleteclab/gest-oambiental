@@ -20,6 +20,9 @@
 // Protocolo (lib/ged/protocolo): registrar/movimentar = Admin, Gestor e Usuário (`protocolar`); ver o livro inteiro = Admin, Gestor
 // e Auditor (`protocolo_geral`); Usuário e Leitor veem os protocolos do seu setor/envolvimento; Leitor e Auditor nunca escrevem.
 //
+// Compartilhamento externo (lib/ged/compartilhamento, docs/ged.md §18): capacidade `compartilhar` = Admin, Gestor e Usuário; no recurso exige
+// VER; o Usuário ainda precisa ser autor do documento ou ter EDITAR (pasta: EDITAR/ADMINISTRAR). Leitor e Auditor nunca. SIGILOSO nunca.
+//
 // Observação: GED_USUARIO nunca tem ADMINISTRAR (nem como criador): quem precisa gerir permissões é Gestor/Admin.
 import type { GedAcao, GedPapel } from "@prisma/client";
 import type { CtxGed } from "./escopo";
@@ -52,7 +55,8 @@ export type CapacidadeGed =
   | "importar" // importação em lote de ZIP (cria pastas e documentos em massa)
   | "excluir" // exclusão controlada de documento, pasta (com subárvore) e conteúdo de lote de importação
   | "protocolar" // registrar e movimentar protocolos (entrada/saída/interno) – Leitor e Auditor só consultam
-  | "protocolo_geral"; // enxergar TODOS os protocolos do cliente (demais papéis: só os do seu setor/envolvimento)
+  | "protocolo_geral" // enxergar TODOS os protocolos do cliente (demais papéis: só os do seu setor/envolvimento)
+  | "compartilhar"; // criar link público (OTP no WhatsApp) para documento/pasta – Leitor e Auditor nunca
 
 export const CAPACIDADES_POR_PAPEL: Record<CapacidadeGed, readonly GedPapel[]> = {
   membros: ["GED_ADMIN"],
@@ -69,6 +73,7 @@ export const CAPACIDADES_POR_PAPEL: Record<CapacidadeGed, readonly GedPapel[]> =
   excluir: ["GED_ADMIN", "GED_GESTOR"],
   protocolar: ["GED_ADMIN", "GED_GESTOR", "GED_USUARIO"],
   protocolo_geral: ["GED_ADMIN", "GED_GESTOR", "GED_AUDITOR"],
+  compartilhar: ["GED_ADMIN", "GED_GESTOR", "GED_USUARIO"],
 };
 
 type ComPapel = { membro: Pick<CtxGed["membro"], "papel"> };
@@ -93,6 +98,8 @@ export const podeExcluirGed = (ctx: ComPapel) => podeGed(ctx, "excluir");
 export const podeProtocolar = (ctx: ComPapel) => podeGed(ctx, "protocolar");
 /** Protocolo: ver todo o livro do cliente (Admin, Gestor e Auditor). */
 export const veTodosProtocolos = (ctx: ComPapel) => podeGed(ctx, "protocolo_geral");
+/** Compartilhamento externo por link (Admin, Gestor e Usuário; no recurso exige ainda VER e, para o Usuário, autoria ou EDITAR). */
+export const podeCompartilhar = (ctx: ComPapel) => podeGed(ctx, "compartilhar");
 export const podeSolicitarAssinatura = (ctx: ComPapel) => podeGed(ctx, "solicitar_assinatura");
 /** Somente leitura de fato (Leitor/Auditor): esconda botões de escrita. */
 export const isSomenteLeituraGed = (ctx: ComPapel) => ctx.membro.papel === "GED_LEITOR" || ctx.membro.papel === "GED_AUDITOR";

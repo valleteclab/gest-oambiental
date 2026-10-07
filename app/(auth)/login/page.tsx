@@ -6,8 +6,8 @@ import { FormLogin } from "./form";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Entrar" };
 
-export default async function PaginaLogin({ searchParams }: { searchParams: Promise<{ next?: string; orgao?: string }> }) {
-  const { next, orgao } = await searchParams;
+export default async function PaginaLogin({ searchParams }: { searchParams: Promise<{ next?: string; orgao?: string; senha?: string }> }) {
+  const { next, orgao, senha } = await searchParams;
   const [orgaos, ultimo] = await Promise.all([listarOrgaos(), ultimoOrgaoEscolhido()]);
   const siglas = new Set(orgaos.map((o) => o.sigla));
   const pedido = orgao?.trim().toUpperCase();
@@ -17,6 +17,7 @@ export default async function PaginaLogin({ searchParams }: { searchParams: Prom
     <>
       {pedido && siglas.has(pedido) && <ContextoOrgao sigla={pedido} />}
       <h1 className="mb-1 text-xl font-semibold">Entrar</h1>
+      {senha === "definida" && <p role="status" className="mb-3 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">Senha definida. Entre com o e-mail e a nova senha.</p>}
       <p className="mb-4 text-sm text-slate-600">Informe suas credenciais. O órgão pode ser escolhido agora ou depois de entrar (aparecem só os órgãos do seu usuário).</p>
       <FormLogin
         next={next}

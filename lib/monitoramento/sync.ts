@@ -254,9 +254,10 @@ export type OpcoesSync = { origem: "agendado" | "manual" | "cli"; usuario_id?: s
 export async function sincronizarMunicipio(municipioId: string, o: OpcoesSync): Promise<ResumoSync> {
   const t0 = Date.now();
   const agora = o.agora ?? new Date();
-  const m = await prisma.municipio.findUnique({ where: { id: municipioId }, select: { id: true, nome: true, codigo_ibge: true, organizacao_id: true, ativo: true } });
+  const m = await prisma.municipio.findUnique({ where: { id: municipioId }, select: { id: true, nome: true, codigo_ibge: true, organizacao_id: true, ativo: true, organizacao: { select: { status: true } } } });
   const vazio = (status: ResumoSync["status"], mensagem: string): ResumoSync => ({ sync_id: null, municipio: m?.nome ?? municipioId, status, mensagem, fontes: [], cruzados: 0, com_car: 0, erros_car: 0, notificados: 0, duracao_ms: Date.now() - t0 });
   if (!m || !m.ativo) return vazio("IGNORADO", "Município inexistente ou inativo.");
+  if (m.organizacao.status !== "ATIVO") return vazio("IGNORADO", "Cliente suspenso.");
   if (!codigoIbgeReal(m.codigo_ibge)) return vazio("IGNORADO", "Código IBGE fictício (dados de demonstração): as fontes do INPE não têm alertas para este município.");
 
   const emCurso = await prisma.monitoramentoSync.findFirst({ where: { municipio_id: m.id, status: "EXECUTANDO", iniciado_em: { gte: new Date(Date.now() - LIMITE_EXECUCAO_MS) } }, select: { id: true } });
@@ -344,7 +345,7 @@ export async function sincronizarMunicipio(municipioId: string, o: OpcoesSync): 
 
 /** Job diário: todos os municípios ativos com código IBGE real (em sequência – respeita os servidores públicos). */
 export async function sincronizarTodos(o: OpcoesSync = { origem: "agendado" }): Promise<ResumoSync[]> {
-  const ms = await prisma.municipio.findMany({ where: { ativo: true }, select: { id: true, codigo_ibge: true }, orderBy: { nome: "asc" } });
+  const ms = await prisma.municipio.findMany({ where: { ativo: true, organizacao: { status: "ATIVO", modulos: { has: "LICENCIAMENTO" } } }, select: { id: true, codigo_ibge: true }, orderBy: { nome: "asc" } });
   const r: ResumoSync[] = [];
   for (const m of ms.filter((x) => codigoIbgeReal(x.codigo_ibge))) r.push(await sincronizarMunicipio(m.id, o));
   return r;

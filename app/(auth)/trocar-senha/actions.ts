@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getUsuario, hashSenha, validarPoliticaSenha, verificarSenha } from "@/lib/auth";
 import { auditar } from "@/lib/audit";
 import { isInterno } from "@/lib/rbac";
+import { usuarioEhOperador } from "@/lib/plataforma/operador";
 
 export async function trocarSenha(_: { erro?: string } | undefined, form: FormData) {
   const u = await getUsuario();
@@ -19,5 +20,5 @@ export async function trocarSenha(_: { erro?: string } | undefined, form: FormDa
   if (nova === atual) return { erro: "A nova senha deve ser diferente da atual." };
   await prisma.usuario.update({ where: { id: u.id }, data: { senha_hash: await hashSenha(nova), trocar_senha: false } });
   await auditar({ usuario_id: u.id, acao: "TROCAR_SENHA", entidade: "usuario", entidade_id: u.id });
-  redirect(isInterno(u) ? "/dashboard" : "/meus-processos");
+  redirect(isInterno(u) ? "/dashboard" : (await usuarioEhOperador(u.id)) ? "/plataforma" : "/meus-processos");
 }

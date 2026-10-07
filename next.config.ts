@@ -35,6 +35,8 @@ const nextConfig: NextConfig = {
       { source: "/protocolo/:path*", headers: publicoSemRastro },
       { source: "/verificar/protocolo/:path*", headers: publicoSemRastro },
       { source: "/api/v1/publico/:path*", headers: publicoSemRastro },
+      // Documentos compartilhados por link + OTP (o token está na URL): nunca em cache, indexados nem repassados no Referer.
+      { source: "/compartilhado/:path*", headers: publicoSemRastro },
     ];
   },
 };

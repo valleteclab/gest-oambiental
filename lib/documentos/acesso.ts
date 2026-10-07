@@ -11,6 +11,8 @@ import { statusPublico, TIPOS_PUBLICOS } from "./render";
  *  - qualquer pessoa (anônimo) se for licença/autorização/certidão VÁLIDA (transparência).
  */
 export async function podeBaixarDocumento(u: UsuarioSessao | null, doc: Pick<DocumentoOficial, "municipio_id" | "titular_id" | "processo_id" | "tipo" | "status" | "validade_ate">): Promise<boolean> {
+  // Cliente suspenso / sem o módulo (painel /plataforma): nem o público nem requerentes baixam; internos já não têm sessão.
+  if (!(await prisma.municipio.count({ where: { id: doc.municipio_id, organizacao: { status: "ATIVO", modulos: { has: "LICENCIAMENTO" } } } }))) return false;
   if ((TIPOS_PUBLICOS as readonly string[]).includes(doc.tipo) && statusPublico(doc) === "VALIDO") return true;
   if (!u) return false;
   if (isInterno(u)) return can(u, "ver", "documento", doc.municipio_id);

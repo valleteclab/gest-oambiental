@@ -145,8 +145,12 @@ export function filtroTabela(modelo: string, e: EscopoExportacao): Record<string
     case "Anexo": return { OR: [proc, { fiscalizacao: mun }, { denuncia: mun }] };
     case "ReuniaoConselho": return { conselho: mun };
     case "EmailEnviado": return { para: { in: e.emails } };
-    case "LogAuditoria": return { OR: [{ usuario_id: { in: e.usuarios } }, { organizacao_id: e.organizacao.id }] };
+    // Ações do operador da plataforma (PLATAFORMA_*, ator fora da organização) são trilha da plataforma: não saem na exportação do cliente.
+    case "LogAuditoria": return { AND: [{ OR: [{ usuario_id: { in: e.usuarios } }, { organizacao_id: e.organizacao.id }] }, { NOT: { acao: { startsWith: "PLATAFORMA_" } } }] };
     case "BackupRegistro": return {}; // registros de infraestrutura da plataforma (sem dados de negócio)
+    // Plataforma (docs/plataforma.md): operadores do SaaS nunca saem na exportação de um cliente; convites só dos usuários dele (sem o hash do token).
+    case "OperadorPlataforma": return { id: "00000000-0000-0000-0000-000000000000" };
+    case "ConviteSenha": return { usuario_id: { in: e.usuarios } };
     // Agente de denúncias: canais (credenciais seguem CIFRADAS), conversas/mensagens e consumo de IA da organização.
     case "CanalAtendimento":
     case "Conversa":
@@ -185,6 +189,10 @@ export function filtroTabela(modelo: string, e: EscopoExportacao): Record<string
     case "GedProtocoloDocumento":
     case "GedProtocoloAssunto":
     case "GedExclusao":
+    case "GedCompartilhamento":
+    case "GedCompartilhamentoOtp":
+    case "GedCompartilhamentoSessao":
+    case "GedCompartilhamentoEvento":
       return { organizacao_id: e.organizacao.id };
     // Cobrança de taxas (chave da API Asaas e token do webhook NÃO são exportados – COLUNAS_EXCLUIDAS)
     case "ConfigCobranca":

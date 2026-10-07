@@ -18,7 +18,7 @@ type Params = { params: Promise<{ sigla: string }> };
 async function carregar(sigla: string) {
   if (!/^[A-Za-z]{2,5}$/.test(sigla)) return null;
   return prisma.municipio.findFirst({
-    where: { sigla: sigla.toUpperCase(), ativo: true },
+    where: { sigla: sigla.toUpperCase(), ativo: true, organizacao: { status: "ATIVO", modulos: { has: "LICENCIAMENTO" } } },
     select: { id: true, sigla: true, nome: true, latitude: true, longitude: true, orgao_ambiental_nome: true, brasao_url: true, endereco: true, email: true, telefone: true, organizacao: { select: { nome: true, logo_url: true } } },
   });
 }

@@ -125,6 +125,8 @@ export async function salvarRascunho(entrada: unknown, u: UsuarioSessao) {
       const d = e.empreendimento!;
       const mun = await tx.municipio.findUnique({ where: { id: d.municipio_id } });
       if (!mun?.ativo) throw invalido("Município inválido.");
+      const orgMun = await tx.organizacao.findUnique({ where: { id: mun.organizacao_id }, select: { status: true, modulos: true } });
+      if (orgMun?.status !== "ATIVO" || !orgMun.modulos.includes("LICENCIAMENTO")) throw invalido("Município inválido.");
       if (interno && !podeProtocolarNoBalcao(u, mun.id)) throw proibido("Sem permissão neste município.");
       const alvo = existente?.empreendimento_id ? await tx.empreendimento.findUnique({ where: { id: existente.empreendimento_id } }) : null;
       // Rascunho com empreendimento criado por ele mesmo e ainda sem outros processos: atualiza em vez de duplicar

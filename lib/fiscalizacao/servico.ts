@@ -22,8 +22,8 @@ type Tx = Prisma.TransactionClient;
 const num = (v: { toString(): string } | null | undefined) => (v === null || v === undefined ? null : Number(v.toString()));
 
 async function municipioOu404(id: string) {
-  const m = await prisma.municipio.findUnique({ where: { id }, select: { id: true, sigla: true, nome: true, organizacao_id: true, ativo: true } });
-  if (!m || !m.ativo) throw invalido("Município inválido.");
+  const m = await prisma.municipio.findUnique({ where: { id }, select: { id: true, sigla: true, nome: true, organizacao_id: true, ativo: true, organizacao: { select: { status: true, modulos: true } } } });
+  if (!m || !m.ativo || m.organizacao.status !== "ATIVO" || !m.organizacao.modulos.includes("LICENCIAMENTO")) throw invalido("Município inválido.");
   return m;
 }
 

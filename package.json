@@ -23,6 +23,7 @@
     "docker:up": "docker compose up -d --build",
     "openapi:export": "tsx -e \"import {documentoOpenApi} from './lib/openapi'; console.log(JSON.stringify(documentoOpenApi(), null, 2))\"",
     "onboard": "tsx prisma/seed/onboarding.ts",
+    "plataforma:operador": "tsx scripts/plataforma/operador.ts",
     "monitoramento:sync": "tsx --conditions=react-server jobs/monitoramento.ts",
     "seed:monitoramento-demo": "tsx --conditions=react-server prisma/seed/monitoramento-demo.ts",
     "seed:demandas-demo": "tsx --conditions=react-server prisma/seed/demandas-demo.ts",

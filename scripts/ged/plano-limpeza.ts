@@ -12,6 +12,10 @@ export type TabelaGed = { modelo: string; tabela: string };
 /** Conteúdo do cliente: apagado em ESTA ordem (filhos antes dos pais). */
 export const TABELAS_APAGADAS: readonly TabelaGed[] = [
   { modelo: "GedExclusao", tabela: "ged_exclusao" },
+  { modelo: "GedCompartilhamentoEvento", tabela: "ged_compartilhamento_evento" },
+  { modelo: "GedCompartilhamentoSessao", tabela: "ged_compartilhamento_sessao" },
+  { modelo: "GedCompartilhamentoOtp", tabela: "ged_compartilhamento_otp" },
+  { modelo: "GedCompartilhamento", tabela: "ged_compartilhamento" },
   { modelo: "GedImportacaoItem", tabela: "ged_importacao_item" },
   { modelo: "GedImportacao", tabela: "ged_importacao" },
   { modelo: "GedProtocoloDocumento", tabela: "ged_protocolo_documento" },

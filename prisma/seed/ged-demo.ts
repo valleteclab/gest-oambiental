@@ -760,6 +760,10 @@ async function main() {
   }
   for (const r of resultados) await coletarProtocolosIds(r.c);
 
+  // Compartilhamento externo (link público + OTP no WhatsApp) de demonstração em VAC.
+  let linkDemo: string | null = null;
+  if (!process.argv.includes("--sem-compartilhamento")) linkDemo = await semearCompartilhamentoDemo(resultados[0].c);
+
   // Mapa de IDs para os testes E2E (tests/e2e/ged-helpers.ts): E2E_GED_IDS=1 (ou --ids).
   if (process.env.E2E_GED_IDS === "1" || process.argv.includes("--ids")) {
     const arq = process.env.E2E_GED_IDS_FILE || path.join(RAIZ, "tests/e2e/.ged-ids.json");
@@ -776,8 +780,46 @@ async function main() {
   console.log("\nAcesso: /login (deixe o campo Órgão em branco) → /ged. Documentos de mesmo título nos dois clientes provam o isolamento.");
   console.log("Busca por conteúdo: 'iluminação pública' e 'aquisição de medicamentos' só existem em VAC; 'adutora' só em AAC.");
   console.log("Documento assinado e selado: \"Termo de Cooperação 005/2026\" (VAC) – certificado A1 de TESTE, sem valor legal.");
+  if (linkDemo) console.log(`Link público de demonstração (VAC, WhatsApp fictício ${DEMO_WHATSAPP_MASCARADO}; código só em CANAIS_ENVIO_SIMULADO=true): ${linkDemo}`);
   await prisma.$disconnect();
   process.exit(0);
+}
+
+const DEMO_WHATSAPP = "5575999990000"; // fictício
+const DEMO_WHATSAPP_MASCARADO = "(75) 9****-0000";
+
+/**
+ * Compartilhamento externo (docs/ged.md §18): um link de DEMONSTRAÇÃO para o "Edital do Pregão 03/2026" (VAC, público) com o WhatsApp
+ * fictício de teste. Token fixo e conhecido (só para a demo – NUNCA em produção): o link é sempre o mesmo e a seed é idempotente.
+ * Se o cliente ainda não tem canal de WhatsApp, cria um canal Evolution FICTÍCIO de "somente envio" (sem servidor por trás: use
+ * CANAIS_ENVIO_SIMULADO=true para o código aparecer só no log do servidor e em `ged_compartilhamento_otp.codigo_teste_cifrado`).
+ */
+async function semearCompartilhamentoDemo(c: ContextoTenant): Promise<string | null> {
+  const { cifrar, hashBusca } = await import("../../lib/crypto");
+  const { hashToken, mascararWhatsapp } = await import("../../lib/ged/compartilhamento/regras");
+  const base = (process.env.APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+  const token = createHash("sha256").update("ged-demo-compartilhamento-vac-v1").digest("base64url"); // 43 caracteres
+  const doc = c.doc.edital03;
+  if (!doc) return null;
+  if (!(await c.db.gedCompartilhamento.findFirst({ where: { token_hash: hashToken(token) }, select: { id: true } }))) {
+    const cfg = await c.db.gedConfig.findFirst({ select: { canal_whatsapp_id: true } });
+    if (!cfg?.canal_whatsapp_id) {
+      const { montarConfig, novoSegredoWebhook } = await import("../../lib/canais");
+      const canal = await c.db.canalAtendimento.create({
+        data: { organizacao_id: c.orgId, municipio_id: null, tipo: "WHATSAPP_EVOLUTION", nome: "WhatsApp do GED (demonstração)", config: { ...(montarConfig("WHATSAPP_EVOLUTION", { instance_name: "ged-vac-demo" }, {}) as Record<string, unknown>), somente_envio: "true" } as Prisma.InputJsonValue, webhook_secret: novoSegredoWebhook(), created_by: c.user.admin },
+      });
+      await c.db.gedConfig.upsert({ where: { organizacao_id: c.orgId }, create: { canal_whatsapp_id: canal.id } as never, update: { canal_whatsapp_id: canal.id } });
+    }
+    await c.db.gedCompartilhamento.create({
+      data: {
+        criado_por_id: c.user.gestor, recurso_tipo: "DOCUMENTO", documento_id: doc.id, recurso_rotulo: doc.titulo, token_hash: hashToken(token),
+        destinatario_nome: "Fornecedor Demonstração (fictício)", destinatario_whatsapp_cifrado: cifrar(DEMO_WHATSAPP), destinatario_whatsapp_hash: hashBusca(DEMO_WHATSAPP), destinatario_mascarado: mascararWhatsapp(DEMO_WHATSAPP),
+        mensagem: "Segue o edital para conferência (dados fictícios de demonstração).", pode_visualizar: true, pode_baixar: true, pode_zip: false, expira_em: new Date(Date.now() + 30 * 86_400_000),
+        notificar_primeiro_acesso: false, itens_congelados: [],
+      } as never,
+    });
+  }
+  return `${base}/compartilhado/${token}`;
 }
 
 /** Protocolos e portal público do cliente para o mapa de IDs do E2E (códigos de consulta/verificação ficam só no arquivo local de testes). */

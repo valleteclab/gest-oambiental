@@ -28,7 +28,7 @@ export const POST = rota(async (req: Request) => {
 export const GET = rota(async (req: Request) => {
   const protocolo = new URL(req.url).searchParams.get("protocolo")?.trim().toUpperCase();
   if (!protocolo || protocolo.length > 40) throw invalido("Informe o protocolo.");
-  const d = await prisma.denuncia.findUnique({ where: { protocolo }, select: { protocolo: true, status: true, created_at: true, municipio: { select: { nome: true } } } });
+  const d = await prisma.denuncia.findUnique({ where: { protocolo, municipio: { organizacao: { status: "ATIVO" } } }, select: { protocolo: true, status: true, created_at: true, municipio: { select: { nome: true } } } });
   if (!d) throw new ErroApi(404, "NAO_ENCONTRADO", "Protocolo não encontrado.");
   return NextResponse.json({ protocolo: d.protocolo, status: d.status, status_rotulo: ROTULO_STATUS_DENUNCIA[d.status], municipio: d.municipio.nome, registrada_em: d.created_at });
 });

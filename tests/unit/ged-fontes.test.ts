@@ -19,7 +19,9 @@ function fontesGed(): string[] {
   const jobs = existsSync(path.join(RAIZ, "jobs")) ? readdirSync(path.join(RAIZ, "jobs")).filter((n) => /^ged/.test(n)).map((n) => path.posix.join("jobs", n)) : [];
   return [...listar("lib/ged"), ...listar("app/(ged)"), ...listar("app/api/v1/ged"), ...listar("components/ged"), ...jobs.flatMap(listar),
     // protocolo público (sem sessão): o cliente vem do slug e TUDO passa por gedDb
-    ...listar("app/(protocolo-publico)"), ...listar("app/api/v1/publico"), ...listar("components/protocolo"), ...listar("app/(publico)/verificar")];
+    ...listar("app/(protocolo-publico)"), ...listar("app/api/v1/publico"), ...listar("components/protocolo"), ...listar("app/(publico)/verificar"),
+    // compartilhamento externo por link + OTP (sem sessão do GED): o token resolve só ids e TUDO passa por gedDb
+    ...listar("app/(compartilhado-publico)"), ...listar("components/compartilhado")];
 }
 
 /** Remove comentários (// e /* *​/) preservando strings simples; suficiente para a varredura. */
@@ -91,6 +93,15 @@ describe("fontes do GED", () => {
     expect(alvo.length).toBeGreaterThan(3);
     const sem = alvo.filter((f) => !/export\s+const\s+dynamic\s*=\s*["']force-dynamic["']/.test(readFileSync(path.join(RAIZ, f), "utf8")));
     expect(sem).toEqual([]);
+  });
+
+  it("compartilhamento público: páginas e rotas declaram force-dynamic e as rotas usam rota()", () => {
+    const alvo = arquivos.filter((f) => /(^|\/)(page|layout|route)\.tsx?$/.test(f) && (f.startsWith("app/(compartilhado-publico)") || f.startsWith("app/api/v1/publico/compartilhado")));
+    expect(alvo.length).toBeGreaterThanOrEqual(8);
+    expect(alvo.filter((f) => !/export\s+const\s+dynamic\s*=\s*["']force-dynamic["']/.test(readFileSync(path.join(RAIZ, f), "utf8")))).toEqual([]);
+    const rotas = alvo.filter((f) => f.endsWith("route.ts"));
+    expect(rotas.length).toBeGreaterThanOrEqual(6);
+    expect(rotas.filter((f) => !/\brota\(/.test(readFileSync(path.join(RAIZ, f), "utf8")))).toEqual([]);
   });
 
   it("rotas de API usam rota() e ctxGedApi()", () => {

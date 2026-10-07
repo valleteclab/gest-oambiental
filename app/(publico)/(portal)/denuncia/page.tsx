@@ -10,7 +10,7 @@ export default async function PaginaDenuncia({ searchParams }: { searchParams: P
   const sp = await searchParams;
   const sigla = (sp.municipio ?? sp.orgao ?? "").trim().toUpperCase();
   const [municipios, chatsInativos] = await Promise.all([
-    prisma.municipio.findMany({ where: { ativo: true }, orderBy: { nome: "asc" }, select: { id: true, sigla: true, nome: true, latitude: true, longitude: true } }),
+    prisma.municipio.findMany({ where: { ativo: true, organizacao: { status: "ATIVO", modulos: { has: "LICENCIAMENTO" } } }, orderBy: { nome: "asc" }, select: { id: true, sigla: true, nome: true, latitude: true, longitude: true } }),
     prisma.canalAtendimento.findMany({ where: { tipo: "WEBCHAT", ativo: false }, select: { municipio_id: true } }),
   ]);
   const semChat = new Set(chatsInativos.map((c) => c.municipio_id));

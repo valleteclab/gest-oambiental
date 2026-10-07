@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { autenticar, criarSessao, listarOrgaos, resolverOrgao } from "@/lib/auth";
 import { isInterno, orgaosPermitidos } from "@/lib/rbac";
+import { usuarioEhOperador } from "@/lib/plataforma/operador";
 
 export type EstadoLogin = { erro?: string; email?: string; orgao?: string } | undefined;
 
@@ -32,7 +33,8 @@ export async function entrar(_: EstadoLogin, form: FormData): Promise<EstadoLogi
   if (r.usuario.trocar_senha) redirect("/trocar-senha");
   // GED (docs/ged-design.md §1.1): quem não é interno do licenciamento mas é membro ativo de um cliente com o módulo GED vai para /ged.
   const temGed = !isInterno(r.usuario) && (await prisma.gedMembro.count({ where: { usuario_id: r.usuario.id, ativo: true, organizacao: { modulos: { has: "GED" } } } })) > 0;
-  const final = destino || (isInterno(r.usuario) ? "/dashboard" : temGed ? "/ged" : "/meus-processos");
+  const operador = !isInterno(r.usuario) && (await usuarioEhOperador(r.usuario.id));
+  const final = destino || (isInterno(r.usuario) ? "/dashboard" : operador ? "/plataforma" : temGed ? "/ged" : "/meus-processos");
   if (escolherDepois) redirect(`/trocar-orgao?next=${encodeURIComponent(final)}`);
   redirect(final);
 }

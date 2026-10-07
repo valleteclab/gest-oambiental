@@ -8,7 +8,8 @@ import { exigirGed } from "@/lib/ged/escopo";
 import { podeAdministrarGed } from "@/lib/ged/papeis";
 import { lerConfigProtocolo, type AssuntoView, type ConfigProtocoloView } from "@/lib/ged/protocolo/config";
 import { PRIORIDADES, ROTULO_PRIORIDADE } from "@/lib/ged/protocolo/regras";
-import { alternarAssuntoAction, atualizarAssuntoAction, criarAssuntoAction, excluirAssuntoAction, salvarConfiguracoesAction, salvarProtocoloAction } from "./actions";
+import { lerConfigCompartilhamento } from "@/lib/ged/compartilhamento/servico";
+import { alternarAssuntoAction, atualizarAssuntoAction, criarAssuntoAction, excluirAssuntoAction, salvarCompartilhamentoAction, salvarConfiguracoesAction, salvarProtocoloAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Configurações – Gestão de Documentos" };
@@ -19,6 +20,7 @@ export default async function PaginaConfiguracoes() {
   const c = await lerConfiguracoes(ctx);
   const ocr = await cotaOcrDoMes(ctx.db);
   const prot = await lerConfigProtocolo(ctx);
+  const comp = await lerConfigCompartilhamento(ctx);
 
   return (
     <>
@@ -53,6 +55,23 @@ export default async function PaginaConfiguracoes() {
               Uso neste mês: {ocr.usadas}{ocr.cota !== null ? ` de ${ocr.cota}` : ""} página(s). Ao atingir a cota, os novos digitalizados ficam como &ldquo;OCR: cota excedida&rdquo; até o mês seguinte ou até a cota ser aumentada e o OCR reprocessado.
             </span>
           </div>
+        </FormGed>
+      </Card>
+      <Card className="mt-6 max-w-2xl" titulo="Compartilhamento externo (link + código no WhatsApp)">
+        <FormGed action={salvarCompartilhamentoAction} botao="Salvar compartilhamento" rotuloAcessivel="Configuração do compartilhamento externo">
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="ativo" defaultChecked={comp.ativo} /> Permitir compartilhar documentos e pastas por link público</label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="label" htmlFor="cmp-padrao">Validade padrão (dias)</label>
+              <input id="cmp-padrao" name="validade_padrao_dias" type="number" min={1} max={30} className="input" defaultValue={comp.validade_padrao_dias} required />
+            </div>
+            <div>
+              <label className="label" htmlFor="cmp-max">Validade máxima (dias, até 30)</label>
+              <input id="cmp-max" name="validade_max_dias" type="number" min={1} max={30} className="input" defaultValue={comp.validade_max_dias} required />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="notificar_acesso" defaultChecked={comp.notificar_acesso} /> Avisar por e-mail quem compartilhou no primeiro acesso (padrão dos novos links)</label>
+          <span className="block text-xs text-slate-500">O código de acesso é enviado pelo canal de WhatsApp do cliente (Administração › Canal de WhatsApp); sem canal ativo ninguém consegue criar links. Documentos sigilosos nunca são compartilhados.</span>
         </FormGed>
       </Card>
       <ProtocoloOnline cfg={prot} />

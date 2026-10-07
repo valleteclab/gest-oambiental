@@ -205,7 +205,7 @@ export type VersaoOcrPendente = { id: string; organizacao_id: string };
 
 /** Versões com OCR PENDENTE de TODOS os clientes com GED (e devolve a PENDENTE as PROCESSANDO travadas). */
 export async function versoesOcrPendentes(limite = 20, idadeMinimaMs = 5000): Promise<VersaoOcrPendente[]> {
-  const orgs = await gedDb(ID_NULO).organizacao.findMany({ where: { modulos: { has: "GED" } }, select: { id: true } });
+  const orgs = await gedDb(ID_NULO).organizacao.findMany({ where: { status: "ATIVO", modulos: { has: "GED" } }, select: { id: true } });
   const corte = new Date(Date.now() - idadeMinimaMs);
   const travadas = new Date(Date.now() - TRAVADO_APOS_MS);
   const out: VersaoOcrPendente[] = [];

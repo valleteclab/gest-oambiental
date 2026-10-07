@@ -76,7 +76,16 @@ export function nomeDoArquivo(numero: string, escolhida: VersaoMin, versoes: Ver
   return /\.[A-Za-z0-9]{1,8}$/.test(bruto) ? bruto : `${bruto}.pdf`;
 }
 
-export async function planejarExportacaoPasta(ctx: CtxGed, pastaId: string, opc: { modo?: ModoVersao; limite?: number } = {}): Promise<PlanoExportacao> {
+export type OpcoesPlano = {
+  modo?: ModoVersao;
+  limite?: number;
+  /** Filtro adicional de documentos (compartilhamento externo: só o conjunto permitido). */
+  extraWhere?: Prisma.GedDocumentoWhereInput;
+  /** Não conta nem lista documentos omitidos (compartilhamento externo: o destinatário não deve saber que existem). */
+  ocultarOmitidos?: boolean;
+};
+
+export async function planejarExportacaoPasta(ctx: CtxGed, pastaId: string, opc: OpcoesPlano = {}): Promise<PlanoExportacao> {
   const modo: ModoVersao = opc.modo === "original" ? "original" : "atual";
   const { pasta: min } = await exigirPasta(ctx, pastaId, "VER"); // 404 se outro cliente/sem VER
   const raiz = exigirEncontrado(await ctx.db.gedPasta.findUnique({ where: { id: min.id }, select: { id: true, nome: true, caminho_nome: true } }), "Pasta não encontrada.");
@@ -98,7 +107,7 @@ export async function planejarExportacaoPasta(ctx: CtxGed, pastaId: string, opc:
 
   const baseDoc: Prisma.GedDocumentoWhereInput = { excluido_em: null, status: { not: "ARQUIVADO" } };
   const visivel = await whereGedVisivel(ctx, "VER");
-  const whereInclui: Prisma.GedDocumentoWhereInput = { AND: [visivel, baseDoc, { pasta_id: { in: pastasIncluidas } }] };
+  const whereInclui: Prisma.GedDocumentoWhereInput = { AND: [visivel, baseDoc, { pasta_id: { in: pastasIncluidas } }, ...(opc.extraWhere ? [opc.extraWhere] : [])] };
 
   const total = await ctx.db.gedDocumento.count({ where: whereInclui });
   const lim = verificarLimiteArquivos(total, opc.limite ?? LIMITE_ARQUIVOS_ZIP);
@@ -106,10 +115,12 @@ export async function planejarExportacaoPasta(ctx: CtxGed, pastaId: string, opc:
 
   // Omitidos = documentos da árvore (qualquer subpasta) − os que entram. Diferença de contagens por pasta (não use NOT sobre o
   // filtro de permissão: com colunas NULL o SQL devolve NULL e a linha some). Só contagem: nada de título/número.
-  const [totaisPorPasta, incluidosPorPasta] = await Promise.all([
-    ctx.db.gedDocumento.groupBy({ by: ["pasta_id"], where: { AND: [baseDoc, { pasta_id: { in: todas.map((p) => p.id) } }] }, _count: { _all: true } }),
-    ctx.db.gedDocumento.groupBy({ by: ["pasta_id"], where: whereInclui, _count: { _all: true } }),
-  ]);
+  const [totaisPorPasta, incluidosPorPasta] = opc.ocultarOmitidos
+    ? [[], []]
+    : await Promise.all([
+        ctx.db.gedDocumento.groupBy({ by: ["pasta_id"], where: { AND: [baseDoc, { pasta_id: { in: todas.map((p) => p.id) } }] }, _count: { _all: true } }),
+        ctx.db.gedDocumento.groupBy({ by: ["pasta_id"], where: whereInclui, _count: { _all: true } }),
+      ]);
   const incl = new Map(incluidosPorPasta.map((g) => [g.pasta_id, g._count._all]));
   const omitidosPorPasta = totaisPorPasta.map((g) => ({ pasta_id: g.pasta_id, qtd: g._count._all - (incl.get(g.pasta_id) ?? 0) })).filter((g) => g.qtd > 0);
   const linhasFixas: LinhaManifesto[] = [];
@@ -167,7 +178,20 @@ export async function planejarExportacaoPasta(ctx: CtxGed, pastaId: string, opc:
  * "erro: …". MANIFESTO.csv e LEIAME.txt vão ao final (refletem o resultado real). Auditoria (resumo + BAIXAR por documento) no fim,
  * inclusive se o cliente cancelar (registra o que foi entregue).
  */
-export async function criarStreamZip(ctx: CtxGed, plano: PlanoExportacao): Promise<Readable> {
+export type OpcoesStream = {
+  /** false = não grava a auditoria/acessos do usuário (quem audita é o chamador – compartilhamento externo). */
+  auditoria?: boolean;
+  /** Texto de "Exportado por" no LEIAME (padrão: o usuário do contexto). */
+  exportadoPor?: string;
+  /** Substitui o LEIAME padrão (que cita a prestação de contas do TCM-BA). */
+  leiame?: (d: { pasta: string; organizacao: string; geradoEm: Date; incluidos: number; bytes: number }) => string;
+  /** Chamado a cada 10 arquivos: false aborta o ZIP (ex.: link revogado no meio do download). */
+  continuar?: () => Promise<boolean>;
+  /** Chamado ao fim (inclusive se interrompido) com o que foi entregue. */
+  aoFinalizar?: (r: { incluidos: EntradaPlano[]; bytes: number; interrompida: boolean }) => Promise<void>;
+};
+
+export async function criarStreamZip(ctx: CtxGed, plano: PlanoExportacao, op: OpcoesStream = {}): Promise<Readable> {
   const { ZipArchive } = await import("archiver");
   const zip = new ZipArchive({ store: true, forceZip64: precisaZip64(plano.totalBytes, plano.entradas.length + 2) });
   const iniciadoEm = new Date();
@@ -197,8 +221,14 @@ export async function criarStreamZip(ctx: CtxGed, plano: PlanoExportacao): Promi
 
   void (async () => {
     try {
+      let n = 0;
       for (const e of plano.entradas) {
         if (abortado) return;
+        if (op.continuar && n++ % 10 === 0 && !(await op.continuar())) {
+          abortado = true;
+          zip.destroy(new Error("download interrompido"));
+          return;
+        }
         try {
           const dados = await lerArquivoGed(ctx.organizacao_id, e.storage_key);
           if (abortado) return;
@@ -216,11 +246,13 @@ export async function criarStreamZip(ctx: CtxGed, plano: PlanoExportacao): Promi
       const raiz = plano.zipRaiz;
       await anexar(montarManifesto(todas), `${raiz}/MANIFESTO.csv`, iniciadoEm);
       await anexar(
-        montarLeiame({
-          pasta: plano.pasta.caminho_nome, organizacao: ctx.organizacao.nome, exportadoPor: ctx.usuario.nome, geradoEm: iniciadoEm,
-          incluidos: incluidos.length, omitidos: plano.omitidos + plano.linhasFixas.filter((l) => l.situacao === "omitido: sem arquivo").length,
-          erros: linhas.filter((l) => l.situacao.startsWith("erro")).length, bytes, modoVersao: plano.modo,
-        }),
+        op.leiame
+          ? op.leiame({ pasta: plano.pasta.caminho_nome, organizacao: ctx.organizacao.nome, geradoEm: iniciadoEm, incluidos: incluidos.length, bytes })
+          : montarLeiame({
+              pasta: plano.pasta.caminho_nome, organizacao: ctx.organizacao.nome, exportadoPor: op.exportadoPor ?? ctx.usuario.nome, geradoEm: iniciadoEm,
+              incluidos: incluidos.length, omitidos: plano.omitidos + plano.linhasFixas.filter((l) => l.situacao === "omitido: sem arquivo").length,
+              erros: linhas.filter((l) => l.situacao.startsWith("erro")).length, bytes, modoVersao: plano.modo,
+            }),
         `${raiz}/LEIAME.txt`,
         iniciadoEm,
       );
@@ -231,7 +263,8 @@ export async function criarStreamZip(ctx: CtxGed, plano: PlanoExportacao): Promi
       abortado = true;
       zip.destroy(err instanceof Error ? err : new Error(String(err)));
     } finally {
-      await registrarExportacao(ctx, plano, incluidos, bytes, abortado);
+      if (op.auditoria !== false) await registrarExportacao(ctx, plano, incluidos, bytes, abortado);
+      if (op.aoFinalizar) await op.aoFinalizar({ incluidos, bytes, interrompida: abortado }).catch((e) => console.error("[ged] exportação de pasta: aoFinalizar", e instanceof Error ? e.message : e));
     }
   })();
   return zip;

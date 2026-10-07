@@ -71,7 +71,7 @@ export type VersaoPendente = { id: string; organizacao_id: string };
 
 /** Versões com texto PENDENTE em TODOS os clientes com GED (para o worker). Ignora as muito recentes (o upload já cuida delas). */
 export async function versoesPendentes(limite = 50, idadeMinimaMs = 5000): Promise<VersaoPendente[]> {
-  const orgs = await gedDb(ID_NULO).organizacao.findMany({ where: { modulos: { has: "GED" } }, select: { id: true } });
+  const orgs = await gedDb(ID_NULO).organizacao.findMany({ where: { status: "ATIVO", modulos: { has: "GED" } }, select: { id: true } });
   const corte = new Date(Date.now() - idadeMinimaMs);
   const out: VersaoPendente[] = [];
   for (const o of orgs) {

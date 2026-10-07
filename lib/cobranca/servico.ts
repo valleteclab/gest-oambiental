@@ -403,6 +403,7 @@ export async function processarWebhookAsaas(token: string, headerToken: string |
   if (!token || token.length < 16) return { processado: false, motivo: "token inválido" };
   const cfg = await prisma.configCobranca.findFirst({ where: { asaas_webhook_token: token } });
   if (!cfg?.asaas_webhook_token) return { processado: false, motivo: "token desconhecido" };
+  if (await prisma.municipio.count({ where: { id: cfg.municipio_id, organizacao: { status: "SUSPENSO" } } })) return { processado: false, motivo: "cliente suspenso" };
   if (!headerToken || !tokensIguais(headerToken.trim(), cfg.asaas_webhook_token)) return { processado: false, motivo: "header asaas-access-token ausente ou inválido" };
   const ev = lerEventoAsaas(corpo);
   if (!ev) return { processado: false, motivo: "evento sem pagamento" };
@@ -438,7 +439,8 @@ export async function sincronizarPendentes(filtro: { organizacao_id?: string; mu
   const where: Prisma.CobrancaWhereInput = {
     status: { in: STATUS_EM_ABERTO },
     ...(filtro.municipio_id ? { municipio_id: filtro.municipio_id } : {}),
-    ...(filtro.organizacao_id ? { municipio: { organizacao_id: filtro.organizacao_id } } : {}),
+    // clientes suspensos (painel /plataforma) ficam fora da sincronização
+    municipio: { organizacao: { status: "ATIVO", ...(filtro.organizacao_id ? { id: filtro.organizacao_id } : {}) } },
   };
   const cobrancas = await prisma.cobranca.findMany({ where, orderBy: { created_at: "asc" }, take: 2000 });
   const cfgs = new Map((await prisma.configCobranca.findMany({ where: { municipio_id: { in: [...new Set(cobrancas.map((c) => c.municipio_id))] } } })).map((c) => [c.municipio_id, c]));

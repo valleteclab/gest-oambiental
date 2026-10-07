@@ -23,6 +23,9 @@
 #   SEED_CDS_POC=true        → SOMENTE no ambiente da PoC (CDS Piemonte – docs/poc-cds.md): onboarding
 #                               cds-piemonte --demo (senha = ONBOARD_SENHA) + npm run seed:cds-poc. Recusa rodar com
 #                               DEMO_MODE=true ou SEED_DEMO=true (a demonstração pública nunca recebe esses dados).
+#   PLATAFORMA_OPERADORES=<e-mails> → bootstrap dos OPERADORES do painel /plataforma (docs/plataforma.md): cria (senha temporária
+#                               impressa UMA vez no log; troca obrigatória) ou promove usuário SEM organização/papéis; idempotente.
+#                               PLATAFORMA_OPERADOR_SENHA fixa a senha inicial dos usuários novos. Remova a senha do ambiente depois.
 # Senhas: no onboarding sem --demo cada usuário novo recebe senha temporária impressa UMA vez no log do deploy
 # (troca obrigatória); ONBOARD_SENHA fixa a senha. Com DEMO_MODE=true: senha demo, sem troca obrigatória.
 set -eu
@@ -56,6 +59,11 @@ if [ -n "${SEED_ONBOARDING:-}" ]; then
     log "SEED_ONBOARDING – onboarding do cliente '$cliente' $flag"
     npm run onboard -- "$cliente" $flag
   done
+fi
+
+if [ -n "${PLATAFORMA_OPERADORES:-}" ]; then
+  log "PLATAFORMA_OPERADORES – bootstrap dos operadores da plataforma"
+  npm run plataforma:operador -- --env
 fi
 
 if sim "${SEED_RIACHAO_DEMO:-}"; then

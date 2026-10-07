@@ -496,6 +496,8 @@ export async function transicionar(processoId: string, acaoBruta: string, payloa
   const previa = await prisma.processo.findUnique({ where: { id: processoId }, include: INCLUDE });
   if (!previa) throw naoEncontrado("Processo não encontrado.");
   if (!podeVerProcesso(usuario, previa)) throw proibido("Você não tem acesso a este processo.");
+  // Cliente suspenso / sem o módulo de licenciamento (painel /plataforma): ninguém movimenta o processo (nem o requerente).
+  if (!(await prisma.organizacao.count({ where: { id: previa.organizacao_id, status: "ATIVO", modulos: { has: "LICENCIAMENTO" } } }))) throw proibido("O acesso desta organização está suspenso.");
 
   if (acao === "emitir_documento") {
     const ctx = { status: previa.status, municipio_id: previa.municipio_id, requerente_id: previa.requerente_id, rt_pessoa_id: previa.rt?.pessoa_id, delega_decisao: previa.municipio.delega_decisao, exige_parecer: previa.tipo_ato.exige_parecer, decisao_tecnico: decisaoPeloTecnico(previa.tipo_ato) };

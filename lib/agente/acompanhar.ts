@@ -11,7 +11,7 @@ export async function acompanharDenuncia(protocolo: string, contato: string) {
   const h = hashContato(contato);
   if (!/^DEN-[A-Z]{3}-\d{3,}\/\d{4}$/.test(p) || !h) return null;
   const d = await prisma.denuncia.findUnique({
-    where: { protocolo: p },
+    where: { protocolo: p, municipio: { organizacao: { status: "ATIVO" } } },
     select: { id: true, protocolo: true, status: true, descricao: true, endereco: true, created_at: true, contato_hash: true, canal: true, municipio: { select: { nome: true, orgao_ambiental_nome: true } }, _count: { select: { anexos: true } } },
   });
   if (!d || !podeConsultarProtocolo(d.contato_hash, h)) return null;

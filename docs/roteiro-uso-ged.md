@@ -68,6 +68,8 @@ Um repositório digital de documentos por órgão, com busca pelo conteúdo, tra
 ## 11. Administração do cliente
 **Como mostrar (admin.vac@):** **Admin** → membros e papéis, setores, tipos de documento, marcadores, canais de envio, certificado digital, exportação dos dados e configurações (cota de OCR).
 
+**Para o dono da plataforma (sem script):** o painel `/plataforma` cadastra um cliente novo em minutos – módulos, setores e tipos de documento padrão, administrador `GED_ADMIN` (senha temporária ou convite por e-mail) – e permite suspender/reativar sem apagar nada. Ver `docs/plataforma.md`.
+
 ## 12. Isolamento entre clientes (o argumento de venda)
 **Como mostrar:** entre como `admin.aac@`. Nenhum documento da Câmara aparece, nem na busca, nem em links diretos (o sistema responde "não encontrado"). A separação é garantida no código e no banco de dados, e vale também para arquivos e exportações.
 
@@ -98,6 +100,16 @@ Um repositório digital de documentos por órgão, com busca pelo conteúdo, tra
 3. Importe a mesma pasta de novo: funciona (o sistema não trata como duplicado o que foi excluído).
 **Atenção:** **documentos com valor jurídico não se excluem.** Se houver trâmite, comentário, pedido de assinatura (em qualquer situação), assinatura/selo ou protocolo, o sistema **não apaga nada** e lista os documentos com o motivo; use **Arquivar** neles. Há a opção "excluir apenas os que podem", que mantém os impeditivos. Só administradores e gestores excluem, e só o que podem administrar. Não há lixeira: **não tem volta**. Tudo fica registrado em **Logs → Alterações** (quem, quando, número, título, sha256), e os registros de acesso são mantidos. Exclusões grandes (mais de 100 documentos) rodam em segundo plano, com barra de progresso.
 
+## 16. Compartilhar com quem não tem usuário (link + código no WhatsApp)
+**Para quê:** mandar um edital, um contrato ou uma pasta a um fornecedor ou parte interessada sem anexar nada ao e-mail, com prova de quem abriu.
+**Como mostrar (gestor.vac@):**
+1. Abra um documento (ex.: *Edital do Pregão 03/2026*) → **Compartilhar**. Informe o **WhatsApp do destinatário** (é você quem cadastra; ele não digita número), a validade (padrão 7 dias, máximo 30) e o que ele pode fazer: visualizar, baixar, e em pasta também o ZIP. Documento RESTRITO pede uma confirmação; **sigiloso não pode ser compartilhado** e o sistema explica.
+2. **Criar link.** O endereço aparece **uma única vez**: copie e envie (ou marque "enviar também o link ao WhatsApp dele").
+3. Abra o link numa janela anônima: só aparecem o órgão, quem compartilhou e o título. Clique em **Receber código no WhatsApp** (no ambiente de demonstração o código não é enviado de verdade). Digite o código: o documento aparece para visualizar no navegador e, se permitido, baixar.
+4. Volte em **Compartilhamentos**: veja quando houve o primeiro acesso, cada visualização/download (com IP truncado e navegador resumido, nunca o telefone) e clique em **Revogar**: quem estava com o documento aberto perde o acesso na hora.
+**Em pasta:** o destinatário vê só o que **você pode ver agora**, sem sigilosos nem documentos com dados pessoais; documento novo na pasta entra no link (use "congelar a lista" para fixar o que existe hoje).
+**Atenção:** para criar links o administrador precisa ter configurado o **canal de WhatsApp** (Administração). Quem só lê (Leitor/Auditor) não compartilha. O destinatário que apenas "visualiza" ainda pode salvar o PDF pelo navegador: use validade curta e limite de downloads quando for sensível.
+
 ## Roteiro rápido de apresentação (15 min)
 1. Login e visão geral (1 min)
 2. Importar uma pasta digitalizada (ou um ZIP) (3 min)
@@ -105,7 +117,8 @@ Um repositório digital de documentos por órgão, com busca pelo conteúdo, tra
 4. Trâmite entre dois servidores (2 min)
 5. Assinatura com dois signatários e verificação pública (4 min)
 6. Logs com o auditor e isolamento com o outro cliente (2 min)
-7. (opcional, +3 min) Protocolo: registrar uma entrada no balcão, protocolar pelo portal do cidadão e verificar o comprovante pelo QR
+7. (opcional, +3 min) Compartilhar um documento por link com código no WhatsApp e revogar
+8. (opcional, +3 min) Protocolo: registrar uma entrada no balcão, protocolar pelo portal do cidadão e verificar o comprovante pelo QR
 
 ## O que ainda não existe
 Upload de imagens e Word, scanner direto pela web (agente local), metadados por IA, portal do cliente para consulta de documentos publicados (o protocolo online já existe), pacote de fechamento mensal (hoje há o ZIP por pasta, sem verificação de DPI), temporalidade e retenção, motor de anonimização. No protocolo: busca por nome do interessado, anexar arquivos depois de registrado, WhatsApp ao cidadão e captcha.

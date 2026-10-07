@@ -1,5 +1,5 @@
 import type { CtxGed } from "@/lib/ged/escopo";
-import { podeGerirEstruturaGed, podeImportarGed, podeVerLogs } from "@/lib/ged/papeis";
+import { podeCompartilhar, podeGerirEstruturaGed, podeImportarGed, podeVerLogs } from "@/lib/ged/papeis";
 import { NavGedLinks } from "./nav-ged-links";
 
 type ItemMenu = { href: string; rotulo: string; visivel: (ctx: CtxGed) => boolean };
@@ -13,6 +13,7 @@ export const ITENS_NAV_GED: ItemMenu[] = [
   { href: "/ged/assinaturas", rotulo: "Assinaturas", visivel: () => true },
   { href: "/ged/protocolo", rotulo: "Protocolo", visivel: () => true },
   { href: "/ged/tramite", rotulo: "Trâmite", visivel: () => true },
+  { href: "/ged/compartilhamentos", rotulo: "Compartilhamentos", visivel: (ctx) => podeCompartilhar(ctx) },
   { href: "/ged/minha-conta/notificacoes", rotulo: "Notificações", visivel: () => true },
   { href: "/ged/logs", rotulo: "Logs", visivel: (ctx) => podeVerLogs(ctx) },
   { href: "/ged/admin", rotulo: "Administração", visivel: (ctx) => podeGerirEstruturaGed(ctx) },

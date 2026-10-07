@@ -261,53 +261,62 @@ model Organizacao {
   logo_url     String?
   // Endereço público do portal de protocolo do GED (/protocolo/{slug}); único na plataforma, minúsculas/números/hífen.
   slug_publico String?  @unique
+  // Situação do cliente na plataforma (/plataforma, docs/plataforma.md): SUSPENSO = ninguém da organização entra, portais
+  // públicos e canais ficam fora do ar e os jobs a ignoram; os dados são preservados.
+  status           StatusOrganizacao @default(ATIVO)
+  suspensa_em      DateTime?
+  suspensa_motivo  String?
   created_at   DateTime @default(now())
   updated_at   DateTime @updatedAt
   created_by   String?  @db.Uuid
 
-  municipios               Municipio[]
-  tipologias               Tipologia[]
-  tipos_ato                TipoAto[]
-  prazos_config            PrazoConfig[]
-  usuarios                 Usuario[]
-  checklists               ChecklistModelo[]
-  modelos                  ModeloDocumento[]
-  exportacoes              Exportacao[]
-  canais                   CanalAtendimento[]
-  alertas_desmatamento     AlertaDesmatamento[]
-  monitoramento_syncs      MonitoramentoSync[]
-  tabela_taxas             TabelaTaxa[]
-  certificados             CertificadoDigital[]
+  municipios                   Municipio[]
+  tipologias                   Tipologia[]
+  tipos_ato                    TipoAto[]
+  prazos_config                PrazoConfig[]
+  usuarios                     Usuario[]
+  checklists                   ChecklistModelo[]
+  modelos                      ModeloDocumento[]
+  exportacoes                  Exportacao[]
+  canais                       CanalAtendimento[]
+  alertas_desmatamento         AlertaDesmatamento[]
+  monitoramento_syncs          MonitoramentoSync[]
+  tabela_taxas                 TabelaTaxa[]
+  certificados                 CertificadoDigital[]
   // Módulos contratados pelo cliente (tenant). Padrão: só licenciamento (clientes existentes).
-  modulos                  ModuloPlataforma[]          @default([LICENCIAMENTO])
-  ged_config               GedConfig?
-  ged_membros              GedMembro[]
-  ged_setores              GedSetor[]
-  ged_setor_membros        GedSetorMembro[]
-  ged_tipos_documento      GedTipoDocumento[]
-  ged_pastas               GedPasta[]
-  ged_documentos           GedDocumento[]
-  ged_versoes              GedVersaoDocumento[]
-  ged_conteudos            GedConteudoTexto[]
-  ged_deteccoes            GedDeteccaoDadoPessoal[]
-  ged_marcadores           GedMarcador[]
-  ged_documento_marcadores GedDocumentoMarcador[]
-  ged_acls                 GedAcl[]
-  ged_tramites             GedTramite[]
-  ged_solicitacoes         GedSolicitacaoAssinatura[]
-  ged_assinantes           GedAssinante[]
-  ged_comentarios          GedComentario[]
-  ged_acessos              GedAcessoLog[]
-  ged_comunicacoes         GedComunicacao[]
-  ged_importacoes          GedImportacao[]
-  ged_importacao_itens     GedImportacaoItem[]
-  ged_preferencias         GedPreferenciaNotificacao[]
-  ged_sequencias           GedSequencia[]
-  ged_exclusoes            GedExclusao[]
-  ged_protocolos           GedProtocolo[]
-  ged_protocolo_eventos    GedProtocoloEvento[]
-  ged_protocolo_documentos GedProtocoloDocumento[]
-  ged_protocolo_assuntos   GedProtocoloAssunto[]
+  modulos                      ModuloPlataforma[]          @default([LICENCIAMENTO])
+  ged_config                   GedConfig?
+  ged_membros                  GedMembro[]
+  ged_setores                  GedSetor[]
+  ged_setor_membros            GedSetorMembro[]
+  ged_tipos_documento          GedTipoDocumento[]
+  ged_pastas                   GedPasta[]
+  ged_documentos               GedDocumento[]
+  ged_versoes                  GedVersaoDocumento[]
+  ged_conteudos                GedConteudoTexto[]
+  ged_deteccoes                GedDeteccaoDadoPessoal[]
+  ged_marcadores               GedMarcador[]
+  ged_documento_marcadores     GedDocumentoMarcador[]
+  ged_acls                     GedAcl[]
+  ged_tramites                 GedTramite[]
+  ged_solicitacoes             GedSolicitacaoAssinatura[]
+  ged_assinantes               GedAssinante[]
+  ged_comentarios              GedComentario[]
+  ged_acessos                  GedAcessoLog[]
+  ged_comunicacoes             GedComunicacao[]
+  ged_importacoes              GedImportacao[]
+  ged_importacao_itens         GedImportacaoItem[]
+  ged_preferencias             GedPreferenciaNotificacao[]
+  ged_sequencias               GedSequencia[]
+  ged_exclusoes                GedExclusao[]
+  ged_protocolos               GedProtocolo[]
+  ged_protocolo_eventos        GedProtocoloEvento[]
+  ged_protocolo_documentos     GedProtocoloDocumento[]
+  ged_protocolo_assuntos       GedProtocoloAssunto[]
+  ged_compartilhamentos        GedCompartilhamento[]
+  ged_compartilhamento_otps    GedCompartilhamentoOtp[]
+  ged_compartilhamento_sessoes GedCompartilhamentoSessao[]
+  ged_compartilhamento_eventos GedCompartilhamentoEvento[]
 
   @@map("organizacao")
 }
@@ -389,6 +398,8 @@ model Usuario {
   certificados      CertificadoDigital[]
   ged_membros       GedMembro[]
   ged_setor_membros GedSetorMembro[]
+  operador          OperadorPlataforma?
+  convites_senha    ConviteSenha[]
 
   @@index([organizacao_id])
   @@map("usuario")
@@ -1428,6 +1439,11 @@ model CertificadoDigital {
 
 // ───────────────────── Gestão de Documentos (GED) – docs/ged-design.md ─────────────────────
 
+enum StatusOrganizacao {
+  ATIVO
+  SUSPENSO
+}
+
 enum ModuloPlataforma {
   LICENCIAMENTO
   GED
@@ -1553,24 +1569,29 @@ enum GedStatusCom {
 }
 
 model GedConfig {
-  id                       String      @id @default(uuid()) @db.Uuid
-  organizacao_id           String      @db.Uuid
-  created_at               DateTime    @default(now())
-  updated_at               DateTime    @updatedAt
-  cota_bytes               BigInt?
-  ia_habilitada            Boolean     @default(false) // LGPD: IA opcional (fase 2)
-  canal_whatsapp_id        String?     @db.Uuid // CanalAtendimento (somente envio)
-  assinatura_prazo_dias    Int         @default(15)
-  lembrete_dias            Int[]       @default([3, 1, 0])
-  retencao_acesso_log_dias Int         @default(730)
-  ocr_cota_paginas_mes     Int?        @default(5000) // páginas de OCR por mês (null = sem limite; 0 = OCR desligado)
+  id                                    String      @id @default(uuid()) @db.Uuid
+  organizacao_id                        String      @db.Uuid
+  created_at                            DateTime    @default(now())
+  updated_at                            DateTime    @updatedAt
+  cota_bytes                            BigInt?
+  ia_habilitada                         Boolean     @default(false) // LGPD: IA opcional (fase 2)
+  canal_whatsapp_id                     String?     @db.Uuid // CanalAtendimento (somente envio)
+  assinatura_prazo_dias                 Int         @default(15)
+  lembrete_dias                         Int[]       @default([3, 1, 0])
+  retencao_acesso_log_dias              Int         @default(730)
+  ocr_cota_paginas_mes                  Int?        @default(5000) // páginas de OCR por mês (null = sem limite; 0 = OCR desligado)
   // Protocolo online (portal do cidadão /protocolo/{slug}) – DESLIGADO por padrão.
-  protocolo_portal_ativo   Boolean     @default(false)
-  protocolo_orientacao     String? // texto de orientação exibido no formulário público
-  protocolo_max_anexos     Int         @default(5)
-  protocolo_max_mb         Int         @default(10) // por arquivo (teto geral: 25 MB)
-  protocolo_responsavel_id String?     @db.Uuid // membro que recebe/guarda os documentos enviados pelo portal
-  organizacao              Organizacao @relation(fields: [organizacao_id], references: [id])
+  protocolo_portal_ativo                Boolean     @default(false)
+  protocolo_orientacao                  String? // texto de orientação exibido no formulário público
+  protocolo_max_anexos                  Int         @default(5)
+  protocolo_max_mb                      Int         @default(10) // por arquivo (teto geral: 25 MB)
+  protocolo_responsavel_id              String?     @db.Uuid // membro que recebe/guarda os documentos enviados pelo portal
+  // Compartilhamento externo por link + OTP no WhatsApp (docs/ged.md §18)
+  compartilhamento_ativo                Boolean     @default(true)
+  compartilhamento_validade_padrao_dias Int         @default(7)
+  compartilhamento_validade_max_dias    Int         @default(30) // teto do cliente (nunca acima de 30)
+  compartilhamento_notificar_acesso     Boolean     @default(true) // avisa quem compartilhou no 1º acesso
+  organizacao                           Organizacao @relation(fields: [organizacao_id], references: [id])
 
   @@unique([organizacao_id])
   @@map("ged_config")
@@ -2310,4 +2331,168 @@ model GedExclusao {
   @@index([organizacao_id, status])
   @@index([organizacao_id, created_at])
   @@map("ged_exclusao")
+}
+
+// ───────────── Compartilhamento externo por link + OTP no WhatsApp (docs/ged.md §18) ─────────────
+
+enum GedStatusCompartilhamento {
+  ATIVO
+  REVOGADO
+  EXPIRADO
+}
+
+enum GedRecursoCompartilhado {
+  DOCUMENTO
+  PASTA
+}
+
+/// Link público (sem login) para um documento ou uma pasta (subárvore). O token NUNCA é guardado: só o sha256 (token_hash).
+/// O alvo (documento_id/pasta_id) não tem FK: excluir o recurso revoga o link (lib/ged/exclusao) e, se escapar, o acesso dá 404.
+/// O WhatsApp do destinatário (informado por quem compartilha) fica cifrado + hashBusca e só serve ao OTP e ao envio do link.
+model GedCompartilhamento {
+  id                            String                      @id @default(uuid()) @db.Uuid
+  organizacao_id                String                      @db.Uuid
+  created_at                    DateTime                    @default(now())
+  updated_at                    DateTime                    @updatedAt
+  criado_por_id                 String                      @db.Uuid
+  recurso_tipo                  GedRecursoCompartilhado
+  documento_id                  String?                     @db.Uuid
+  pasta_id                      String?                     @db.Uuid
+  recurso_rotulo                String // título do documento / nome da pasta no momento da criação (exibido antes do OTP)
+  token_hash                    String                      @unique // sha256 hex do token (>= 32 bytes de entropia)
+  destinatario_nome             String?
+  destinatario_whatsapp_cifrado String
+  destinatario_whatsapp_hash    String
+  destinatario_mascarado        String
+  mensagem                      String?
+  pode_visualizar               Boolean                     @default(true)
+  pode_baixar                   Boolean                     @default(false)
+  pode_zip                      Boolean                     @default(false)
+  expira_em                     DateTime
+  limite_downloads              Int?
+  downloads                     Int                         @default(0)
+  status                        GedStatusCompartilhamento   @default(ATIVO)
+  revogado_em                   DateTime?
+  revogado_por_id               String?                     @db.Uuid
+  revogado_motivo               String?
+  congelado                     Boolean                     @default(false) // pasta: só a lista de documentos de itens_congelados
+  itens_congelados              String[]                    @db.Uuid
+  confirmou_restrito            Boolean                     @default(false)
+  notificar_primeiro_acesso     Boolean                     @default(true)
+  primeiro_acesso_em            DateTime?
+  ultimo_acesso_em              DateTime?
+  otp_falhas                    Int                         @default(0) // falhas seguidas de OTP (zera no acerto) – bloqueio progressivo
+  bloqueado_ate                 DateTime?
+  link_enviado_whatsapp_em      DateTime?
+  organizacao                   Organizacao                 @relation(fields: [organizacao_id], references: [id])
+  otps                          GedCompartilhamentoOtp[]
+  sessoes                       GedCompartilhamentoSessao[]
+  eventos                       GedCompartilhamentoEvento[]
+
+  @@index([organizacao_id, status, expira_em])
+  @@index([organizacao_id, criado_por_id, created_at])
+  @@index([organizacao_id, documento_id])
+  @@index([organizacao_id, pasta_id])
+  @@map("ged_compartilhamento")
+}
+
+/// Código de uso único enviado ao WhatsApp: só hash com sal (HMAC), validade 10 min, no máximo 5 tentativas.
+/// `codigo_teste_cifrado` só é preenchido com CANAIS_ENVIO_SIMULADO=true (ensaios); nunca em produção.
+model GedCompartilhamentoOtp {
+  id                   String              @id @default(uuid()) @db.Uuid
+  organizacao_id       String              @db.Uuid
+  created_at           DateTime            @default(now())
+  updated_at           DateTime            @updatedAt
+  compartilhamento_id  String              @db.Uuid
+  codigo_hash          String
+  sal                  String
+  expira_em            DateTime
+  tentativas           Int                 @default(0)
+  usado_em             DateTime?
+  invalidado_em        DateTime?
+  enviado_em           DateTime?
+  erro_envio           String?
+  ip_hash              String?
+  codigo_teste_cifrado String?
+  organizacao          Organizacao         @relation(fields: [organizacao_id], references: [id])
+  compartilhamento     GedCompartilhamento @relation(fields: [compartilhamento_id], references: [id])
+
+  @@index([organizacao_id, compartilhamento_id, created_at])
+  @@map("ged_compartilhamento_otp")
+}
+
+/// Sessão curta do destinatário após o OTP (cookie httpOnly; só o hash do token é guardado), presa ao user-agent.
+model GedCompartilhamentoSessao {
+  id                  String              @id @default(uuid()) @db.Uuid
+  organizacao_id      String              @db.Uuid
+  created_at          DateTime            @default(now())
+  updated_at          DateTime            @updatedAt
+  compartilhamento_id String              @db.Uuid
+  token_hash          String              @unique
+  ua_hash             String
+  expira_em           DateTime // deslizante (30 min)
+  teto_em             DateTime // teto absoluto (2 h)
+  ultimo_uso_em       DateTime            @default(now())
+  encerrada_em        DateTime?
+  organizacao         Organizacao         @relation(fields: [organizacao_id], references: [id])
+  compartilhamento    GedCompartilhamento @relation(fields: [compartilhamento_id], references: [id])
+
+  @@index([organizacao_id, compartilhamento_id])
+  @@index([organizacao_id, teto_em])
+  @@map("ged_compartilhamento_sessao")
+}
+
+/// Transparência: um evento por ato (link criado, OTP, visualização, download, ZIP, revogação…). Sem dado pessoal completo:
+/// IP truncado, user-agent resumido, telefone nunca.
+model GedCompartilhamentoEvento {
+  id                  String              @id @default(uuid()) @db.Uuid
+  organizacao_id      String              @db.Uuid
+  created_at          DateTime            @default(now())
+  updated_at          DateTime            @updatedAt
+  compartilhamento_id String              @db.Uuid
+  tipo                String
+  documento_id        String?             @db.Uuid
+  ip                  String?
+  user_agent          String?
+  detalhe             String?
+  organizacao         Organizacao         @relation(fields: [organizacao_id], references: [id])
+  compartilhamento    GedCompartilhamento @relation(fields: [compartilhamento_id], references: [id])
+
+  @@index([organizacao_id, compartilhamento_id, created_at])
+  @@index([organizacao_id, created_at])
+  @@map("ged_compartilhamento_evento")
+}
+
+// ───────────── Plataforma (operador do SaaS – /plataforma, docs/plataforma.md) ─────────────
+
+/// Operador da plataforma: usuário SEM organização, SEM papéis e SEM cadastro de pessoa, promovido exclusivamente pela CLI
+/// (`npm run plataforma:operador`) ou pelo bootstrap PLATAFORMA_OPERADORES. Nenhuma tela de cliente grava esta tabela.
+model OperadorPlataforma {
+  id            String    @id @default(uuid()) @db.Uuid
+  usuario_id    String    @unique @db.Uuid
+  ativo         Boolean   @default(true)
+  origem        String // "cli" | "env"
+  ultimo_acesso DateTime?
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  usuario Usuario @relation(fields: [usuario_id], references: [id])
+
+  @@map("operador_plataforma")
+}
+
+/// Convite de definição de senha (uso único, expira): só o hash SHA-256 do token é guardado.
+model ConviteSenha {
+  id         String    @id @default(uuid()) @db.Uuid
+  usuario_id String    @db.Uuid
+  token_hash String    @unique
+  expira_em  DateTime
+  usado_em   DateTime?
+  criado_por String?   @db.Uuid // operador que gerou o convite
+  created_at DateTime  @default(now())
+
+  usuario Usuario @relation(fields: [usuario_id], references: [id])
+
+  @@index([usuario_id])
+  @@map("convite_senha")
 }

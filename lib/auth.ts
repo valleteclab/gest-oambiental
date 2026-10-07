@@ -8,6 +8,7 @@ import { prisma } from "./db";
 import { registrarAuditoria } from "./audit";
 import { isInterno, podeAcessarOrgao, type UsuarioSessao } from "./rbac";
 import { sessaoPorId } from "./sessao";
+import { MENSAGEM_CLIENTE_SUSPENSO } from "./plataforma/situacao";
 import { ipBloqueado, ipDaRequisicao, MENSAGEM_MUITAS_TENTATIVAS, registrarFalhaIp } from "./limite-login";
 
 // Sessão: JWT curto de acesso (15 min) + refresh (8 h), cookies Secure/HttpOnly/SameSite=Lax (SPEC 3 / 9.3).
@@ -88,6 +89,7 @@ export async function encerrarSessao() {
   c.delete(COOKIE_ACESSO);
   c.delete(COOKIE_REFRESH);
   c.delete(COOKIE_ORGAO);
+  c.delete({ name: "lg_plat", path: "/plataforma" }); // reautenticação do painel /plataforma (lib/plataforma/operador.ts)
 }
 
 // ───────────── Órgão (município) ativo ─────────────
@@ -111,7 +113,7 @@ const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * Para o que o usuário pode escolher, filtre com orgaosPermitidos(usuario, …) (ver /trocar-orgao).
  */
 export async function listarOrgaos(): Promise<OrgaoResumo[]> {
-  return prisma.municipio.findMany({ where: { ativo: true }, select: SELECT_ORGAO, orderBy: { nome: "asc" } });
+  return prisma.municipio.findMany({ where: { ativo: true, organizacao: { status: "ATIVO", modulos: { has: "LICENCIAMENTO" } } }, select: SELECT_ORGAO, orderBy: { nome: "asc" } });
 }
 
 /** Resolve um órgão ativo pela sigla (ex.: "LOR") ou pelo id do município. */
@@ -119,7 +121,7 @@ export async function resolverOrgao(valor: string | null | undefined): Promise<O
   const v = (valor ?? "").trim();
   if (!v) return null;
   const where = RE_UUID.test(v) ? { id: v } : { sigla: v.toUpperCase() };
-  return prisma.municipio.findFirst({ where: { ...where, ativo: true }, select: SELECT_ORGAO });
+  return prisma.municipio.findFirst({ where: { ...where, ativo: true, organizacao: { status: "ATIVO", modulos: { has: "LICENCIAMENTO" } } }, select: SELECT_ORGAO });
 }
 
 /** Sigla lembrada do último login (pré-seleção do /login). */
@@ -136,7 +138,7 @@ export const getOrgaoAtivo = cache(async (): Promise<OrgaoResumo | null> => {
   if (!id || !RE_UUID.test(id)) return null;
   const u = await getUsuario();
   if (!u || !podeAcessarOrgao(u, id)) return null;
-  return prisma.municipio.findFirst({ where: { id, ativo: true }, select: SELECT_ORGAO });
+  return prisma.municipio.findFirst({ where: { id, ativo: true, organizacao: { status: "ATIVO", modulos: { has: "LICENCIAMENTO" } } }, select: SELECT_ORGAO });
 });
 
 export async function contextoRequisicao() {
@@ -198,7 +200,15 @@ export async function autenticar(email: string, senha: string, orgao?: OrgaoResu
     return falha(falhas >= MAX_FALHAS ? "senha_incorreta_bloqueado" : "senha_incorreta", u.id);
   }
   const usuario = await carregarUsuario(u.id);
-  if (!usuario) return { ok: false, erro: "Usuário inválido." };
+  if (!usuario) {
+    // Cliente suspenso (painel /plataforma): só depois da senha correta, para não revelar a situação a quem não tem a conta.
+    const suspensa = u.organizacao_id ? await prisma.organizacao.findFirst({ where: { id: u.organizacao_id, status: "SUSPENSO" }, select: { id: true } }) : null;
+    if (suspensa) {
+      await registrarAuditoria({ usuario_id: u.id, acao: "LOGIN_FALHA", entidade: "usuario", entidade_id: u.id, organizacao_id: u.organizacao_id, depois: { email, motivo: "cliente_suspenso" }, ...ctx });
+      return { ok: false, erro: MENSAGEM_CLIENTE_SUSPENSO };
+    }
+    return { ok: false, erro: "Usuário inválido." };
+  }
   if (orgao && !podeAcessarOrgao(usuario, orgao.id)) {
     await registrarAuditoria({ usuario_id: u.id, acao: "LOGIN_FALHA", entidade: "usuario", entidade_id: u.id, depois: { email, motivo: "orgao_sem_acesso", orgao: orgao.sigla }, ...ctx });
     return { ok: false, erro: ERRO_ORGAO_SEM_ACESSO, motivo: "orgao_sem_acesso" };

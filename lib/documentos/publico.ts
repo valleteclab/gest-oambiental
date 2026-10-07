@@ -73,7 +73,8 @@ export async function documentoPorCodigo(codigoBruto: string): Promise<Documento
   const codigo = normalizarCodigo(codigoBruto);
   if (!codigo) return null;
   const d = await prisma.documentoOficial.findUnique({
-    where: { codigo_verificador: codigo },
+    // cliente suspenso / sem o módulo (painel /plataforma): o portal público responde como "não encontrado"
+    where: { codigo_verificador: codigo, municipio: { organizacao: { status: "ATIVO", modulos: { has: "LICENCIAMENTO" } } } },
     include: { municipio: true, processo: { select: { numero: true, empreendimento: { select: { nome: true } } } }, fiscalizacao: { select: { empreendimento: { select: { nome: true } } } } },
   });
   if (!d) return null;
@@ -179,7 +180,7 @@ export async function consultarProcessoPublico(numeroBruto: string, docBruto?: s
   const numero = normalizarNumeroProcesso(numeroBruto);
   if (!/^[A-Z]{2,5}-\d{4}-\d{1,8}$/.test(numero)) return null;
   const p = await prisma.processo.findUnique({
-    where: { numero },
+    where: { numero, municipio: { organizacao: { status: "ATIVO", modulos: { has: "LICENCIAMENTO" } } } },
     include: {
       municipio: { select: { nome: true, orgao_ambiental_nome: true } },
       tipo_ato: { select: { nome: true, sigla: true } },
@@ -242,7 +243,7 @@ export async function listarLicencasPublicas(f: FiltroLicencas) {
   const ate = dataValida(f.ate, true);
   const where: Prisma.DocumentoOficialWhereInput = {
     tipo: { in: tipos },
-    ...(f.municipio ? { municipio: { sigla: f.municipio.toUpperCase() } } : {}),
+    municipio: { organizacao: { status: "ATIVO", modulos: { has: "LICENCIAMENTO" } }, ...(f.municipio ? { sigla: f.municipio.toUpperCase() } : {}) },
     ...(f.sigla ? { sigla_ato: f.sigla.toUpperCase() } : {}),
     ...(de || ate ? { emitido_em: { ...(de ? { gte: de } : {}), ...(ate ? { lte: ate } : {}) } } : {}),
   };
@@ -287,7 +288,7 @@ export async function listarLicencasPublicas(f: FiltroLicencas) {
 
 export async function opcoesFiltroPublico() {
   const [municipios, siglas] = await Promise.all([
-    prisma.municipio.findMany({ where: { ativo: true }, orderBy: { nome: "asc" }, select: { sigla: true, nome: true } }),
+    prisma.municipio.findMany({ where: { ativo: true, organizacao: { status: "ATIVO", modulos: { has: "LICENCIAMENTO" } } }, orderBy: { nome: "asc" }, select: { sigla: true, nome: true } }),
     prisma.tipoAto.findMany({ where: { ativo: true, categoria: { in: ["LICENCA", "AUTORIZACAO", "CERTIDAO"] } }, orderBy: { sigla: "asc" }, distinct: ["sigla"], select: { sigla: true, nome: true } }),
   ]);
   // Portal público lista órgãos de todas as organizações; siglas repetidas entre clientes aparecem uma vez só.

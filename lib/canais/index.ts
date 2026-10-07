@@ -96,7 +96,10 @@ export const novoSegredoWebhook = () => cifrar(gerarSegredo());
 
 export async function carregarCanal(id: string): Promise<CanalRuntime | null> {
   const c = await prisma.canalAtendimento.findUnique({ where: { id } });
-  return c ? montarRuntime(c) : null;
+  if (!c) return null;
+  // Cliente suspenso (painel /plataforma): o canal não recebe nem envia mensagens.
+  if (c.organizacao_id && (await prisma.organizacao.count({ where: { id: c.organizacao_id, status: "SUSPENSO" } }))) return null;
+  return montarRuntime(c);
 }
 
 export function urlBase(): string {

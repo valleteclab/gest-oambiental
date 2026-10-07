@@ -75,7 +75,12 @@ export async function processarEvento(id: string): Promise<void> {
     await prisma.eventoWebhook.update({ where: { id }, data: { status: "IGNORADO", processado_em: new Date(), erro: "Canal inativo." } });
     return;
   }
-  const canal = (await carregarCanal(c.id))!;
+  const canal = await carregarCanal(c.id);
+  if (!canal) {
+    // carregarCanal devolve null quando o cliente está suspenso (painel /plataforma)
+    await prisma.eventoWebhook.update({ where: { id }, data: { status: "IGNORADO", processado_em: new Date(), erro: "Cliente suspenso." } });
+    return;
+  }
   const prov = provedor(canal.tipo);
   try {
     const conexao = prov.parseStatusConexao?.(ev.corpo) ?? null;

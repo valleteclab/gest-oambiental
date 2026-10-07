@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { exigirUsuario, getOrgaoAtivo } from "@/lib/auth";
 import { isInterno } from "@/lib/rbac";
+import { usuarioEhOperador } from "@/lib/plataforma/operador";
 import { SinoAlertas } from "@/components/sino-alertas";
 import { FaixaDemo, OrgaoAtivo } from "@/components/orgao";
 
@@ -11,6 +12,8 @@ export default async function LayoutRequerente({ children }: { children: React.R
   // Usuário só do módulo GED (sem papel de licenciamento e sem cadastro de requerente) não pertence a este portal.
   if (!isInterno(usuario) && !usuario.pessoa_id && (await prisma.gedMembro.count({ where: { usuario_id: usuario.id, ativo: true, organizacao: { modulos: { has: "GED" } } } })) > 0) redirect("/ged");
   const orgao = await getOrgaoAtivo();
+  // Link discreto só para o operador da plataforma (a segurança de /plataforma não depende dele).
+  const operador = !isInterno(usuario) && (await usuarioEhOperador(usuario.id));
   return (
     <div className="min-h-screen">
       <FaixaDemo />
@@ -22,6 +25,7 @@ export default async function LayoutRequerente({ children }: { children: React.R
             <Link href="/meus-processos" className="hover:underline">Meus processos</Link>
             <Link href="/novo-requerimento" className="hover:underline">Novo requerimento</Link>
             {isInterno(usuario) && <Link href="/dashboard" className="hover:underline">Painel interno</Link>}
+            {operador && <Link href="/plataforma" prefetch={false} className="text-xs text-slate-500 hover:underline">Plataforma</Link>}
           </nav>
           <div className="ml-auto flex items-center gap-2">
             <SinoAlertas usuarioId={usuario.id} />
