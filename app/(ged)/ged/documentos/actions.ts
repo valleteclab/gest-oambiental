@@ -6,6 +6,7 @@ import { invalido } from "@/lib/http";
 import { comoEstadoForm, type EstadoFormGed } from "@/lib/ged/acoes";
 import { ctxGedApi } from "@/lib/ged/escopo";
 import { arquivarDocumento, atualizarMetadadosDocumento, criarDocumentoUpload, definirDadosPessoais, enviarNovaVersao, reprocessarTextoDocumento, restaurarDocumento } from "@/lib/ged/documentos/servico";
+import { reprocessarOcrDocumento } from "@/lib/ged/ocr/reprocessar";
 import { definirMarcadoresDocumento } from "@/lib/ged/marcadores";
 
 const txt = (f: FormData, k: string) => String(f.get(k) ?? "");
@@ -98,5 +99,15 @@ export async function reprocessarTextoAction(_: EstadoFormGed, f: FormData): Pro
     await reprocessarTextoDocumento(ctx, id);
     doc(id);
     return "A indexação do texto foi reiniciada.";
+  });
+}
+
+export async function reprocessarOcrAction(_: EstadoFormGed, f: FormData): Promise<EstadoFormGed> {
+  return comoEstadoForm(async () => {
+    const ctx = await ctxGedApi();
+    const id = txt(f, "id");
+    await reprocessarOcrDocumento(ctx, id);
+    doc(id);
+    return "O OCR foi recolocado na fila.";
   });
 }

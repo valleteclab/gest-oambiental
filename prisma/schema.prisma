@@ -297,6 +297,8 @@ model Organizacao {
   ged_comentarios          GedComentario[]
   ged_acessos              GedAcessoLog[]
   ged_comunicacoes         GedComunicacao[]
+  ged_importacoes          GedImportacao[]
+  ged_importacao_itens     GedImportacaoItem[]
   ged_preferencias         GedPreferenciaNotificacao[]
   ged_sequencias           GedSequencia[]
 
@@ -1470,6 +1472,16 @@ enum GedStatusTexto {
   ERRO
 }
 
+// OCR no servidor (docs/ged-design.md §6, fase 2). Estado do OCR da versão-base (scan); null = OCR não se aplica.
+enum GedStatusOcr {
+  PENDENTE
+  PROCESSANDO
+  CONCLUIDO
+  OCR_INDISPONIVEL
+  COTA_EXCEDIDA
+  ERRO
+}
+
 enum GedAcao {
   VER
   EDITAR
@@ -1543,6 +1555,7 @@ model GedConfig {
   assinatura_prazo_dias    Int         @default(15)
   lembrete_dias            Int[]       @default([3, 1, 0])
   retencao_acesso_log_dias Int         @default(730)
+  ocr_cota_paginas_mes     Int?        @default(5000) // páginas de OCR por mês (null = sem limite; 0 = OCR desligado)
   organizacao              Organizacao @relation(fields: [organizacao_id], references: [id])
 
   @@unique([organizacao_id])
@@ -1705,6 +1718,8 @@ model GedVersaoDocumento {
   paginas        Int?
   conteudo_html  String? // só origem EDITOR (sanitizado)
   texto_status   GedStatusTexto  @default(PENDENTE)
+  ocr_status     GedStatusOcr? // OCR da versão-base (scan); o resultado é uma nova versão origem=OCR (derivada_de_id)
+  ocr_mensagem   String? // motivo de ERRO/COTA_EXCEDIDA/OCR_INDISPONIVEL (texto curto, sem dados do documento)
   selada         Boolean         @default(false) // trigger: imutável quando true; DELETE bloqueado
   criado_por_id  String          @db.Uuid
 
@@ -1716,6 +1731,7 @@ model GedVersaoDocumento {
 
   @@unique([documento_id, n])
   @@index([organizacao_id, documento_id])
+  @@index([organizacao_id, sha256]) // deduplicação da importação em lote
   @@map("ged_versao_documento")
 }
 
@@ -1983,4 +1999,77 @@ model GedSequencia {
 
   @@unique([organizacao_id, tipo, ano])
   @@map("ged_sequencia")
+}
+
+// ───────── GED: importação em lote de ZIP (fase 2 – docs/ged.md "Importação em lote") ─────────
+
+enum GedStatusImportacao {
+  PENDENTE
+  PROCESSANDO
+  CONCLUIDA
+  CONCLUIDA_COM_ERROS
+  FALHOU
+}
+
+enum GedStatusItemImportacao {
+  IMPORTADO
+  DUPLICADO
+  IGNORADO
+  ERRO
+}
+
+/// Lote de importação: o ZIP fica em ged/{org}/importacao/{id}.zip só até o fim do processamento.
+model GedImportacao {
+  id               String              @id @default(uuid()) @db.Uuid
+  organizacao_id   String              @db.Uuid
+  created_at       DateTime            @default(now())
+  updated_at       DateTime            @updatedAt
+  criado_por_id    String              @db.Uuid
+  nome_arquivo     String
+  tamanho_zip      Int
+  sha256_zip       String
+  storage_key      String? // null depois que o ZIP é removido
+  pasta_destino_id String?             @db.Uuid // null = raiz
+  tipo_id          String?             @db.Uuid
+  sensibilidade    GedSensibilidade
+  status           GedStatusImportacao @default(PENDENTE)
+  iniciado_em      DateTime?
+  concluido_em     DateTime?
+  erro             String? // falha do lote inteiro (ZIP inválido, limite excedido…)
+  total_arquivos   Int                 @default(0)
+  importados       Int                 @default(0)
+  duplicados       Int                 @default(0)
+  ignorados        Int                 @default(0)
+  com_erro         Int                 @default(0)
+  ocultos          Int                 @default(0) // lixo do sistema (__MACOSX, Thumbs.db, ocultos) – não viram item
+  pastas_criadas   Int                 @default(0)
+
+  itens       GedImportacaoItem[]
+  organizacao Organizacao         @relation(fields: [organizacao_id], references: [id])
+
+  @@index([organizacao_id, created_at])
+  @@index([organizacao_id, status])
+  @@map("ged_importacao")
+}
+
+model GedImportacaoItem {
+  id             String                  @id @default(uuid()) @db.Uuid
+  organizacao_id String                  @db.Uuid
+  created_at     DateTime                @default(now())
+  importacao_id  String                  @db.Uuid
+  ordem          Int
+  caminho        String // caminho original dentro do ZIP (normalizado)
+  status         GedStatusItemImportacao
+  motivo         String?
+  documento_id   String?                 @db.Uuid
+  pasta_id       String?                 @db.Uuid
+  sha256         String?
+  tamanho        Int?
+
+  importacao  GedImportacao @relation(fields: [importacao_id], references: [id])
+  organizacao Organizacao   @relation(fields: [organizacao_id], references: [id])
+
+  @@unique([importacao_id, ordem])
+  @@index([organizacao_id, importacao_id, status])
+  @@map("ged_importacao_item")
 }

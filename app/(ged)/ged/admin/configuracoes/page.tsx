@@ -3,6 +3,7 @@ import { forbidden } from "next/navigation";
 import { CabecalhoPagina, Card } from "@/components/ui";
 import { FormGed } from "@/components/ged/form-ged";
 import { lerConfiguracoes } from "@/lib/ged/admin/configuracoes";
+import { cotaOcrDoMes } from "@/lib/ged/ocr/servico";
 import { exigirGed } from "@/lib/ged/escopo";
 import { podeAdministrarGed } from "@/lib/ged/papeis";
 import { salvarConfiguracoesAction } from "./actions";
@@ -14,6 +15,7 @@ export default async function PaginaConfiguracoes() {
   const ctx = await exigirGed();
   if (!podeAdministrarGed(ctx)) forbidden();
   const c = await lerConfiguracoes(ctx);
+  const ocr = await cotaOcrDoMes(ctx.db);
 
   return (
     <>
@@ -39,6 +41,14 @@ export default async function PaginaConfiguracoes() {
             <label className="label" htmlFor="cfg-cota">Cota de armazenamento informativa (GB)</label>
             <input id="cfg-cota" name="cota_gb" inputMode="decimal" className="input" defaultValue={c.cota_gb ?? ""} placeholder="Sem cota definida" />
             <span className="mt-1 block text-xs text-slate-500">Apenas informativa nesta fase: não bloqueia envios.</span>
+          </div>
+          <div>
+            <label className="label" htmlFor="cfg-ocr">Cota mensal de OCR (páginas)</label>
+            <input id="cfg-ocr" name="ocr_cota_paginas_mes" inputMode="numeric" className="input" defaultValue={c.ocr_cota_paginas_mes ?? ""} placeholder="Sem limite" />
+            <span className="mt-1 block text-xs text-slate-500" data-testid="ocr-uso">
+              Páginas de documentos digitalizados que o servidor reconhece por mês (OCR, para a busca achar o texto). Vazio = sem limite; 0 = OCR desligado.
+              Uso neste mês: {ocr.usadas}{ocr.cota !== null ? ` de ${ocr.cota}` : ""} página(s). Ao atingir a cota, os novos digitalizados ficam como &ldquo;OCR: cota excedida&rdquo; até o mês seguinte ou até a cota ser aumentada e o OCR reprocessado.
+            </span>
           </div>
         </FormGed>
       </Card>

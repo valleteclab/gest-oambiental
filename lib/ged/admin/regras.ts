@@ -69,6 +69,8 @@ export const zConfiguracoes = z.object({
   retencao_acesso_log_dias: z.coerce.number().int("Use um número inteiro.").min(90, "Mínimo de 90 dias.").max(3650, "Máximo de 3650 dias (10 anos)."),
   /** Cota informativa em GB; vazio = sem cota. */
   cota_gb: z.preprocess((v) => (v === "" || v === null || v === undefined ? null : v), z.coerce.number().min(0.1, "Mínimo de 0,1 GB.").max(100000).nullable()),
+  /** Páginas de OCR por mês: vazio = sem limite; 0 = OCR desligado; ausente = não altera. */
+  ocr_cota_paginas_mes: z.preprocess((v) => (v === "" || v === null ? null : v), z.coerce.number().int("Use um número inteiro.").min(0, "Mínimo de 0.").max(10_000_000, "Valor alto demais.").nullable().optional()),
 });
 export type EntradaConfiguracoes = z.infer<typeof zConfiguracoes>;
 

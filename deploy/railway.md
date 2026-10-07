@@ -75,6 +75,12 @@ Manual: `railway run --service worker npm run onboard -- <cliente> [--demo] [--a
 
 **Isolamento por cliente:** cada organização (tenant) só enxerga os próprios municípios, usuários, configurações, relatórios e exportações; o consórcio de demonstração e Riachão das Neves ficam isolados mesmo no mesmo banco. Os limites municipais são obtidos do IBGE pelo `codigo_ibge` (nada a configurar).
 
+### OCR do GED (worker dedicado)
+O OCR de documentos digitalizados do GED (`docs/ged.md` §13) usa `ocrmypdf` + Tesseract (português), instalados no **estágio `worker`** de `Dockerfile`/`Dockerfile.worker`: a imagem do worker fica **~400–600 MB maior** (a do `app` não muda). Como o OCR consome muita CPU/memória, a recomendação é um **segundo serviço worker** (mesmo repo e `Dockerfile.worker`) só para essa fila:
+- serviço `worker` (geral): `GED_OCR_DESATIVADO=true` (não disputa CPU com exportações, alertas e extração de texto);
+- serviço `worker-ocr`: `JOBS_FILAS=ged-ocr` (sem *Pre-deploy command*; as migrações ficam no `worker` geral), mesmas variáveis de banco/storage (`DATABASE_URL`, `DATA_KEY`, `STORAGE_*`/`S3_*`, `CLAMAV_*` se houver) e memória de ≥ 1 GB; ajuste `GED_OCR_JOBS` (padrão 2) ao nº de vCPUs.
+Com um único worker, deixe tudo como está: ele também processa a fila `ged-ocr`. Sem nenhum worker com `ocrmypdf` os digitalizados ficam "OCR pendente"/"indisponível" (nada quebra). Cota mensal por cliente: `/ged/admin/configuracoes` (padrão 5000 páginas).
+
 ## 4. Homolog × produção
 Crie dois *Environments* no projeto (`homolog`, `production`) – cada um tem seu próprio Postgres, bucket e domínio. Região: o Railway não tem região no Brasil; se a exigência de hospedagem no Brasil (SPEC §3) for contratual, use AWS sa-east-1 (`deploy/README.md`).
 

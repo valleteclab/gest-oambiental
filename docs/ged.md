@@ -23,18 +23,18 @@ Módulo de gestão eletrônica de documentos da plataforma LicenciaGov, habilita
 | Auditoria | Toda escrita chama `auditarGed()` (→ `auditar()` com `organizacao_id`) na mesma transação. |
 | Assinatura | Assinatura eletrônica **avançada** por signatário (evidências no banco) + **selo PAdES A1 do órgão** no PDF final (`lib/ged/assinaturas`); verificação pública em `/verificar/[codigo]`. Sem carimbo de tempo/LTV na fase 1. |
 | Notificações | Outbox `GedComunicacao` + job `ged-notificar` (e-mail e WhatsApp, com modo simulado). |
-| Busca | `pdftotext` (poppler-utils) → `GedConteudoTexto.tsv` (português, sem acento) – job `ged-extrair-texto`. PDF só de imagem → `SEM_TEXTO` (OCR é fase 2). |
+| Busca | `pdftotext` (poppler-utils) → `GedConteudoTexto.tsv` (português, sem acento) – job `ged-extrair-texto`. PDF só de imagem → `SEM_TEXTO` e, na fase 2, OCR no servidor (fila `ged-ocr`, §13) gera uma nova versão pesquisável. |
 
 ## 2. Tabelas
 
 Todas com `organizacao_id`, `created_at`, `updated_at` e `@@map("ged_…")`:
-`ged_config`, `ged_membro`, `ged_setor`, `ged_setor_membro`, `ged_tipo_documento`, `ged_pasta`, `ged_documento`, `ged_versao_documento`, `ged_conteudo_texto`, `ged_deteccao_dado_pessoal`, `ged_marcador`, `ged_documento_marcador`, `ged_acl`, `ged_tramite`, `ged_solicitacao_assinatura`, `ged_assinante`, `ged_comentario`, `ged_acesso_log`, `ged_comunicacao`, `ged_preferencia_notificacao`, `ged_sequencia`. Definição: `prisma/schema.prisma` e §2 do desenho.
+`ged_config`, `ged_membro`, `ged_setor`, `ged_setor_membro`, `ged_tipo_documento`, `ged_pasta`, `ged_documento`, `ged_versao_documento`, `ged_conteudo_texto`, `ged_deteccao_dado_pessoal`, `ged_marcador`, `ged_documento_marcador`, `ged_acl`, `ged_tramite`, `ged_solicitacao_assinatura`, `ged_assinante`, `ged_comentario`, `ged_acesso_log`, `ged_comunicacao`, `ged_preferencia_notificacao`, `ged_sequencia`, `ged_importacao`, `ged_importacao_item`. Definição: `prisma/schema.prisma` e §2 do desenho.
 
 ## 3. Rotas
 
-Páginas (`app/(ged)/ged/…`, todas `force-dynamic`; **conforme entregue** por cada frente): `/ged` (início), `/ged/documentos`, `/ged/documentos/novo`, `/ged/documentos/[id]`, `/ged/editor/novo`, `/ged/editor/[id]`, `/ged/pastas`, `/ged/assinaturas`, `/ged/assinaturas/[id]`, `/ged/tramite`, `/ged/logs`, `/ged/minha-conta`, `/ged/minha-conta/notificacoes`, `/ged/admin` (+ `setores`, `marcadores`, `tipos`; membros/canal/certificado/exportação conforme entregue). Pública: `/verificar` e `/verificar/[codigo]`.
+Páginas (`app/(ged)/ged/…`, todas `force-dynamic`; **conforme entregue** por cada frente): `/ged` (início), `/ged/documentos`, `/ged/documentos/novo`, `/ged/documentos/[id]`, `/ged/editor/novo`, `/ged/editor/[id]`, `/ged/pastas`, `/ged/importar` (+ `[id]`), `/ged/assinaturas`, `/ged/assinaturas/[id]`, `/ged/tramite`, `/ged/logs`, `/ged/minha-conta`, `/ged/minha-conta/notificacoes`, `/ged/admin` (+ `setores`, `marcadores`, `tipos`; membros/canal/certificado/exportação conforme entregue). Pública: `/verificar` e `/verificar/[codigo]`.
 
-API `/api/v1/ged/*` (sempre `rota()` + `ctxGedApi()`): `documentos` (+ `/[id]`, `/[id]/arquivo`, `arquivar`, `restaurar`, `marcadores`, `dados-pessoais`), `busca`, `pastas`, `marcadores`, `tipos`, `setores`, `acl`, `comentarios`, `tramite` (+ `caixa`, `/[id]`), `editor` (+ `/[id]/rascunho|finalizar|reabrir`), e (conforme entregue) `assinaturas`, `logs`, `notificacoes`.
+API `/api/v1/ged/*` (sempre `rota()` + `ctxGedApi()`): `documentos` (+ `/[id]`, `/[id]/arquivo`, `arquivar`, `restaurar`, `marcadores`, `dados-pessoais`), `busca`, `pastas`, `importacoes` (+ `/[id]`), `marcadores`, `tipos`, `setores`, `acl`, `comentarios`, `tramite` (+ `caixa`, `/[id]`), `editor` (+ `/[id]/rascunho|finalizar|reabrir`), e (conforme entregue) `assinaturas`, `logs`, `notificacoes`.
 
 Login: usuário só-GED entra sem escolher órgão e cai em `/ged`; usuário só-GED em `/dashboard` ou `/processos` é redirecionado para `/ged`.
 
@@ -45,6 +45,8 @@ Login: usuário só-GED entra sem escolher órgão e cai em `/ged`; usuário só
 | Fila | Arquivo | Quando | O que faz |
 |---|---|---|---|
 | `ged-extrair-texto` | `jobs/ged-texto.ts` | varredura a cada `JOBS_GED_TEXTO_MS` (15 s) | extrai texto dos PDFs pendentes de todos os clientes (job com o escopo da organização) |
+| `ged-ocr` | `jobs/ged-ocr.ts` | varredura a cada `JOBS_GED_OCR_MS` (20 s) | OCR (`ocrmypdf`) das versões digitalizadas pendentes de todos os clientes, 1 por vez (§13); worker dedicado com `JOBS_FILAS=ged-ocr` |
+| `ged-importar` | `jobs/ged-importar.ts` | varredura a cada `JOBS_GED_IMPORTAR_MS` (10 s) | processa os lotes de importação de ZIP pendentes (ou parados há > 10 min) de todos os clientes (§12) |
 | `ged-assinaturas` | `jobs/ged-assinaturas.ts` | `JOBS_CRON_GED_ASSINATURAS` (padrão `7 * * * *`) | lembretes e expiração de solicitações |
 | `ged-notificar`, `ged-retencao-logs` | `jobs/ged-notificar.ts` | sob demanda / `JOBS_CRON_GED_RETENCAO` (padrão `40 3 * * *`) | envia a outbox (e-mail/WhatsApp); retenção de logs de acesso |
 | `storage-replicar` | `jobs/ged-backup.ts` | `JOBS_CRON_REPLICACAO` (padrão `0 3 * * *`) | copia arquivos novos para o destino de backup (ver §6) |
@@ -60,6 +62,8 @@ Login: usuário só-GED entra sem escolher órgão e cai em `/ged`; usuário só
 | `SMTP_URL`, `APP_URL` | e-mail e links das notificações |
 | `EVOLUTION_API_KEY` (e canal em `GedConfig.canal_whatsapp_id`) | WhatsApp (envio; sem pareamento use o modo simulado do canal) |
 | `GED_TEXTO_INLINE=true` | extrai texto no próprio request (sem worker) – desenvolvimento |
+| `GED_OCR_BIN`, `GED_OCR_IDIOMA`, `GED_OCR_JOBS`, `GED_OCR_TIMEOUT_MS`, `GED_OCR_MAX_PAGINAS`, `GED_OCR_MAX_MB` | OCR (§13): binário (padrão `ocrmypdf`), idioma (`por`), `--jobs` (2), tempo máximo por arquivo (15 min), limites de páginas (300) e tamanho (25 MB) |
+| `GED_OCR_INLINE=true`, `GED_OCR_DESATIVADO=true`, `JOBS_FILAS=ged-ocr`, `JOBS_GED_OCR_MS` | OCR no próprio web mesmo havendo worker (dev) · desliga o OCR neste processo · worker dedicado só de OCR · intervalo da varredura |
 | `GED_NOTIFICAR_LOTE`, `GED_NOTIFICAR_VARREDURA_MS`, `GED_NOTIFICAR_VARREDURA_LIMITE` | vazão do envio de notificações |
 | `JOBS_CRON_REPLICACAO`, `JOBS_CRON_RECONCILIACAO` | agendas da replicação de arquivos |
 | `BACKUP_S3_*`, `BACKUP_ARQUIVOS_DIR`, `BACKUP_ARQUIVOS_PREFIX`, `REPLICACAO_LOTE`, `REPLICACAO_TEMPO_MAX_MIN` | destino e dimensionamento da replicação (docs/backup.md §4) |
@@ -132,11 +136,12 @@ npx playwright test tests/e2e/t1[6-9]* tests/e2e/t20* --project=desktop-chromium
 | `t17-ged-documentos` | upload, filtros (título, remetente, data, marcador, pasta), busca por conteúdo com trecho, marcadores (CRUD + aplicar), pastas (criar/subpasta/mover), ACL Ver/Editar/Assinar por usuário, sigiloso × administrador, "dados pessoais" rebaixa a sensibilidade | desktop; dados com sufixo único (re-executável) |
 | `t18-ged-editor-tramite` | editor (autosave → PDF), trâmite completo, linha do tempo imutável, comentários; triggers do banco recusam `UPDATE` | `t18c` usa `DATABASE_URL` (via `tests/e2e/t20-banco.ts`) |
 | `t19-ged-assinaturas` | solicitação sequencial com 2 signatários, ordem, comentário, senha errada, assinar, selo com código, recusa com justificativa, painel por status, PDF selado (PAdES, imagem do QR em cada página, folha de assinaturas), `/verificar/{codigo}` sem login, WebCrypto (íntegro / 1 byte alterado) e código inexistente | a parte "selado" usa o documento do seed |
+| `t22-ged-ocr` | PDF "escaneado" (só imagem, gerado no teste) → OCR real: nova versão `origem=OCR` pesquisável, scan original com o mesmo sha256, assinatura aberta **não** cancelada, busca (API e UI), outro cliente sem acesso; cota mensal de OCR em `/ged/admin/configuracoes` | desktop; precisa de `ocrmypdf`+`tesseract-ocr-por` no servidor (senão `test.skip` com o motivo); sem worker o web roda o OCR em segundo plano |
 | `t20-ged-notificacoes-logs` | e-mail do trâmite (assunto, link, "Enviado em dd/mm/aaaa às HH:mm (horário de Brasília)", sem anexo), WhatsApp simulado com opt-in por código, `/ged/logs` (3 abas, filtros, CSV, 403 para Leitor/Usuário) | no E2E não há worker: `tests/e2e/t20-banco.ts` executa a mesma `processarComunicacao()` direto no banco (precisa de `DATABASE_URL` e `DATA_KEY` iguais aos do servidor; sem elas os testes de envio se pulam) |
 
 Dicas de robustez (helpers em `tests/e2e/ged-helpers.ts`): sem `networkidle`; `aguardarHidratacao()` espera o React hidratar (os `FormGed` só funcionam depois); `submeter()` repete o clique uma vez; formulários que **somem** depois de salvar (ciência, devolução, arquivamento, enviar para assinatura) são conferidos pelo resultado (linha do tempo, painel), não pela mensagem; `window.confirm` é aceito por `aceitarDialogos()`.
 
-**CI** (`.github/workflows/ci.yml`, job E2E): instala o Chromium do Playwright e define `CHROMIUM_PATH` **antes** dos seeds; instala `poppler-utils` (pdftotext, busca por conteúdo de upload); roda `seed:demo`, o onboarding/seed de Riachão e `E2E_GED_IDS=1 npm run seed:ged-demo`; só então faz o build e sobe o servidor. Sem `.ged-ids.json` os specs t16–t20 se pulam com a instrução no motivo. O seed do GED não altera os dados do licenciamento (organizações VAC/AAC são só-GED, sem municípios, e os usuários `@gestaodocumentos.demo` não têm papel de licenciamento).
+**CI** (`.github/workflows/ci.yml`, job E2E): instala o Chromium do Playwright e define `CHROMIUM_PATH` **antes** dos seeds; instala `poppler-utils` (pdftotext, busca por conteúdo de upload) e `ocrmypdf tesseract-ocr tesseract-ocr-por` (t22: OCR real; sem eles o spec se pula); roda `seed:demo`, o onboarding/seed de Riachão e `E2E_GED_IDS=1 npm run seed:ged-demo`; só então faz o build e sobe o servidor. Sem `.ged-ids.json` os specs t16–t20 se pulam com a instrução no motivo. O seed do GED não altera os dados do licenciamento (organizações VAC/AAC são só-GED, sem municípios, e os usuários `@gestaodocumentos.demo` não têm papel de licenciamento).
 
 Banco isolado para trabalho paralelo: `CREATE DATABASE licenciagov_ged_x` + `DATABASE_URL=… npx prisma migrate deploy` (linhas imutáveis não podem ser apagadas).
 
@@ -151,7 +156,7 @@ Banco isolado para trabalho paralelo: `CREATE DATABASE licenciagov_ged_x` + `DAT
 ## 10. Limites conhecidos (fase 1)
 
 - Upload somente **PDF**, até **25 MB**; cota por cliente em `GedConfig.cota_bytes` (aplicação conforme entregue).
-- PDF só de imagem não é pesquisável por conteúdo (`SEM_TEXTO`) até a fase 2 (OCR).
+- PDF só de imagem só fica pesquisável depois do OCR (§13), que exige worker com `ocrmypdf`; sem ele o estado é "OCR indisponível".
 - Assinatura por signatário é eletrônica avançada; o selo PAdES é do **órgão** (e-CNPJ A1). Sem certificado cadastrado, o PDF recebe aviso de "assinatura eletrônica avançada". Sem carimbo de tempo RFC 3161 nem LTV. Certificado da PoC é de teste, sem valor legal.
 - Validade jurídica do digitalizado (Decreto 10.278/2020) a confirmar com a assessoria jurídica do cliente.
 - Replicação de arquivos cobre `Anexo`, `DocumentoOficial` e `GedVersaoDocumento`. **Não** cobre `ReuniaoConselho.ata_pdf_key`, `MensagemConversa.midia_key`, `Cobranca.comprovante_key` nem os ZIPs de `Exportacao` (transitórios).
@@ -161,4 +166,56 @@ Banco isolado para trabalho paralelo: `CREATE DATABASE licenciagov_ged_x` + `DAT
 
 ## 11. Roadmap
 
-OCR (fase 2: fila `ged-ocr` em worker separado, `ocrmypdf`, nova versão `origem=OCR`) · importação de pasta/ZIP · portal do cliente (exposição pública só de derivados anonimizados, `whereExposicaoPublica()`) · fechamento mensal da digitalização · motor de anonimização (detecção de CPF/CNPJ/e-mail/telefone e IA opcional; o modelo já existe) · **hardening com RLS** (role `NOSUPERUSER NOBYPASSRLS`, role separado para migração, `set_config('app.org', …, true)` por transação) · assinatura ICP-Brasil por signatário (PAdES incremental) · carimbo de tempo/LTV · lixeira e retenção de documentos · replicação com versionamento/Object Lock no bucket de backup.
+~~OCR (fila `ged-ocr`, `ocrmypdf`, nova versão `origem=OCR`)~~ (entregue, §13) · ~~importação de pasta/ZIP~~ (entregue, §12) · portal do cliente (exposição pública só de derivados anonimizados, `whereExposicaoPublica()`) · fechamento mensal da digitalização · motor de anonimização (detecção de CPF/CNPJ/e-mail/telefone e IA opcional; o modelo já existe) · **hardening com RLS** (role `NOSUPERUSER NOBYPASSRLS`, role separado para migração, `set_config('app.org', …, true)` por transação) · assinatura ICP-Brasil por signatário (PAdES incremental) · carimbo de tempo/LTV · lixeira e retenção de documentos · replicação com versionamento/Object Lock no bucket de backup.
+
+## 12. Importação em lote de ZIP (fase 2)
+
+Para quem digitaliza no Windows, organiza em pastas por cliente (licitação, pagamentos, controle interno…) e envia cópias periódicas: o **ZIP inteiro** é enviado de uma vez e a **estrutura de pastas do ZIP vira a árvore de pastas do GED**. Quem pode: **GED_ADMIN e GED_GESTOR** (`podeImportarGed`, capacidade `importar` em `lib/ged/papeis.ts`).
+
+**Como usar (tela `/ged/importar`, menu "Importar ZIP")**: escolha o `.zip` (até 300 MB), a pasta de destino (padrão: raiz), o tipo de documento e a sensibilidade (valem para todos os documentos do lote; a sensibilidade sugerida vem da pasta). Ao enviar, a tela do lote (`/ged/importar/[id]`) se atualiza sozinha e mostra contadores e o **relatório por arquivo** (importado, duplicado, ignorado, erro + motivo), filtrável e com **CSV** (`?formato=csv`). O Admin vê todos os lotes do cliente; o Gestor só os que enviou.
+
+**Regras de importação** (`lib/ged/importacao/*`):
+
+| Tema | Regra |
+|---|---|
+| Pastas | cada pasta do ZIP é criada se faltar (via `criarPasta()`: exige EDITAR na pasta-pai) ou reaproveitada se já existir com o mesmo nome (sem diferenciar maiúsculas) no mesmo pai; pasta existente **arquivada** gera erro nos itens dela. Pastas novas herdam a ACL do pai (padrão) e recebem a sensibilidade escolhida como padrão. |
+| Documentos | um por PDF, via `criarDocumentoUpload()` (origem `UPLOAD`: antivírus, número `…-DOC-…`, versão 1, ACL do criador, texto indexável/OCR, auditoria `GED_DOCUMENTO_CRIADO`). Título = nome do arquivo sem `.pdf` (`_` vira espaço). Exige EDITAR na pasta de destino. |
+| Extensões | só **PDF** (mesma regra de `validarUploadGed`, fase 1); `.xlsx`, `.docx`, imagens etc. aparecem como "Ignorado". Conteúdo que não é PDF (sem `%PDF-`) vira "Erro". Máx. 25 MB por arquivo. |
+| Duplicados | mesmo **sha256** já existente na **organização** (documento não excluído) → pulado e relatado (também dentro do próprio ZIP e em reenvios da cópia mensal). O número/link do original só é mostrado se o usuário puder ver o documento. Nunca compara com outro cliente. |
+| Lixo | `__MACOSX`, `.DS_Store`, `Thumbs.db`, `desktop.ini`, `~$*` e qualquer item oculto (`.nome`) são ignorados sem aparecer no relatório (só um contador). |
+| Nomes | UTF-8 (flag 11), Info-ZIP `0x7075`, UTF-8 sem flag ou CP850 (Windows pt-BR antigo); normalizados em NFC; `\` vira `/`; segmentos até 120 caracteres. |
+| zip-slip | caminho absoluto, unidade (`C:`), `..` e caracteres de controle → o **item** vira "Erro" (nada é gravado fora da árvore; os arquivos nunca são gravados em disco com o nome do ZIP: só viram registros do banco e chaves `ged/{org}/{ano}/{doc}/v{n}-{sha8}.pdf`). Links simbólicos são ignorados. |
+| zip-bomb | limites em `lib/ged/importacao/limites.ts`: ZIP 300 MB; 10 000 entradas; 3 000 arquivos; 1 000 pastas; 10 níveis; 2 GB descompactados (soma **declarada**); 25 MB por arquivo; razão de compressão ≤ 250 (acima de 1 MiB). Violação global → recusa o ZIP (422 na hora). A inflação é cortada no tamanho declarado (`maxOutputLength`), conferindo CRC e tamanho (declaração mentirosa → erro do item). ZIP64 e arquivos com senha não são suportados (mensagem clara). |
+| Isolamento | tudo via `gedDb(organizacao_id)`; ZIP em `ged/{org}/importacao/{id}.zip` (só o job lê, nunca por URL); `ged_importacao`/`ged_importacao_item` com `organizacao_id` NOT NULL, trigger `ged_mesmo_tenant` (usuário, pasta, tipo, documento), regra em `filtroTabela()`/`DESCRICAO_TABELA`. Lote de outro cliente → 404. Pasta/tipo de destino de outro cliente → recusado. |
+
+**Execução**: `POST /api/v1/ged/importacoes` (multipart: `arquivo`, `pasta_id?`, `tipo_id?`, `sensibilidade?`) valida o ZIP (diretório central e limites; 422 se inválido/sem PDF/limite), grava o ZIP e registra o lote `PENDENTE` (no máximo 3 lotes ativos por cliente; 429 acima). O job `ged-importar` (`jobs/ged-importar.ts`) processa em segundo plano: **sem worker no ar**, a própria API processa em segundo plano no processo web (mesmo critério do OCR/texto; `GED_IMPORTACAO_INLINE=true` força). Cada arquivo é independente (falha vira item "Erro" e o lote continua); o processamento é **retomável** (itens já gravados são pulados por `ordem`; um lote `PROCESSANDO` sem sinal de vida por 10 min é retomado). Ao fim o ZIP é **removido** (também em `FALHOU`), o status vira `CONCLUIDA`, `CONCLUIDA_COM_ERROS` ou `FALHOU` e a auditoria registra `GED_IMPORTACAO_CRIADA` / `GED_IMPORTACAO_CONCLUIDA` / `GED_IMPORTACAO_FALHOU`. `GET /api/v1/ged/importacoes` lista os lotes; `GET /api/v1/ged/importacoes/{id}?status=&page=&size=` traz o lote e os itens.
+
+**Testes**: `tests/unit/ged-importacao-zip.test.ts` (parser, nomes/encoding, zip-slip, lixo, zip-bomb, limites, permissão) e `tests/e2e/t21-ged-importacao.spec.ts` (ZIP gerado em memória contra VAC e AAC: pastas, duplicados, lixo, zip-slip, reenvio só duplica, isolamento e papéis). Limites desta fase: só PDF (outros formatos aguardam a ampliação de `validarUploadGed`), ZIP ≤ 300 MB lido em memória, sem ZIP64.
+
+## 13. OCR no servidor (fase 2)
+
+PDFs digitalizados (só imagem) ficavam em `SEM_TEXTO` e a busca não os achava. Agora o servidor reconhece o texto com **`ocrmypdf`** (Tesseract, português) e o documento passa a ser pesquisável. Código em `lib/ged/ocr/*` (`decisao.ts` regras puras · `executar.ts` processo externo · `servico.ts` fila/cota/execução · `reprocessar.ts` ação do usuário) e fila `ged-ocr` (`jobs/ged-ocr.ts`).
+
+**Fluxo**
+1. Upload (ou importação de ZIP) → `ged-extrair-texto` roda `pdftotext`. Se o texto é escasso (< ~25 caracteres/página no total, **ou** metade ou mais das páginas sem texto – PDF misto) a versão recebe `ocr_status=PENDENTE`. Imagens PNG/JPG/TIFF sempre precisam de OCR (o upload do GED ainda só aceita PDF; a regra já cobre imagens).
+2. O worker (varredura de 20 s, `singletonKey` = versão, fila com `policy: short`) reivindica a versão (`PENDENTE → PROCESSANDO`, atômico), confere limites e **cota**, e executa `ocrmypdf -l por --skip-text --jobs 2 --output-type pdf` (timeout 15 min; `--skip-text` preserva as páginas que já têm texto). `PROCESSANDO` há mais de 30 min (worker caiu) volta a `PENDENTE`.
+3. Sucesso → **nova versão** `origem=OCR` (`derivada_de_id` = scan; torna-se a versão atual), com o texto em `GedConteudoTexto` (`metodo=OCR`, alimenta o `tsvector` existente) e `texto_status=EXTRAIDO`. A versão original **permanece** (mesmo sha256, baixável); a base fica `ocr_status=CONCLUIDO`. Auditoria `GED_OCR_CONCLUIDO` (com os hashes das duas versões).
+4. Sem texto reconhecido, limites estourados ou falha do processo → `ERRO` (com motivo curto); binário ausente → `OCR_INDISPONIVEL`; cota estourada → `COTA_EXCEDIDA`. O upload nunca falha por causa do OCR.
+
+**Regras de segurança do documento**
+- A versão OCR **não cancela** solicitação de assinatura aberta (`OCR` não está em `ORIGENS_QUE_CANCELAM_ASSINATURA`: só acrescenta camada de texto; a solicitação continua apontando para a versão que foi enviada à assinatura).
+- OCR **nunca** roda em versão selada, em documento `ASSINADO`/`ARQUIVADO`, nem sobre versões `OCR/SELO/EDITOR/ANONIMIZACAO` (sem laços). Se o documento recebeu outra versão ou foi assinado enquanto o OCR rodava, o resultado é descartado.
+- Autor da versão OCR: o autor da versão-base (ou um `GED_ADMIN` ativo); a auditoria marca `automatico: true`.
+- Tudo via `gedDb(organizacao_id)`; sem SQL cru; colunas novas em tabelas já cobertas pela exportação (`GedVersaoDocumento`, `GedConfig`).
+
+**Cota** – `GedConfig.ocr_cota_paginas_mes` (padrão **5000** páginas/mês por cliente; vazio = sem limite; 0 = OCR desligado), editável por GED_ADMIN em `/ged/admin/configuracoes`, que também mostra o uso do mês. O consumo é a soma de `paginas` das versões `OCR` criadas no mês (fuso de Brasília); tentativas que falham não consomem. Ao estourar: `COTA_EXCEDIDA`, aviso na ficha do documento e auditoria `GED_OCR_COTA_EXCEDIDA`.
+
+**Interface** – na tabela de versões da ficha do documento: **OCR pendente / processando / concluído / indisponível / cota excedida / falhou** (`data-testid="ocr-status"`). **Reprocessar OCR** (GED_ADMIN e GED_GESTOR com EDITAR) aparece quando a versão atual está em `ERRO`, `OCR_INDISPONIVEL`, `COTA_EXCEDIDA` ou é um scan antigo (`SEM_TEXTO` sem tentativa de OCR); auditoria `GED_OCR_REPROCESSADO`. A API de documento (`GET /api/v1/ged/documentos/:id`) devolve `ocr_status` por versão.
+
+**Operação**
+- O OCR é pesado (CPU/memória): rode-o em **worker dedicado** (`JOBS_FILAS=ged-ocr npm run jobs` – só essa fila, `application_name` diferente, sem os agendamentos gerais) e, no worker geral, `GED_OCR_DESATIVADO=true` se ele não deve concorrer. Importações grandes enfileiram muitos scans: um worker processa um por vez.
+- Imagem: `ocrmypdf ghostscript tesseract-ocr tesseract-ocr-por qpdf unpaper` instalados no estágio `worker` de `Dockerfile`/`Dockerfile.worker` (**+400–600 MB**; o estágio `app` não os carrega). Veja `deploy/railway.md`.
+- Sem worker e **com** o binário no próprio web (dev/CI), o OCR roda em segundo plano no processo web; sem o binário a versão fica `PENDENTE` até um worker pegá-la. `GED_OCR_BIN` aponta outro executável (ex.: wrapper).
+- Limites: 300 páginas e 25 MB por arquivo (`GED_OCR_MAX_PAGINAS`, `GED_OCR_MAX_MB`). Não otimiza nem converte para PDF/A (`--output-type pdf`).
+
+**Testes**: `tests/unit/ged-ocr.test.ts` (decisão, elegibilidade, cota, status, chamada do binário com `spawn` mockado, timeout) e `tests/e2e/t22-ged-ocr.spec.ts` (OCR real).

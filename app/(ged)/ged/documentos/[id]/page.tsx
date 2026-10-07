@@ -18,10 +18,11 @@ import { exigirGed } from "@/lib/ged/escopo";
 import { listarMarcadores, marcadoresDoDocumento } from "@/lib/ged/marcadores";
 import { podeVerLogs } from "@/lib/ged/papeis";
 import { exigirDocumento } from "@/lib/ged/permissoes";
+import { apresentacaoOcr, ocrReprocessavel, podeReprocessarOcrPapel } from "@/lib/ged/ocr/decisao";
 import { pastasParaSeletor } from "@/lib/ged/pastas";
 import { listarTiposDocumento } from "@/lib/ged/tipos-documento";
 import { ROTULO_SENSIBILIDADE_GED, SENSIBILIDADES_GED } from "@/lib/ged/tipos";
-import { arquivarDocumentoAction, atualizarMetadadosAction, definirDadosPessoaisAction, definirMarcadoresAction, novaVersaoAction, reprocessarTextoAction } from "../actions";
+import { arquivarDocumentoAction, atualizarMetadadosAction, definirDadosPessoaisAction, definirMarcadoresAction, novaVersaoAction, reprocessarOcrAction, reprocessarTextoAction } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +65,7 @@ export default async function PaginaDocumento({ params, searchParams }: { params
 
   const [criador, versoes, marcadores] = await Promise.all([
     ctx.db.usuario.findFirst({ where: { id: d.criado_por_id, organizacao_id: ctx.organizacao_id }, select: { nome: true } }),
-    ctx.db.gedVersaoDocumento.findMany({ where: { documento_id: id }, orderBy: { n: "desc" }, select: { id: true, n: true, origem: true, nome_arquivo: true, tamanho: true, sha256: true, paginas: true, texto_status: true, selada: true, created_at: true } }),
+    ctx.db.gedVersaoDocumento.findMany({ where: { documento_id: id }, orderBy: { n: "desc" }, select: { id: true, n: true, origem: true, nome_arquivo: true, tamanho: true, sha256: true, paginas: true, texto_status: true, ocr_status: true, ocr_mensagem: true, selada: true, created_at: true } }),
     marcadoresDoDocumento(ctx, id),
   ]);
   const atual = versoes.find((v) => v.id === d.versao_atual_id) ?? versoes[0] ?? null;
@@ -99,11 +100,20 @@ export default async function PaginaDocumento({ params, searchParams }: { params
               </section>
               <Card titulo="Versões">
                 <ListaVersoes documentoId={id} versoes={versoes} atualId={d.versao_atual_id} />
+                {atual?.ocr_status === "COTA_EXCEDIDA" && <div className="mt-3"><Aviso tipo="alerta">{atual.ocr_mensagem ?? "A cota mensal de OCR foi atingida."} O documento não será pesquisável pelo conteúdo até o OCR ser reprocessado.</Aviso></div>}
                 {atual && (atual.texto_status === "ERRO" || atual.texto_status === "SEM_TEXTO") && pode("EDITAR") && (
                   <div className="mt-3">
                     <FormGed action={reprocessarTextoAction} botao="Reprocessar texto" classeBotao="btn-secundario" inline rotuloAcessivel="Reprocessar texto da versão atual">
                       <input type="hidden" name="id" value={id} />
                       <p className="basis-full text-sm text-slate-600">{atual.texto_status === "SEM_TEXTO" ? "Este PDF não tem texto selecionável (provavelmente digitalizado); a busca no conteúdo não o encontra." : "A leitura do texto falhou."}</p>
+                    </FormGed>
+                  </div>
+                )}
+                {atual && pode("EDITAR") && podeReprocessarOcrPapel(ctx.membro.papel) && ocrReprocessavel({ ...atual }, d.status) && (
+                  <div className="mt-3">
+                    <FormGed action={reprocessarOcrAction} botao="Reprocessar OCR" classeBotao="btn-secundario" inline rotuloAcessivel="Reprocessar OCR da versão atual">
+                      <input type="hidden" name="id" value={id} />
+                      <p className="basis-full text-sm text-slate-600">{atual.ocr_status ? `${apresentacaoOcr(atual.ocr_status).descricao} ` : "Este arquivo digitalizado ainda não passou por OCR. "}O reconhecimento cria uma nova versão pesquisável e preserva o arquivo original.</p>
                     </FormGed>
                   </div>
                 )}

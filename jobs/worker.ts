@@ -42,9 +42,28 @@ async function main() {
   if (!url) throw new Error("DATABASE_URL não definida");
   const tz = process.env.JOBS_TZ ?? "America/Bahia";
 
-  const boss = new PgBoss({ connectionString: url, schema: "pgboss", application_name: NOME_APLICACAO_WORKER });
+  // Worker dedicado (JOBS_FILAS=ged-ocr): só as filas listadas, sem os agendamentos gerais. O application_name é outro de propósito:
+  // o web usa "licenciagov-worker" para saber se há worker geral (exportação, extração de texto) – o de OCR não conta.
+  const filasDedicadas = (process.env.JOBS_FILAS ?? "").split(",").map((f) => f.trim()).filter(Boolean);
+  const boss = new PgBoss({ connectionString: url, schema: "pgboss", application_name: filasDedicadas.length ? `${NOME_APLICACAO_WORKER}-${filasDedicadas.join("+")}` : NOME_APLICACAO_WORKER });
   boss.on("error", (e) => console.error("[pg-boss]", e));
   await boss.start();
+
+  if (filasDedicadas.length) {
+    const desconhecidas = filasDedicadas.filter((f) => f !== "ged-ocr");
+    if (desconhecidas.length) throw new Error(`JOBS_FILAS: fila(s) sem suporte a worker dedicado: ${desconhecidas.join(", ")} (suportado: ged-ocr)`);
+    await (await import("./ged-ocr")).registrar(boss, { tz, log });
+    log(`worker dedicado no ar. Filas: ${filasDedicadas.join(", ")}.`);
+    const pararDedicado = async () => {
+      log("encerrando…");
+      await boss.stop({ graceful: true, timeout: 30000 }).catch(() => {});
+      await prisma.$disconnect();
+      process.exit(0);
+    };
+    process.on("SIGINT", pararDedicado);
+    process.on("SIGTERM", pararDedicado);
+    return;
+  }
 
   for (const q of ["alertas", "backup-check", "exportacao"]) await boss.createQueue(q).catch(() => {});
 

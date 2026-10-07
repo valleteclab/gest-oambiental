@@ -12,6 +12,7 @@ export async function salvarConfiguracoesAction(_: EstadoFormGed, f: FormData) {
       lembrete_dias: String(f.get("lembrete_dias") ?? ""),
       retencao_acesso_log_dias: String(f.get("retencao_acesso_log_dias") ?? ""),
       cota_gb: String(f.get("cota_gb") ?? "").replace(",", "."),
+      ocr_cota_paginas_mes: String(f.get("ocr_cota_paginas_mes") ?? "").trim(),
     });
     revalidatePath("/ged/admin/configuracoes");
     return "Configurações salvas.";

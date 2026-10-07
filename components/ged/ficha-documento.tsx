@@ -1,10 +1,12 @@
 // Ficha (painel de metadados) e lista de versões do documento. Server Components.
 import Link from "next/link";
 import type { GedAnonimizacao } from "@prisma/client";
+import type { GedStatusOcr } from "@prisma/client";
 import { Badge } from "@/components/ui";
 import { BadgeLgpd, IndicadorTexto } from "@/components/ged/lista-documentos";
 import { ChipMarcador, type MarcadorChip } from "@/components/ged/seletor-marcadores";
 import { COR_STATUS_DOCUMENTO_GED, ROTULO_ORIGEM_VERSAO_GED, ROTULO_SENSIBILIDADE_GED, ROTULO_STATUS_DOCUMENTO_GED, type GedOrigemVersao, type GedSensibilidade, type GedStatusDocumento } from "@/lib/ged/tipos";
+import { apresentacaoOcr } from "@/lib/ged/ocr/decisao";
 import { fmtDataCivil, fmtDataHora } from "@/lib/format";
 
 export type FichaDados = {
@@ -36,9 +38,23 @@ export type VersaoView = {
   sha256: string;
   paginas: number | null;
   texto_status: "PENDENTE" | "EXTRAIDO" | "SEM_TEXTO" | "OCR_PENDENTE" | "ERRO";
+  ocr_status?: GedStatusOcr | null;
+  ocr_mensagem?: string | null;
   selada: boolean;
   created_at: Date;
 };
+
+/** Estado do OCR da versão (Pendente / Processando / Concluído / Indisponível / Cota excedida / Falhou). */
+export function IndicadorOcr({ status, mensagem }: { status: GedStatusOcr | null | undefined; mensagem?: string | null }) {
+  if (!status) return null;
+  const a = apresentacaoOcr(status);
+  return (
+    <span data-testid="ocr-status" data-status={status} title={mensagem ?? a.descricao} className="inline-flex flex-col gap-0.5">
+      <Badge cor={a.cor}>{a.rotulo}</Badge>
+      {mensagem && status !== "CONCLUIDO" && <span className="text-xs text-slate-600">{mensagem}</span>}
+    </span>
+  );
+}
 
 const COR_SENS = { PUBLICO: "verde", RESTRITO: "amarelo", SIGILOSO: "vermelho" } as const;
 const tamanho = (b: number) => (b >= 1048576 ? `${(b / 1048576).toFixed(1).replace(".", ",")} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
@@ -93,7 +109,7 @@ export function ListaVersoes({ documentoId, versoes, atualId }: { documentoId: s
           {versoes.map((v) => (
             <tr key={v.id}>
               <td className="whitespace-nowrap font-medium">v{v.n}{v.id === atualId && <> <Badge cor="azul">Atual</Badge></>}{v.selada && <> <Badge cor="verde">Selada</Badge></>}</td>
-              <td>{ROTULO_ORIGEM_VERSAO_GED[v.origem]}<div className="mt-1"><IndicadorTexto status={v.texto_status} /></div></td>
+              <td>{ROTULO_ORIGEM_VERSAO_GED[v.origem]}<div className="mt-1"><IndicadorTexto status={v.texto_status} /></div><div className="mt-1"><IndicadorOcr status={v.ocr_status} mensagem={v.ocr_mensagem} /></div></td>
               <td className="break-words">{v.nome_arquivo}<div className="text-xs text-slate-500">{tamanho(v.tamanho)}{v.paginas ? ` · ${v.paginas} pág.` : ""}</div></td>
               <td><code className="break-all text-xs" title={v.sha256}>{v.sha256.slice(0, 16)}…</code><details className="text-xs"><summary className="cursor-pointer text-primaria-700">completo</summary><code className="break-all">{v.sha256}</code></details></td>
               <td className="whitespace-nowrap text-xs">{fmtDataHora(v.created_at)}</td>

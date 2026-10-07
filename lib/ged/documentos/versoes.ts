@@ -17,8 +17,8 @@ import { chaveGed, salvarArquivoGed } from "../storage";
 import { contarPaginasPdf, htmlParaTexto } from "./pdf-info";
 import { cancelarSolicitacoesAbertas } from "../assinaturas/cancelamento";
 
-/** Origens de versão que mudam o conteúdo do documento (e portanto invalidam uma solicitação de assinatura aberta). */
-const ORIGENS_QUE_CANCELAM_ASSINATURA: readonly GedOrigemVersao[] = ["UPLOAD", "EDITOR", "SCAN"];
+/** Origens de versão que mudam o conteúdo do documento (e portanto invalidam uma solicitação de assinatura aberta). OCR NÃO está aqui de propósito: só acrescenta camada de texto. */
+export const ORIGENS_QUE_CANCELAM_ASSINATURA: readonly GedOrigemVersao[] = ["UPLOAD", "EDITOR", "SCAN"];
 
 /** Origens que representam arquivo enviado por pessoa (passam pelo antivírus). */
 export const ORIGENS_COM_UPLOAD: readonly GedOrigemVersao[] = ["UPLOAD", "SCAN"];

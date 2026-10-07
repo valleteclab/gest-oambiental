@@ -57,6 +57,12 @@ RUN npx prisma generate && npm run build
 # ───────────── worker: jobs pg-boss + migrate/seed (tsx) ─────────────
 FROM base AS worker
 ENV NODE_ENV=production
+# OCR do GED (fila ged-ocr, docs/ged.md §13): só no worker – o app não carrega estes pacotes (+400–600 MB).
+# Sem eles o OCR fica "indisponível" (o upload e a busca por texto digital seguem funcionando).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ocrmypdf tesseract-ocr tesseract-ocr-por ghostscript qpdf unpaper \
+ && rm -rf /var/lib/apt/lists/* \
+ && ocrmypdf --version
 COPY --from=deps --chown=node:node /app/node_modules ./node_modules
 # Fontes completas (jobs/, lib/, prisma/ + seeds/clientes, scripts/ (predeploy.sh), templates/, public/, tests/fixtures…)
 # – filtradas pelo .dockerignore. Pré-deploy no Railway: `sh scripts/predeploy.sh` (ver deploy/railway.md).

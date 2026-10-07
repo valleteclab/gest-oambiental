@@ -18,7 +18,7 @@ export const GET = rota(async (_req: Request, { params }: Ctx) => {
       where: { id: doc.id },
       select: { id: true, numero: true, titulo: true, status: true, sensibilidade: true, remetente: true, data_documento: true, pasta_id: true, tipo_id: true, versao_atual_id: true, contem_dados_pessoais: true, anonimizacao_status: true, created_at: true, updated_at: true },
     }),
-    ctx.db.gedVersaoDocumento.findMany({ where: { documento_id: doc.id }, orderBy: { n: "desc" }, select: { id: true, n: true, origem: true, nome_arquivo: true, mime: true, tamanho: true, sha256: true, paginas: true, texto_status: true, selada: true, created_at: true } }),
+    ctx.db.gedVersaoDocumento.findMany({ where: { documento_id: doc.id }, orderBy: { n: "desc" }, select: { id: true, n: true, origem: true, nome_arquivo: true, mime: true, tamanho: true, sha256: true, paginas: true, texto_status: true, ocr_status: true, selada: true, created_at: true } }),
     marcadoresDoDocumento(ctx, doc.id),
   ]);
   return NextResponse.json({ ...d, versoes, marcadores, acoes });

@@ -1,0 +1,31 @@
+import { NextResponse } from "next/server";
+import { rota } from "@/lib/http";
+import { ctxGedApi } from "@/lib/ged/escopo";
+import { montarCsv } from "@/lib/ged/logs/csv";
+import { listarItensImportacao, obterImportacao } from "@/lib/ged/importacao/servico";
+
+export const dynamic = "force-dynamic";
+
+// GET /api/v1/ged/importacoes/{id}?status=ERRO&page=&size=  → lote + itens do relatório (outro cliente → 404)
+// GET /api/v1/ged/importacoes/{id}?formato=csv           → relatório completo em CSV
+export const GET = rota(async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
+  const ctx = await ctxGedApi();
+  const { id } = await params;
+  const url = new URL(req.url);
+  const lote = await obterImportacao(ctx, id);
+  if (url.searchParams.get("formato") === "csv") {
+    const linhas: unknown[][] = [];
+    for (let page = 1; ; page++) {
+      const r = await listarItensImportacao(ctx, id, { page, size: 500 });
+      linhas.push(...r.itens.map((i) => [i.ordem + 1, i.caminho, i.status, i.motivo ?? ""]));
+      if (page * 500 >= r.total) break;
+    }
+    return new Response(montarCsv(["#", "Caminho no ZIP", "Situação", "Motivo"], linhas), {
+      headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="importacao-${id.slice(0, 8)}.csv"` },
+    });
+  }
+  const page = Math.max(1, Number(url.searchParams.get("page") ?? 1));
+  const size = Math.min(500, Math.max(1, Number(url.searchParams.get("size") ?? 50)));
+  const r = await listarItensImportacao(ctx, id, { status: url.searchParams.get("status"), page, size });
+  return NextResponse.json({ ...lote, itens: r.itens, itens_total: r.total, page: r.page, size: r.size });
+});

@@ -42,7 +42,8 @@ export type CapacidadeGed =
   | "marcadores" // criar/editar marcadores
   | "tipos" // criar/editar tipos de documento
   | "criar_documento" // criar/enviar documentos
-  | "solicitar_assinatura"; // abrir solicitação de assinatura (além de EDITAR no documento)
+  | "solicitar_assinatura" // abrir solicitação de assinatura (além de EDITAR no documento)
+  | "importar"; // importação em lote de ZIP (cria pastas e documentos em massa)
 
 export const CAPACIDADES_POR_PAPEL: Record<CapacidadeGed, readonly GedPapel[]> = {
   membros: ["GED_ADMIN"],
@@ -55,6 +56,7 @@ export const CAPACIDADES_POR_PAPEL: Record<CapacidadeGed, readonly GedPapel[]> =
   logs: ["GED_ADMIN", "GED_AUDITOR"],
   criar_documento: ["GED_ADMIN", "GED_GESTOR", "GED_USUARIO"],
   solicitar_assinatura: ["GED_ADMIN", "GED_GESTOR", "GED_USUARIO"],
+  importar: ["GED_ADMIN", "GED_GESTOR"],
 };
 
 type ComPapel = { membro: Pick<CtxGed["membro"], "papel"> };
@@ -71,6 +73,8 @@ export const podeGerirEstruturaGed = (ctx: ComPapel) => ctx.membro.papel === "GE
 /** Pode consultar os logs do módulo (Admin e Auditor). */
 export const podeVerLogs = (ctx: ComPapel) => podeGed(ctx, "logs");
 export const podeCriarDocumento = (ctx: ComPapel) => podeGed(ctx, "criar_documento");
+/** Importação em lote de ZIP (Admin e Gestor). */
+export const podeImportarGed = (ctx: ComPapel) => podeGed(ctx, "importar");
 export const podeSolicitarAssinatura = (ctx: ComPapel) => podeGed(ctx, "solicitar_assinatura");
 /** Somente leitura de fato (Leitor/Auditor): esconda botões de escrita. */
 export const isSomenteLeituraGed = (ctx: ComPapel) => ctx.membro.papel === "GED_LEITOR" || ctx.membro.papel === "GED_AUDITOR";

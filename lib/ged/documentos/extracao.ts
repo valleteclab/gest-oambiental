@@ -6,6 +6,7 @@
 // consulta cada uma com gedDb(organizacao_id) – nenhum SQL cru fora de lib/ged/busca.ts/db.ts.
 import type { Prisma } from "@prisma/client";
 import { gedDb } from "../db";
+import { agendarOcrSeNecessario } from "../ocr/servico";
 import { lerArquivoGed } from "../storage";
 import { contarPaginasPdf, limparTexto, textoDoPdf, textoEscasso } from "./pdf-info";
 
@@ -26,6 +27,7 @@ export async function extrairTextoAgora(organizacaoId: string, versaoId: string,
   if (!opc.forcar && v.texto_status !== "PENDENTE") return "IGNORADO";
   if (!/pdf/i.test(v.mime)) {
     await db.gedVersaoDocumento.update({ where: { id: v.id }, data: { texto_status: "SEM_TEXTO" } });
+    await agendarOcrSeNecessario(organizacaoId, v, null); // imagem: OCR gera o PDF pesquisável
     return "SEM_TEXTO";
   }
   let ultimoErro: unknown;
@@ -36,6 +38,7 @@ export async function extrairTextoAgora(organizacaoId: string, versaoId: string,
       const paginas = v.paginas ?? (await contarPaginasPdf(arquivo));
       if (textoEscasso(texto, paginas)) {
         await db.gedVersaoDocumento.update({ where: { id: v.id }, data: { texto_status: "SEM_TEXTO", ...(v.paginas == null && paginas ? { paginas } : {}) } });
+        await agendarOcrSeNecessario(organizacaoId, { id: v.id, mime: v.mime, paginas }, texto); // fase 2: OCR no servidor (fila ged-ocr)
         return "SEM_TEXTO";
       }
       await db.$transaction(async (tx) => {
@@ -46,6 +49,7 @@ export async function extrairTextoAgora(organizacaoId: string, versaoId: string,
         });
         await tx.gedVersaoDocumento.update({ where: { id: v.id }, data: { texto_status: "EXTRAIDO", ...(v.paginas == null && paginas ? { paginas } : {}) } });
       });
+      await agendarOcrSeNecessario(organizacaoId, { id: v.id, mime: v.mime, paginas }, texto); // PDF misto (páginas só de imagem)
       return "EXTRAIDO";
     } catch (e) {
       ultimoErro = e;
