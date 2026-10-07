@@ -82,3 +82,28 @@ shred -u licenciagov.dump
 Depois: apontar `DATABASE_URL` do app e do worker para o banco restaurado (e `S3_*` para o bucket de arquivos replicado,
 se o primário estiver indisponível), subir os serviços, verificar `/api/health`, comunicar os municípios e registrar o
 incidente com RPO/RTO efetivos. Se a camada 1 (backup nativo do Railway/PITR) estiver disponível e for mais recente, prefira-a.
+
+## D. Restaurar os arquivos (anexos, documentos oficiais e arquivos do GED)
+
+O dump do banco **não** contém os arquivos enviados. A **ordem da recuperação é: 1) banco (seção C) e só depois 2) arquivos** – o banco restaurado
+diz quais chaves de storage existem e o `sha256` de cada uma (`anexo.sha256`, `documento_oficial.sha256_pdf`, `ged_versao_documento.sha256`).
+
+```bash
+# Origem = o mesmo destino da replicação (BACKUP_S3_* ou BACKUP_ARQUIVOS_DIR); destino = storage da aplicação nova (STORAGE_DRIVER/S3_*)
+export BACKUP_S3_BUCKET=licenciagov-dr BACKUP_S3_ENDPOINT=https://<conta>.r2.cloudflarestorage.com BACKUP_S3_REGION=auto
+export BACKUP_S3_ACCESS_KEY_ID=… BACKUP_S3_SECRET_ACCESS_KEY=…
+export STORAGE_DRIVER=s3 S3_BUCKET=<bucket novo> S3_ENDPOINT=… S3_REGION=…
+
+# 0) Ensaio: o que seria restaurado (nada é gravado)
+npm run backup:restore-arquivos -- --simular
+# 1) Um cliente (tenant) apenas – o prefixo é ged/<organizacao_id>/ (id em organizacao.id do banco já restaurado)
+npm run backup:restore-arquivos -- --prefixo ged/<organizacao_id>/
+# 2) Tudo (licenciamento + GED)
+npm run backup:restore-arquivos
+```
+
+- Confere o **sha256** de cada arquivo contra o sidecar/metadata gravado na replicação; arquivo corrompido no backup **não** é gravado (vai para a lista de erros; o comando sai com código 1).
+- **Não sobrescreve** arquivos que já existem no destino (use `--sobrescrever` só se tiver certeza). Pode ser repetido com segurança.
+- Origem em diretório (NAS/disco montado): `--origem-dir /mnt/backup-arquivos` (ou `BACKUP_ARQUIVOS_DIR`).
+- Depois: abrir uma amostra de documentos de cada cliente (`/ged/documentos/<id>` → visualizar) e conferir `sha256` com `ged_versao_documento.sha256`; rodar a reconciliação (`storage-reconciliar`) no ambiente novo se o replicador for religado.
+- Teste periódico: ao registrar o teste mensal de restauração (seção B), restaure **um cliente** com `--prefixo` num storage descartável e anexe o resultado.

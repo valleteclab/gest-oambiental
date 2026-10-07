@@ -1,0 +1,172 @@
+{
+  "$comentario": "Cliente FICTÍCIO de demonstração do módulo GED (tenant A). Nenhum dado real. Executar: npm run onboard -- ged-demo-a --demo  (ou npm run seed:ged-demo, que também cria documentos). E-mails @gestaodocumentos.demo; senha de demonstração Demo@2026licencia (--demo).",
+  "modulos": [
+    "GED"
+  ],
+  "organizacao": {
+    "nome": "Câmara Municipal de Vale das Acácias (DEMO)",
+    "sigla": "VAC",
+    "cnpj": null,
+    "logo_url": null
+  },
+  "ged": {
+    "config": {
+      "assinatura_prazo_dias": 15,
+      "lembrete_dias": [
+        3,
+        1,
+        0
+      ],
+      "retencao_acesso_log_dias": 730
+    },
+    "setores": [
+      {
+        "nome": "Protocolo",
+        "sigla": "PROT"
+      },
+      {
+        "nome": "Licitações",
+        "sigla": "LIC"
+      },
+      {
+        "nome": "Controle Interno",
+        "sigla": "CI"
+      },
+      {
+        "nome": "Financeiro",
+        "sigla": "FIN"
+      }
+    ],
+    "tipos_documento": [
+      "Ofício",
+      "Contrato",
+      "Ata",
+      "Empenho",
+      "Nota fiscal",
+      "Parecer"
+    ],
+    "marcadores": [
+      {
+        "nome": "Urgente",
+        "cor": "#dc2626"
+      },
+      {
+        "nome": "Licitação",
+        "cor": "#2563eb"
+      },
+      {
+        "nome": "Pagamento",
+        "cor": "#16a34a"
+      },
+      {
+        "nome": "Controle interno",
+        "cor": "#9333ea"
+      },
+      {
+        "nome": "Digitalizado",
+        "cor": "#64748b"
+      }
+    ],
+    "pastas": [
+      {
+        "caminho": "Documentação da licitação",
+        "sensibilidade_padrao": "RESTRITO"
+      },
+      {
+        "caminho": "Documentação da licitação/Editais",
+        "sensibilidade_padrao": "PUBLICO"
+      },
+      {
+        "caminho": "Documentação da licitação/Propostas"
+      },
+      {
+        "caminho": "Documentação da licitação/Atas",
+        "sensibilidade_padrao": "PUBLICO"
+      },
+      {
+        "caminho": "Processos de pagamento/2026/Empenhos"
+      },
+      {
+        "caminho": "Processos de pagamento/2026/Notas fiscais"
+      },
+      {
+        "caminho": "Processos de pagamento/2026/Ordens de pagamento"
+      },
+      {
+        "caminho": "Controle interno/Relatórios"
+      },
+      {
+        "caminho": "Controle interno/Auditorias"
+      },
+      {
+        "caminho": "Pessoal",
+        "herda_acl": false,
+        "sensibilidade_padrao": "SIGILOSO"
+      },
+      {
+        "caminho": "Digitalização/Lote mensal"
+      }
+    ],
+    "usuarios": [
+      {
+        "email": "admin.vac@gestaodocumentos.demo",
+        "nome": "Marta Albuquerque Lins",
+        "cargo": "Administradora do sistema",
+        "papel_ged": "GED_ADMIN",
+        "setores": [
+          "PROT"
+        ]
+      },
+      {
+        "email": "gestor.vac@gestaodocumentos.demo",
+        "nome": "Roberto Cavalcante Neto",
+        "cargo": "Secretário Geral",
+        "papel_ged": "GED_GESTOR",
+        "setores": [
+          {
+            "sigla": "LIC",
+            "chefe": true
+          }
+        ]
+      },
+      {
+        "email": "servidor1.vac@gestaodocumentos.demo",
+        "nome": "Helena Prado Siqueira",
+        "cargo": "Servidora – Protocolo",
+        "papel_ged": "GED_USUARIO",
+        "setores": [
+          {
+            "sigla": "PROT",
+            "chefe": true
+          },
+          "LIC"
+        ]
+      },
+      {
+        "email": "servidor2.vac@gestaodocumentos.demo",
+        "nome": "Antônio Barros Medeiros",
+        "cargo": "Servidor – Financeiro",
+        "papel_ged": "GED_USUARIO",
+        "setores": [
+          "FIN"
+        ]
+      },
+      {
+        "email": "vereador.vac@gestaodocumentos.demo",
+        "nome": "Ver. Carlos Eduardo Tavares",
+        "cargo": "Vereador (presidente da Câmara)",
+        "papel_ged": "GED_LEITOR",
+        "setores": []
+      },
+      {
+        "email": "auditor.vac@gestaodocumentos.demo",
+        "nome": "Sílvia Montenegro Rocha",
+        "cargo": "Auditora – Controle Interno",
+        "papel_ged": "GED_AUDITOR",
+        "setores": [
+          "CI"
+        ]
+      }
+    ]
+  }
+}

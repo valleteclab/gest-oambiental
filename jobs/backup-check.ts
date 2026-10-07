@@ -3,6 +3,7 @@
 import { prisma } from "../lib/db";
 import { enviarEmail } from "../lib/email";
 import { situacaoBackup } from "../lib/backup/registrar";
+import { ultimaReplicacao } from "../lib/backup/arquivos";
 
 export async function verificarBackup(agora = new Date()) {
   const s = await situacaoBackup(agora);
@@ -10,6 +11,10 @@ export async function verificarBackup(agora = new Date()) {
   if (s.backupAtrasado) problemas.push(s.ultimoBackup ? `Último backup bem-sucedido há ${Math.floor(s.horasDesdeBackup!)} h (limite 24 h).` : "Nenhum backup registrado.");
   if (s.ultimaFalha) problemas.push(`Última execução de backup falhou: ${s.ultimaFalha.observacao ?? "sem detalhes"}.`);
   if (s.restoreAtrasado) problemas.push(s.ultimoRestore ? `Último teste de restauração há ${Math.floor(s.diasDesdeRestore!)} dias (periodicidade mensal).` : "Nenhum teste de restauração registrado.");
+  // Replicação diária dos arquivos enviados (anexos, PDFs oficiais, documentos do GED) – docs/backup.md §4
+  const rep = await ultimaReplicacao(agora);
+  if (rep.atrasada) problemas.push(rep.ultima ? `Última replicação de arquivos há ${Math.floor(rep.horas!)} h (limite 24 h).` : "Nenhuma replicação de arquivos registrada.");
+  if (rep.ultimaFalha) problemas.push(`Última replicação de arquivos falhou: ${rep.ultimaFalha.observacao ?? "sem detalhes"}.`);
   if (problemas.length === 0) return { ok: true, avisados: 0 };
 
   const admins = await prisma.usuario.findMany({ where: { ativo: true, papeis: { some: { papel: "ADMIN" } } }, select: { email: true } });

@@ -50,7 +50,7 @@ export function AclPainel({ alvo, entradas, usuarios, setores, acoesPermitidas, 
       {entradas.length === 0 ? (
         <p className="text-sm text-slate-600">Nenhuma permissão direta concedida.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className="tabela">
             <caption className="sr-only">Permissões concedidas</caption>
             <thead>

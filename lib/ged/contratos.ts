@@ -62,6 +62,7 @@ export type EventoGed =
   | "ASSINATURA_RECUSADA"
   | "ASSINATURA_LEMBRETE"
   | "ASSINATURA_EXPIRADA"
+  | "ASSINATURA_CANCELADA"
   | "DOCUMENTO_COMPARTILHADO";
 export type NotificarInput = { usuario_ids: string[]; documento_id?: string; assinante_id?: string; dados?: Record<string, string> };
 /** Grava as linhas da outbox (GedComunicacao PENDENTE) na transação do chamador; o envio é feito pelo job ged-notificar. */

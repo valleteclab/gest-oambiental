@@ -147,7 +147,7 @@ export default async function PaginaBackup() {
                   {s.historico.map((r) => (
                     <tr key={r.id}>
                       <td className="whitespace-nowrap">{fmtDataHora(r.executado_em)}</td>
-                      <td>{r.tipo === "BACKUP" ? "Backup" : "Teste de restauração"}</td>
+                      <td>{r.tipo === "BACKUP" ? "Backup" : r.tipo === "REPLICACAO_ARQUIVOS" ? "Replicação de arquivos" : "Teste de restauração"}</td>
                       <td><Badge cor={r.sucesso ? "verde" : "vermelho"}>{r.sucesso ? "OK" : "Falha"}</Badge></td>
                       <td className="whitespace-nowrap">{fmtBytes(r.tamanho)}</td>
                       <td className="hidden max-w-md break-words text-xs text-slate-600 md:table-cell">{[r.destino, r.observacao].filter(Boolean).join(" · ")}</td>

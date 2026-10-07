@@ -1,0 +1,114 @@
+{
+  "$comentario": "Cliente FICTÍCIO de demonstração do módulo GED (tenant B) – existe para provar o isolamento entre clientes (documentos de mesmo título que os do tenant A). Executar: npm run onboard -- ged-demo-b --demo",
+  "modulos": [
+    "GED"
+  ],
+  "organizacao": {
+    "nome": "Autarquia de Águas do Cerrado (DEMO)",
+    "sigla": "AAC",
+    "cnpj": null,
+    "logo_url": null
+  },
+  "ged": {
+    "config": {
+      "assinatura_prazo_dias": 10
+    },
+    "setores": [
+      {
+        "nome": "Protocolo",
+        "sigla": "PROT"
+      },
+      {
+        "nome": "Operações",
+        "sigla": "OPE"
+      },
+      {
+        "nome": "Financeiro",
+        "sigla": "FIN"
+      }
+    ],
+    "tipos_documento": [
+      "Ofício",
+      "Contrato",
+      "Ata",
+      "Empenho",
+      "Nota fiscal",
+      "Parecer"
+    ],
+    "marcadores": [
+      {
+        "nome": "Urgente",
+        "cor": "#dc2626"
+      },
+      {
+        "nome": "Licitação",
+        "cor": "#2563eb"
+      },
+      {
+        "nome": "Pagamento",
+        "cor": "#16a34a"
+      },
+      {
+        "nome": "Controle interno",
+        "cor": "#9333ea"
+      }
+    ],
+    "pastas": [
+      {
+        "caminho": "Documentação da licitação/Editais",
+        "sensibilidade_padrao": "PUBLICO"
+      },
+      {
+        "caminho": "Documentação da licitação/Atas",
+        "sensibilidade_padrao": "PUBLICO"
+      },
+      {
+        "caminho": "Processos de pagamento/2026/Empenhos"
+      },
+      {
+        "caminho": "Processos de pagamento/2026/Notas fiscais"
+      },
+      {
+        "caminho": "Controle interno/Relatórios"
+      },
+      {
+        "caminho": "Pessoal",
+        "herda_acl": false,
+        "sensibilidade_padrao": "SIGILOSO"
+      }
+    ],
+    "usuarios": [
+      {
+        "email": "admin.aac@gestaodocumentos.demo",
+        "nome": "Paulo Ricardo Nogueira",
+        "cargo": "Administrador do sistema",
+        "papel_ged": "GED_ADMIN",
+        "setores": [
+          "PROT"
+        ]
+      },
+      {
+        "email": "gestor.aac@gestaodocumentos.demo",
+        "nome": "Luciana Farias Duarte",
+        "cargo": "Diretora Administrativa",
+        "papel_ged": "GED_GESTOR",
+        "setores": [
+          {
+            "sigla": "OPE",
+            "chefe": true
+          }
+        ]
+      },
+      {
+        "email": "servidor.aac@gestaodocumentos.demo",
+        "nome": "Fernando Quintela Alves",
+        "cargo": "Servidor – Protocolo",
+        "papel_ged": "GED_USUARIO",
+        "setores": [
+          "PROT",
+          "FIN"
+        ]
+      }
+    ]
+  }
+}

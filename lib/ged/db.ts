@@ -186,3 +186,41 @@ export async function proximoValorSequencia(tx: GedTx, organizacaoId: string, ti
   if (!linhas[0]) throw new Error("GED: sequência não encontrada.");
   return linhas[0].ultimo;
 }
+
+// ───────────── Consultas entre clientes permitidas neste arquivo (frente D – assinaturas) ─────────────
+// Únicas leituras sem escopo de organização do GED. Devolvem SOMENTE ids; todo o resto passa por gedDb(organizacao_id).
+
+/**
+ * Resolve um código verificador PÚBLICO (/verificar/{codigo}) em { documento_id, organizacao_id }. Aceita apenas o formato
+ * XXXX-XXXX-XXXX (alfabeto sem 0/O/1/I); qualquer outra entrada devolve null sem consultar o banco.
+ */
+export async function resolverCodigoVerificador(codigo: string): Promise<{ documento_id: string; organizacao_id: string } | null> {
+  if (typeof codigo !== "string" || !/^[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}$/.test(codigo)) return null;
+  const d = await prisma.gedDocumento.findUnique({ where: { codigo_verificador: codigo }, select: { id: true, organizacao_id: true } });
+  return d ? { documento_id: d.id, organizacao_id: d.organizacao_id } : null;
+}
+
+/** Job de lembretes/expiração: solicitações ABERTAS de todos os clientes (somente ids). Use gedDb(organizacao_id) para o restante. */
+export async function solicitacoesAbertasEntreClientes(limite = 5000): Promise<{ id: string; organizacao_id: string }[]> {
+  return prisma.gedSolicitacaoAssinatura.findMany({ where: { status: "ABERTA" }, select: { id: true, organizacao_id: true }, orderBy: { prazo_em: "asc" }, take: limite });
+}
+
+// ───────────── Varreduras entre clientes (SOMENTE jobs; devolvem apenas ids) ─────────────
+// Jobs não têm sessão/tenant. Estas duas funções descobrem QUAIS clientes têm trabalho e devolvem só `(id, organizacao_id)`;
+// quem chama processa cada linha com `gedDb(organizacao_id)` (jobs/ged-notificar.ts). Nunca devolvem conteúdo.
+
+/** Comunicações PENDENTES (outbox) de todos os clientes, mais antigas primeiro; `atualizadasAntesDe` pula as mexidas há pouco (reserva/backoff). */
+export async function comunicacoesPendentesEntreClientes(opc: { limite?: number; atualizadasAntesDe?: Date } = {}): Promise<{ id: string; organizacao_id: string }[]> {
+  const limite = Math.min(Math.max(opc.limite ?? 50, 1), 500);
+  return prisma.gedComunicacao.findMany({
+    where: { status: "PENDENTE", ...(opc.atualizadasAntesDe ? { updated_at: { lte: opc.atualizadasAntesDe } } : {}) },
+    select: { id: true, organizacao_id: true },
+    orderBy: { created_at: "asc" },
+    take: limite,
+  });
+}
+
+/** Ids das organizações com o módulo GED ativo (rotinas diárias por cliente, ex.: retenção do log de acesso). */
+export async function organizacoesGedAtivas(): Promise<string[]> {
+  return (await prisma.organizacao.findMany({ where: { modulos: { has: "GED" } }, select: { id: true } })).map((o) => o.id);
+}

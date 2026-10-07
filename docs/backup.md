@@ -8,7 +8,7 @@ Referência: SPEC §9.2 e teste de aceite **T10**. Checklist de restauração: [
 |---|---|---|---|---|
 | 1. Backup gerenciado | Backup nativo do volume do Postgres no Railway (*Postgres → Backups*) ou snapshot/PITR do provedor (RDS/Cloud SQL…) | Mesmo provedor | Diário/semanal (config. do provedor) | Config. do provedor |
 | 2. Dump lógico cruzado (**implementado e executado pelo sistema**) | Worker, fila `backup`: `pg_dump -Fc` → **AES-256** (openssl) → bucket S3-compatível em **outro provedor** (`BACKUP_S3_*`, ex.: Cloudflare R2 ou Backblaze B2) | Outro provedor/região | Diário 03:15 (America/Bahia) | **30 dias** (`BACKUP_RETENCAO_DIAS`) |
-| 3. Arquivos (anexos/PDFs) | Bucket de storage com **versionamento** + **replicação** para outro provedor | S3/R2 | Contínuo / diário (rclone sync) | Versões antigas 30 dias |
+| 3. Arquivos (anexos/PDFs/GED) | Bucket de storage com **versionamento** + **replicação feita pelo sistema** (fila `storage-replicar`) para o bucket de backup em outro provedor, sob `arquivos/` | S3/R2/B2 | Diário 03:00 + reconciliação semanal (dom. 04:30) | **Nunca apaga** no destino; versões antigas por lifecycle do bucket |
 | 4. Portabilidade | Exportação completa em `/admin/exportar` (CSV+JSON por tabela, dicionário, anexos, `manifest.json` com SHA-256) | Download pelo órgão | Sob demanda | Responsabilidade do órgão |
 
 Objetivos: **RPO ≤ 24 h** · **RTO ≤ 4 h**. Teste de restauração **automático mensal** (fila `restore-test`) – ver [`restore.md`](restore.md).
@@ -53,11 +53,43 @@ Variáveis: ver `deploy/railway.md` §2 ("Backup real") e `.env.example`.
 - **Lifecycle rule** de 35 dias no prefixo `pg/` como segunda barreira (a rotina já apaga > 30 dias).
 - A credencial precisa de `PutObject`, `GetObject`, `ListBucket` e `DeleteObject` (retenção). Com Object Lock, a remoção só esconde versões.
 
-## 4. Arquivos (anexos e documentos oficiais)
+## 4. Arquivos (anexos, documentos oficiais e arquivos do GED) – replicação
 
+O dump do banco **não** leva os arquivos enviados. Quem os copia é o job **`storage-replicar`** (`lib/backup/arquivos.ts`,
+registrado por `jobs/ged-backup.ts` no worker).
+
+- **Quais**: toda `storage_key` de `Anexo`, `DocumentoOficial` e `GedVersaoDocumento` (todos os clientes – é infraestrutura da
+  plataforma; descobre as chaves direto no Prisma). **Fora do escopo**: `ReuniaoConselho.ata_pdf_key`, `MensagemConversa.midia_key`,
+  `Cobranca.comprovante_key` e os ZIPs de `Exportacao`.
+- **Para onde**: `arquivos/{storage_key}` (ex.: `arquivos/ged/<organizacao_id>/2026/<documento_id>/v1-ab12cd34.pdf`), na ordem:
+  1. `BACKUP_ARQUIVOS_DIR` – diretório local/NAS (desenvolvimento, testes, ponto de montagem);
+  2. bucket externo `BACKUP_S3_*` (mesmo bucket dos dumps; prefixo `BACKUP_ARQUIVOS_PREFIX`, padrão `arquivos/`, independente de `BACKUP_S3_PREFIX=pg/`);
+  3. sem nenhum dos dois: storage da própria aplicação em `backups/arquivos/` (**mesmo provedor** – o registro avisa "cópia fora do provedor NÃO configurada").
+- **Quando**: `JOBS_CRON_REPLICACAO` (padrão `0 3 * * *`, `JOBS_TZ`) copia o que foi criado **depois da última marca d'água**
+  (menos 1 h de sobreposição; "já está no destino com o mesmo tamanho e sha256" não recopia). Em carga inicial grande, o job
+  processa em lotes (`REPLICACAO_LOTE`, padrão 2000) até `REPLICACAO_TEMPO_MAX_MIN` (padrão 50 min) e continua no dia seguinte.
+  A marca d'água só avança quando não houve erro.
+- **Verificação**: depois de gravar, confere **tamanho + sha256** (sha256 no *metadata* do objeto S3 ou em sidecar `<arquivo>.sha256`
+  no diretório; ETag/MD5 quando disponível). Arquivo cujo hash difere do registro do banco é copiado e contado em `divergencias`
+  (investigar); origem ilegível conta como erro.
+- **Nunca apaga** no destino (a interface de destino nem tem "remover"). Em Object Lock/versionamento isso é uma segunda barreira.
+- **Reconciliação semanal** (`storage-reconciliar`, `JOBS_CRON_RECONCILIACAO`, padrão `30 4 * * 0`): inventário do banco × listagem
+  completa do destino; copia o que **faltar** ou estiver com **tamanho diferente** e informa `sobrando` (só no destino). Pega o que a
+  incremental perdeu (ex.: arquivos cujo `created_at` ficou anterior à marca d'água).
+- **Registro**: cada execução grava `backup_registro` com `tipo = REPLICACAO_ARQUIVOS` (`tamanho` = bytes copiados, `destino`, `sucesso`,
+  `observacao` = `modo`, `marca`, `copiados`, `ja_no_destino`, `erros`, `divergencias`, `sobrando`, duração e amostra de erros) + `log_auditoria`
+  (`REPLICACAO_ARQUIVOS_REGISTRO`). Falha também envia e-mail para `BACKUP_ALERTA_EMAIL`. Advisory lock impede duas execuções simultâneas.
+- **Alerta de atraso (> 24 h)**: `ultimaReplicacao()` (`lib/backup/arquivos.ts`) devolve `{ ultima, horas, atrasada, marca }`. Integração
+  no `jobs/backup-check.ts` (uma linha em `verificarBackup`, depois do bloco de backup):
+  `const rep = await ultimaReplicacao(agora); if (rep.atrasada) problemas.push(rep.ultima ? "Última replicação de arquivos há " + Math.floor(rep.horas!) + " h (limite 24 h)." : "Nenhuma replicação de arquivos registrada.");`
+  e `/admin/backup` pode rotular `tipo === "REPLICACAO_ARQUIVOS"` como "Replicação de arquivos".
+- **Restauração**: `npm run backup:restore-arquivos -- [--prefixo ged/<organizacao_id>/] [--simular] [--sobrescrever] [--origem-dir <dir>]`
+  (ver [`restore.md`](restore.md) §D). Restaura **só um cliente** com o prefixo; preserva arquivos que já existem; confere o sha256.
 - Bucket principal (`S3_BUCKET`) com **versionamento** ligado – um upload nunca sobrescreve sem guardar a versão anterior.
-- **Replicação** (S3 CRR / R2 → B2 via `rclone sync --backup-dir` diário) para bucket em outra região/provedor.
 - PDFs de documentos oficiais são imutáveis; o `sha256_pdf` no banco permite verificar a integridade após uma restauração.
+
+Execução manual de ensaio (sem worker): `npx tsx --conditions=react-server -e "import('./lib/backup/arquivos').then(m => m.replicarArquivos({ origem: 'manual' })).then(r => { console.log(r); process.exit(0) })"`
+(com `BACKUP_ARQUIVOS_DIR=/caminho` para um destino local).
 
 ## 5. Monitoramento
 
