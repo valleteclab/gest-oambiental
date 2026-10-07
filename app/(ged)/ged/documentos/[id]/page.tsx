@@ -8,6 +8,7 @@ import AbaLogs from "@/components/ged/aba-logs";
 import AbaTramite from "@/components/ged/aba-tramite";
 import { AclPainelServidor } from "@/components/ged/acl-painel-servidor";
 import { FichaDocumento, ListaVersoes, SelosDocumento } from "@/components/ged/ficha-documento";
+import { ExcluirConteudo } from "@/components/ged/excluir-conteudo";
 import { FormGed } from "@/components/ged/form-ged";
 import { ZonaArquivoPdf } from "@/components/ged/upload-documento";
 import { PreviewPdf } from "@/components/ged/preview-pdf";
@@ -16,7 +17,7 @@ import type { PropsAbaGed } from "@/components/ged/tipos-abas";
 import { ErroApi } from "@/lib/http";
 import { exigirGed } from "@/lib/ged/escopo";
 import { listarMarcadores, marcadoresDoDocumento } from "@/lib/ged/marcadores";
-import { podeVerLogs } from "@/lib/ged/papeis";
+import { podeExcluirGed, podeVerLogs } from "@/lib/ged/papeis";
 import { exigirDocumento } from "@/lib/ged/permissoes";
 import { apresentacaoOcr, ocrReprocessavel, podeReprocessarOcrPapel } from "@/lib/ged/ocr/decisao";
 import { pastasParaSeletor } from "@/lib/ged/pastas";
@@ -156,6 +157,12 @@ export default async function PaginaDocumento({ params, searchParams }: { params
                     <input type="hidden" name="restaurar" value={arquivado ? "true" : "false"} />
                     <p className="text-sm text-slate-600">{arquivado ? "O documento volta às listas com a situação que tinha antes de ser arquivado." : "O documento e seu histórico são mantidos; nada é excluído."}</p>
                   </FormGed>
+                </Card>
+              )}
+              {podeExcluirGed(ctx) && pode("ADMINISTRAR") && pode("VER") && (
+                <Card titulo="Excluir documento">
+                  <p className="mb-3 text-sm text-slate-600">Apaga o documento e todas as suas versões, <strong>sem volta</strong>. Documentos com trâmite, comentários, solicitação de assinatura, assinatura/selo ou protocolo têm valor jurídico e <strong>não podem ser excluídos</strong> (use Arquivar).</p>
+                  <ExcluirConteudo tipo="DOCUMENTO" id={id} botao="Excluir documento…" depois="/ged/documentos" />
                 </Card>
               )}
             </div>

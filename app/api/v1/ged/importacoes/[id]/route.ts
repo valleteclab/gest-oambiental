@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { rota } from "@/lib/http";
 import { ctxGedApi } from "@/lib/ged/escopo";
 import { montarCsv } from "@/lib/ged/logs/csv";
+import { lerEntradaExclusao, respostaInicio } from "@/lib/ged/exclusao/http";
+import { iniciarExclusao } from "@/lib/ged/exclusao/servico";
 import { cancelarEnvio } from "@/lib/ged/importacao/envio";
 import { listarItensImportacao, obterImportacao } from "@/lib/ged/importacao/servico";
 
@@ -32,9 +34,12 @@ export const GET = rota(async (req: Request, { params }: { params: Promise<{ id:
 });
 
 // DELETE /api/v1/ged/importacoes/{id} – cancela um lote que ainda está RECEBENDO (descarta o que foi enviado).
-export const DELETE = rota(async (_req: Request, { params }: { params: Promise<{ id: string }> }) => {
+// DELETE /api/v1/ged/importacoes/{id}?documentos=true  { confirmacao: "EXCLUIR", apenas_possiveis? } – EXCLUI os documentos que o lote
+// importou e as pastas que ele criou e ficaram vazias (equivale a POST …/excluir; pré-visualização: GET …/excluir).
+export const DELETE = rota(async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
   const ctx = await ctxGedApi();
   const { id } = await params;
+  if (new URL(req.url).searchParams.get("documentos") === "true") return respostaInicio(await iniciarExclusao(ctx, { tipo: "IMPORTACAO", id }, await lerEntradaExclusao(req)));
   await cancelarEnvio(ctx, id);
   return new Response(null, { status: 204 });
 });

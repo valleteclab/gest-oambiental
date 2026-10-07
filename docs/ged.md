@@ -28,13 +28,13 @@ Módulo de gestão eletrônica de documentos da plataforma LicenciaGov, habilita
 ## 2. Tabelas
 
 Todas com `organizacao_id`, `created_at`, `updated_at` e `@@map("ged_…")`:
-`ged_config`, `ged_membro`, `ged_setor`, `ged_setor_membro`, `ged_tipo_documento`, `ged_pasta`, `ged_documento`, `ged_versao_documento`, `ged_conteudo_texto`, `ged_deteccao_dado_pessoal`, `ged_marcador`, `ged_documento_marcador`, `ged_acl`, `ged_tramite`, `ged_solicitacao_assinatura`, `ged_assinante`, `ged_comentario`, `ged_acesso_log`, `ged_comunicacao`, `ged_preferencia_notificacao`, `ged_sequencia`, `ged_importacao`, `ged_importacao_item`, `ged_protocolo`, `ged_protocolo_evento`, `ged_protocolo_documento`, `ged_protocolo_assunto`. Definição: `prisma/schema.prisma` e §2 do desenho.
+`ged_config`, `ged_membro`, `ged_setor`, `ged_setor_membro`, `ged_tipo_documento`, `ged_pasta`, `ged_documento`, `ged_versao_documento`, `ged_conteudo_texto`, `ged_deteccao_dado_pessoal`, `ged_marcador`, `ged_documento_marcador`, `ged_acl`, `ged_tramite`, `ged_solicitacao_assinatura`, `ged_assinante`, `ged_comentario`, `ged_acesso_log`, `ged_comunicacao`, `ged_preferencia_notificacao`, `ged_sequencia`, `ged_importacao`, `ged_importacao_item`, `ged_exclusao`, `ged_protocolo`, `ged_protocolo_evento`, `ged_protocolo_documento`, `ged_protocolo_assunto`. Definição: `prisma/schema.prisma` e §2 do desenho.
 
 ## 3. Rotas
 
 Páginas (`app/(ged)/ged/…`, todas `force-dynamic`; **conforme entregue** por cada frente): `/ged` (início), `/ged/documentos`, `/ged/documentos/novo`, `/ged/documentos/[id]`, `/ged/editor/novo`, `/ged/editor/[id]`, `/ged/pastas`, `/ged/importar` (+ `[id]`), `/ged/protocolo` (+ `novo`, `[id]`), `/ged/assinaturas`, `/ged/assinaturas/[id]`, `/ged/tramite`, `/ged/logs`, `/ged/minha-conta`, `/ged/minha-conta/notificacoes`, `/ged/admin` (+ `setores`, `marcadores`, `tipos`; membros/canal/certificado/exportação conforme entregue). Públicas (sem login): `/verificar` e `/verificar/[codigo]`, `/verificar/protocolo/[codigo]`, `/protocolo/[slug]` e `/protocolo/[slug]/consulta` (§14).
 
-API `/api/v1/ged/*` (sempre `rota()` + `ctxGedApi()`; a API **pública** do portal fica em `/api/v1/publico/protocolo/{slug}/…`, sem sessão, §14): `documentos` (+ `/[id]`, `/[id]/arquivo`, `arquivar`, `restaurar`, `marcadores`, `dados-pessoais`), `busca`, `pastas` (+ `/[id]`, `/[id]/zip` – §16), `importacoes` (+ `/[id]`), `protocolos` (+ `/[id]`, `/[id]/comprovante`), `marcadores`, `tipos`, `setores`, `acl`, `comentarios`, `tramite` (+ `caixa`, `/[id]`), `editor` (+ `/[id]/rascunho|finalizar|reabrir`), e (conforme entregue) `assinaturas`, `logs`, `notificacoes`.
+API `/api/v1/ged/*` (sempre `rota()` + `ctxGedApi()`; a API **pública** do portal fica em `/api/v1/publico/protocolo/{slug}/…`, sem sessão, §14): `documentos` (+ `/[id]`, `/[id]/excluir`, `/[id]/arquivo`, `arquivar`, `restaurar`, `marcadores`, `dados-pessoais`), `busca`, `pastas` (+ `/[id]`, `/[id]/zip` – §16, `/[id]/excluir` – §17), `importacoes` (+ `/[id]`, `/[id]/excluir`), `exclusoes` (+ `/[id]`, `/[id]/retomar`), `protocolos` (+ `/[id]`, `/[id]/comprovante`), `marcadores`, `tipos`, `setores`, `acl`, `comentarios`, `tramite` (+ `caixa`, `/[id]`), `editor` (+ `/[id]/rascunho|finalizar|reabrir`), e (conforme entregue) `assinaturas`, `logs`, `notificacoes`.
 
 Login: usuário só-GED entra sem escolher órgão e cai em `/ged`; usuário só-GED em `/dashboard` ou `/processos` é redirecionado para `/ged`.
 
@@ -47,6 +47,7 @@ Login: usuário só-GED entra sem escolher órgão e cai em `/ged`; usuário só
 | `ged-extrair-texto` | `jobs/ged-texto.ts` | varredura a cada `JOBS_GED_TEXTO_MS` (15 s) | extrai texto dos PDFs pendentes de todos os clientes (job com o escopo da organização) |
 | `ged-ocr` | `jobs/ged-ocr.ts` | varredura a cada `JOBS_GED_OCR_MS` (20 s) | OCR (`ocrmypdf`) das versões digitalizadas pendentes de todos os clientes, 1 por vez (§13); worker dedicado com `JOBS_FILAS=ged-ocr` |
 | `ged-importar` | `jobs/ged-importar.ts` | varredura a cada `JOBS_GED_IMPORTAR_MS` (10 s) | processa os lotes de importação de ZIP pendentes (ou parados há > 10 min) de todos os clientes (§12) |
+| `ged-excluir` | `jobs/ged-excluir.ts` | varredura a cada `JOBS_GED_EXCLUIR_MS` (10 s) | exclusão controlada grande (pasta/lote com mais de 100 documentos), em blocos, com progresso e retomada (§17); sem worker o web processa inline (`GED_EXCLUSAO_INLINE=true` força) |
 | `ged-assinaturas` | `jobs/ged-assinaturas.ts` | `JOBS_CRON_GED_ASSINATURAS` (padrão `7 * * * *`) | lembretes e expiração de solicitações |
 | `ged-notificar`, `ged-retencao-logs` | `jobs/ged-notificar.ts` | sob demanda / `JOBS_CRON_GED_RETENCAO` (padrão `40 3 * * *`) | envia a outbox (e-mail/WhatsApp); retenção de logs de acesso |
 | `storage-replicar` | `jobs/ged-backup.ts` | `JOBS_CRON_REPLICACAO` (padrão `0 3 * * *`) | copia arquivos novos para o destino de backup (ver §6) |
@@ -283,7 +284,7 @@ Desligado por padrão. O GED_ADMIN liga em **`/ged/admin/configuracoes` → "Pro
 
 ## 15. Operação: limpar o conteúdo do GED de um cliente
 
-Não há tela de exclusão em massa e as trilhas são imutáveis por trigger (`ged_tramite`, `ged_comentario`, versões seladas, assinantes decididos, protocolo e andamento). Para **zerar um ambiente de teste/demonstração** (ex.: "Câmara Municipal de Vale das Acácias (DEMO)", sigla `VAC`) existe a ferramenta `scripts/ged/limpar-organizacao.ts`:
+A exclusão do dia a dia (documento, pasta, lote de importação) tem tela e API próprias: ver **§17**. Esta seção é a ferramenta de **operação** para zerar um cliente inteiro (sem tela). As trilhas são imutáveis por trigger (`ged_tramite`, `ged_comentario`, versões seladas, assinantes decididos, protocolo e andamento). Para **zerar um ambiente de teste/demonstração** (ex.: "Câmara Municipal de Vale das Acácias (DEMO)", sigla `VAC`) existe a ferramenta `scripts/ged/limpar-organizacao.ts`:
 
 ```bash
 npm run ged:limpar -- VAC                                  # DRY-RUN (padrão): só imprime contagens por tabela Ged* e nº/tamanho de arquivos em ged/{org}/
@@ -328,3 +329,60 @@ npm run ged:limpar -- VAC --executar --confirmar=VAC       # apaga (a confirmaç
 **Auditoria:** ao fim (inclusive se interrompido) `auditarGed` grava `GED_PASTA_EXPORTADA_ZIP` (pasta, modo, nº de documentos, omitidos, bytes, interrompida) e um `ged_acesso_log` **BAIXAR por documento entregue** (em lote, `user_agent = exportacao-pasta-zip`), visíveis em `/ged/logs`.
 
 **Limites:** pastas arquivadas e documentos arquivados não entram; não verifica DPI nem converte/reduz PDFs; sem opção de filtrar por período/tipo (use subpastas); sem fila/link por e-mail.
+
+## 17. Exclusão controlada: documento, pasta e lote de importação
+
+**Para quê:** o administrador do cliente subiu uma pasta errada (ou de teste) e precisa apagá-la e refazer a importação, sem acesso ao banco. Antes só existia arquivar (§3) e a limpeza de operação do cliente inteiro (§15).
+
+**Onde:** botão **Excluir documento…** na ficha do documento; **Excluir pasta e conteúdo…** em `/ged/pastas` (junto de "Baixar pasta (ZIP)"); **Excluir documentos desta importação…** em `/ged/importar/{id}` (caso principal: "importei errado, quero refazer"). Cada um abre um painel que mostra **o que será apagado** (nº de pastas, documentos, versões e MB), **o que impede** (lista com número, título, pasta e motivo) e exige digitar **o nome da pasta** (pasta) ou **EXCLUIR** (documento e lote). O texto avisa que não tem volta.
+
+### Quem pode
+Capacidade nova `excluir` (`lib/ged/papeis.ts`): **GED_ADMIN e GED_GESTOR**. Usuário, Leitor e Auditor: 403. Além do papel, a permissão no recurso:
+- **documento:** `VER` **e** `ADMINISTRAR` (mesma régua de arquivar/mover). O Admin tem Administrar em todos, mas **não vê SIGILOSO sem ACL**, então esses ficam como "sem permissão" (contados, nunca identificados: sem número nem título);
+- **pasta:** `ADMINISTRAR` na pasta raiz e em cada subpasta (subpasta sem permissão não é removida);
+- **lote:** `importar` e ser o dono do lote (Admin vê todos). Só depois de **concluído** (`CONCLUIDA`, `CONCLUIDA_COM_ERROS` ou `FALHOU`); lote recebendo/na fila/processando → 409.
+Outro cliente ou recurso invisível → **404**. Tudo via `gedDb(organizacao_id)`; nenhum SQL cru; as Server Actions/rotas refazem a checagem.
+
+### O que NUNCA é excluído (valor jurídico / registro imutável)
+Documento com qualquer um destes é **impeditivo** (`lib/ged/exclusao/regras.ts`, `motivosDeBloqueio`):
+
+| Motivo | Quando |
+|---|---|
+| `TRAMITE` | tem linha em `ged_tramite` (imutável) |
+| `COMENTARIO` | tem linha em `ged_comentario` (imutável por trigger). **Decisão:** comentário bloqueia; não há exclusão em cascata autorizada e nenhum trigger é desligado |
+| `ASSINATURA` | tem solicitação de assinatura de **qualquer** situação (aberta, concluída, recusada, cancelada, expirada) ou está `EM_ASSINATURA` |
+| `SELADA` | `ASSINADO`, com código verificador, versão selada ou versão de origem `SELO`/`COMPROVANTE` |
+| `PROTOCOLO` | é anexo de protocolo (`ged_protocolo_documento`) ou o comprovante de um protocolo |
+| `DERIVADO` | tem versão derivada (anonimizada) que não sairia junto |
+| `SEM_PERMISSAO` | o usuário não tem Ver + Administrar |
+O banco também recusa, por conta própria (a regra não depende só do app): FK `RESTRICT` de trâmite/comentário/solicitação para o documento, triggers de imutabilidade, o trigger novo `ged_documento_protegido` (recusa `DELETE` de documento assinado/com código/vinculado a protocolo) e o `ged_versao_imutavel` (que agora permite apagar **somente** versão não selada, que não seja SELO/COMPROVANTE nem referenciada por protocolo). **Nenhuma trava é desligada** e `session_replication_role` não é usado.
+
+### Tudo-ou-nada × "apenas os que podem"
+Excluir **pasta** ou **lote** é **tudo-ou-nada**: se um documento é impeditivo, **nada** é apagado, a API responde **409 `EXCLUSAO_BLOQUEADA`** e a tela lista os documentos (até 200; o total vem em `bloqueados_total`) com o motivo. A opção explícita **"Excluir apenas os que podem ser excluídos"** (`apenas_possiveis: true`) apaga o resto e **mantém** os impeditivos e as pastas que ainda os contêm. Documento isolado impeditivo: 409 com o motivo.
+
+### Pastas
+Só se remove pasta **vazia**: primeiro saem os documentos, depois as pastas, **filhas antes das mães** (`pastasRemoviveis`). Uma pasta que ainda tem documento, subpasta que não foi candidata ou sem permissão fica. **Lote:** o lote não guarda quais pastas criou; são candidatas as ancestrais-ou-próprias das pastas dos seus itens, **criadas a partir do início do lote** e abaixo da pasta de destino (nunca o destino nem seus ancestrais; pasta que já existia antes do lote nunca entra) e que fiquem vazias. Funciona também para lotes antigos.
+
+### Execução, progresso e retomada
+`lib/ged/exclusao/*`: o plano (`planejarExclusao`, só leitura) é refeito a cada início. **Pequeno** (até 100 documentos e 100 pastas): síncrono, resposta **200** com o resultado. **Grande:** resposta **202** e execução pelo job `ged-excluir` (`jobs/ged-excluir.ts`, registrado em `jobs/ged.ts`; sem worker, o web processa inline) com acompanhamento em `GET /api/v1/ged/exclusoes/{id}` (status, contadores, percentual) e barra na tela. Uma exclusão ativa por cliente (409 `EXCLUSAO_EM_ANDAMENTO`). **Blocos:** 100 documentos por transação (reavaliando os impedimentos dentro da transação; se o bloco falha, cai para um por vez); depois pastas (100 por transação, conferindo "sem documento e sem subpasta" no banco). **Retomável:** exclusão `PROCESSANDO` sem sinal de vida por 10 min é retomada pela varredura; `FALHOU` é retomada por `POST /exclusoes/{id}/retomar` (ou botão na tela); o que já foi excluído não volta nem é refeito. **Storage:** os arquivos (`ged/{org}/…`) são removidos **depois** do commit do banco; falha deixa só arquivo órfão (nunca registro sem arquivo).
+
+### Dependentes (o que acontece com cada tabela)
+Apagados com o documento: versões, texto indexado, detecções de dados pessoais, vínculos de marcador, ACLs, o documento. **Comunicações pendentes** do documento viram `IGNORADA` (as já enviadas ficam, sem FK). **Itens de importação** do documento viram `REMOVIDO` (`documento_id` nulo, motivo com data e quem; o relatório do lote permanece e o lote ganha `conteudo_excluido_em`); itens `DUPLICADO` que apontavam para o documento só perdem o link. Em pasta excluída: ACLs da pasta e as referências em itens/lotes são limpas (`pasta_destino_id` do lote vira nulo). **`ged_acesso_log` NÃO é apagado:** não tem FK para o documento; `/ged/logs` mostra o número como `NUMERO (excluído)`, lido da auditoria. A numeração (`GedSequencia`) **não volta**: reimportar gera números novos.
+**Reimportar:** a deduplicação por sha256 olha as versões existentes; como a exclusão remove as versões, o mesmo conteúdo importa de novo normalmente.
+
+### Auditoria
+`auditarGed` na mesma transação: `GED_DOCUMENTO_EXCLUIDO` **por documento** (antes: número, título, pasta/caminho, sha256 da versão atual, nº de versões e bytes, status, sensibilidade, criador; depois: via, origem, `exclusao_id`), `GED_PASTA_EXCLUIDA` por pasta, e o resumo `GED_EXCLUSAO_INICIADA` / `GED_EXCLUSAO_CONCLUIDA` (/`FALHOU`/`RETOMADA`) com quem, quando e contagens. O `log_auditoria` é imutável e continua depois da exclusão; aparece em **Logs → Alterações** (filtro por ação "EXCLU" ou pelo documento).
+
+### API
+Pré-visualizar e executar (corpo JSON ou querystring `confirmacao`, `apenas_possiveis`):
+
+| Rota | Função |
+|---|---|
+| `GET /documentos/{id}/excluir` · `POST …/excluir` · `DELETE /documentos/{id}` | plano / exclui o documento (`confirmacao: "EXCLUIR"`) |
+| `GET /pastas/{id}/excluir` · `POST …/excluir` · `DELETE /pastas/{id}?excluir=true` | plano / exclui a pasta e a subárvore (`confirmacao` = nome da pasta). `DELETE /pastas/{id}` sem o parâmetro **continua só arquivando** a pasta vazia |
+| `GET /importacoes/{id}/excluir` · `POST …/excluir` · `DELETE /importacoes/{id}?documentos=true` | plano / exclui os documentos do lote e as pastas que ele criou. `DELETE /importacoes/{id}` sem o parâmetro **continua só cancelando** o lote `RECEBENDO` |
+| `GET /exclusoes` · `GET /exclusoes/{id}` · `POST /exclusoes/{id}/retomar` | lista (Admin: todas; Gestor: as suas), progresso, retomada |
+Códigos: 200 concluída (síncrona), 202 em segundo plano, 403 sem papel/permissão, 404 outro cliente ou invisível, 409 `EXCLUSAO_BLOQUEADA` (corpo com a lista), `NADA_A_EXCLUIR`, `EXCLUSAO_EM_ANDAMENTO`, `IMPORTACAO_EM_ANDAMENTO`, 422 confirmação errada.
+
+### Testes e limites conhecidos
+`tests/unit/ged-exclusao.test.ts` (impedimentos, derivados, decisão, confirmação, ordem de pastas, pastas do lote, blocos/limites, ausência de `session_replication_role`/SQL cru, migração) e E2E `tests/e2e/t26-ged-exclusao.spec.ts` (importa pasta, exclui o lote, confere documentos/pastas/arquivos/busca, reimporta, bloqueios com motivo, tudo-ou-nada × apenas os que podem, 403/404, auditoria e logs, exclusão grande em segundo plano, telas). **Limites:** não há lixeira nem desfazer; exclusão ativa é uma por cliente; documentos com comentário nunca saem (inclusive comentários de recusa/assinatura); o ajuste fino do "documento de outro usuário que o Gestor não administra" é por ACL (o Gestor só exclui o que administra); `ged_comunicacao` já enviada mantém o `documento_id` sem FK.

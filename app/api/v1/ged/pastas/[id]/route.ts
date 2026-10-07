@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { rota } from "@/lib/http";
 import { ctxGedApi } from "@/lib/ged/escopo";
 import { definirHerancaPasta } from "@/lib/ged/acl";
+import { lerEntradaExclusao, respostaInicio } from "@/lib/ged/exclusao/http";
+import { iniciarExclusao } from "@/lib/ged/exclusao/servico";
 import { arquivarPasta, atualizarPasta, restaurarPasta } from "@/lib/ged/pastas";
 
 export const dynamic = "force-dynamic";
@@ -21,10 +23,13 @@ export const PATCH = rota(async (req: Request, { params }: Ctx) => {
   return NextResponse.json({ ok: true });
 });
 
-// DELETE /api/v1/ged/pastas/:id – arquiva a pasta (precisa estar vazia)
-export const DELETE = rota(async (_req: Request, { params }: Ctx) => {
+// DELETE /api/v1/ged/pastas/:id – arquiva a pasta (precisa estar vazia).
+// DELETE /api/v1/ged/pastas/:id?excluir=true  { confirmacao: "<nome da pasta>", apenas_possiveis? } – EXCLUI a pasta, as subpastas e os
+// documentos (definitivo; tudo-ou-nada). Equivale a POST /pastas/:id/excluir (pré-visualização: GET /pastas/:id/excluir).
+export const DELETE = rota(async (req: Request, { params }: Ctx) => {
   const ctx = await ctxGedApi();
   const { id } = await params;
+  if (new URL(req.url).searchParams.get("excluir") === "true") return respostaInicio(await iniciarExclusao(ctx, { tipo: "PASTA", id }, await lerEntradaExclusao(req)));
   await arquivarPasta(ctx, id);
   return NextResponse.json({ ok: true });
 });

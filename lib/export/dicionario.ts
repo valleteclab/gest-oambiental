@@ -94,6 +94,7 @@ export const DESCRICAO_TABELA: Record<string, string> = {
   GedProtocoloEvento: "GED – andamento imutável do protocolo (registro, análise, encaminhamento, resposta, arquivamento, devolução, indeferimento).",
   GedProtocoloDocumento: "GED – anexos do protocolo (documento, versão, nome, tamanho e sha256 do arquivo no ato).",
   GedProtocoloAssunto: "GED – assuntos oferecidos no portal público de protocolo e o setor de destino de cada um.",
+  GedExclusao: "GED – execuções de exclusão controlada (documento, pasta, conteúdo de importação): alvo, modo, situação e contadores. O histórico de cada item excluído fica na auditoria.",
   GedSequencia: "GED – contador de numeração de documentos por cliente/tipo/ano.",
   CertificadoDigital: "Certificados digitais A1 (e-CNPJ do órgão / e-CPF do servidor) usados para assinar documentos: somente metadados; arquivo .pfx e senha NÃO são exportados.",
 };

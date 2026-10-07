@@ -2,11 +2,14 @@ import Link from "next/link";
 import { forbidden, notFound } from "next/navigation";
 import { Aviso, Badge, CabecalhoPagina, Card, Paginacao } from "@/components/ui";
 import { AutoAtualizar } from "@/components/ged/auto-atualizar";
+import { ExcluirConteudo } from "@/components/ged/excluir-conteudo";
 import { ImportarEnvio } from "@/components/ged/importar-envio";
 import { EM_ANDAMENTO, StatusImportacao } from "@/components/ged/status-importacao";
 import { ErroApi } from "@/lib/http";
 import { fmtDataHora } from "@/lib/format";
 import { exigirGed } from "@/lib/ged/escopo";
+import { exclusaoAtivaDoAlvo } from "@/lib/ged/exclusao/servico";
+import { podeExcluirGed } from "@/lib/ged/papeis";
 import { listarItensImportacao, obterImportacao } from "@/lib/ged/importacao/servico";
 import { formatarBytes } from "@/lib/ged/importacao/cliente";
 import { podeImportarGed } from "@/lib/ged/papeis";
@@ -15,9 +18,9 @@ import { ROTULO_SENSIBILIDADE_GED } from "@/lib/ged/tipos";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Importação – Gestão de Documentos" };
 
-const FILTROS = [["", "Todos"], ["RECEBIDO", "Aguardando"], ["IMPORTADO", "Importados"], ["DUPLICADO", "Duplicados"], ["IGNORADO", "Ignorados"], ["ERRO", "Com erro"]] as const;
-const COR = { RECEBIDO: "amarelo", IMPORTADO: "verde", DUPLICADO: "azul", IGNORADO: "cinza", ERRO: "vermelho" } as const;
-const ROTULO = { RECEBIDO: "Aguardando", IMPORTADO: "Importado", DUPLICADO: "Duplicado", IGNORADO: "Ignorado", ERRO: "Erro" } as const;
+const FILTROS = [["", "Todos"], ["RECEBIDO", "Aguardando"], ["IMPORTADO", "Importados"], ["DUPLICADO", "Duplicados"], ["IGNORADO", "Ignorados"], ["ERRO", "Com erro"], ["REMOVIDO", "Removidos"]] as const;
+const COR = { RECEBIDO: "amarelo", IMPORTADO: "verde", DUPLICADO: "azul", IGNORADO: "cinza", ERRO: "vermelho", REMOVIDO: "cinza" } as const;
+const ROTULO = { RECEBIDO: "Aguardando", IMPORTADO: "Importado", DUPLICADO: "Duplicado", IGNORADO: "Ignorado", ERRO: "Erro", REMOVIDO: "Removido" } as const;
 
 export default async function PaginaImportacao({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ status?: string; page?: string }> }) {
   const ctx = await exigirGed();
@@ -33,6 +36,9 @@ export default async function PaginaImportacao({ params, searchParams }: { param
     if (e instanceof ErroApi && e.status === 404) notFound();
     throw e;
   }
+  const finalizado = ["CONCLUIDA", "CONCLUIDA_COM_ERROS", "FALHOU"].includes(lote.status);
+  const podeExcluirLote = podeExcluirGed(ctx) && finalizado;
+  const exclusaoAtiva = podeExcluirLote ? await exclusaoAtivaDoAlvo(ctx, { tipo: "IMPORTACAO", id }) : null;
   const ativo = EM_ANDAMENTO.includes(lote.status);
   const aberto = lote.status === "RECEBENDO";
   const feitos = lote.importados + lote.duplicados + lote.ignorados + lote.com_erro;
@@ -70,6 +76,13 @@ export default async function PaginaImportacao({ params, searchParams }: { param
           </dl>
           {lote.ocultos > 0 && <p className="mt-3 text-xs text-slate-500">{lote.ocultos} arquivo(s) oculto(s) ou de sistema foram ignorados sem aparecer no relatório.</p>}
         </Card>
+        {podeExcluirLote && (
+          <Card titulo="Excluir o conteúdo desta importação">
+            {lote.conteudo_excluido_em && <div className="mb-3"><Aviso tipo="info">O conteúdo deste lote foi excluído em {fmtDataHora(lote.conteudo_excluido_em)}. O relatório continua disponível.</Aviso></div>}
+            <p className="mb-3 text-sm text-slate-600">Importou errado ou estava testando? Apaga <strong>todos os documentos criados por este lote</strong> e as pastas que ele criou e ficarem vazias, <strong>sem volta</strong>, para você poder importar de novo. Documentos com valor jurídico (trâmite, comentários, assinatura/selo, protocolo) não são excluídos: nesse caso nada é apagado e você vê a lista.</p>
+            <ExcluirConteudo tipo="IMPORTACAO" id={id} botao="Excluir documentos desta importação…" depois={`/ged/importar/${id}`} ativa={exclusaoAtiva} />
+          </Card>
+        )}
         <Card titulo="Relatório por arquivo">
           <nav className="mb-3 flex flex-wrap gap-2" aria-label="Filtrar relatório">
             {FILTROS.map(([v, r]) => (

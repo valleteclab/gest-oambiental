@@ -14,6 +14,9 @@
 //   GED_LEITOR    VER ASSINAR (pode ser signatário)                         –
 //   GED_AUDITOR   VER (somente via ACL)                                     ler logs (acesso, comunicação, auditoria)
 //
+// Exclusão controlada (lib/ged/exclusao, docs/ged.md §17): capacidade `excluir` = Admin e Gestor; além do papel, o documento exige
+// VER + ADMINISTRAR e a pasta exige ADMINISTRAR (mesma régua de arquivar/mover). Usuário, Leitor e Auditor nunca excluem.
+//
 // Protocolo (lib/ged/protocolo): registrar/movimentar = Admin, Gestor e Usuário (`protocolar`); ver o livro inteiro = Admin, Gestor
 // e Auditor (`protocolo_geral`); Usuário e Leitor veem os protocolos do seu setor/envolvimento; Leitor e Auditor nunca escrevem.
 //
@@ -47,6 +50,7 @@ export type CapacidadeGed =
   | "criar_documento" // criar/enviar documentos
   | "solicitar_assinatura" // abrir solicitação de assinatura (além de EDITAR no documento)
   | "importar" // importação em lote de ZIP (cria pastas e documentos em massa)
+  | "excluir" // exclusão controlada de documento, pasta (com subárvore) e conteúdo de lote de importação
   | "protocolar" // registrar e movimentar protocolos (entrada/saída/interno) – Leitor e Auditor só consultam
   | "protocolo_geral"; // enxergar TODOS os protocolos do cliente (demais papéis: só os do seu setor/envolvimento)
 
@@ -62,6 +66,7 @@ export const CAPACIDADES_POR_PAPEL: Record<CapacidadeGed, readonly GedPapel[]> =
   criar_documento: ["GED_ADMIN", "GED_GESTOR", "GED_USUARIO"],
   solicitar_assinatura: ["GED_ADMIN", "GED_GESTOR", "GED_USUARIO"],
   importar: ["GED_ADMIN", "GED_GESTOR"],
+  excluir: ["GED_ADMIN", "GED_GESTOR"],
   protocolar: ["GED_ADMIN", "GED_GESTOR", "GED_USUARIO"],
   protocolo_geral: ["GED_ADMIN", "GED_GESTOR", "GED_AUDITOR"],
 };
@@ -82,6 +87,8 @@ export const podeVerLogs = (ctx: ComPapel) => podeGed(ctx, "logs");
 export const podeCriarDocumento = (ctx: ComPapel) => podeGed(ctx, "criar_documento");
 /** Importação em lote de ZIP (Admin e Gestor). */
 export const podeImportarGed = (ctx: ComPapel) => podeGed(ctx, "importar");
+/** Exclusão controlada de documento/pasta/lote (Admin e Gestor; a permissão no recurso é checada à parte). */
+export const podeExcluirGed = (ctx: ComPapel) => podeGed(ctx, "excluir");
 /** Protocolo: registrar entrada/saída/interno e movimentar (Admin, Gestor e Usuário). */
 export const podeProtocolar = (ctx: ComPapel) => podeGed(ctx, "protocolar");
 /** Protocolo: ver todo o livro do cliente (Admin, Gestor e Auditor). */

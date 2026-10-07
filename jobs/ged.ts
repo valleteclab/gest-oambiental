@@ -6,13 +6,14 @@
 //   ged-backup       – replicação diária dos arquivos para o bucket de backup
 //   ged-ocr          – OCR no servidor (ocrmypdf) dos PDFs digitalizados; worker dedicado: JOBS_FILAS=ged-ocr (GED_OCR_DESATIVADO=true desliga)
 //   ged-importar     – importação em lote de ZIP (lib/ged/importacao)
+//   ged-excluir      – exclusão controlada de pasta/lote grandes, com progresso e retomada (lib/ged/exclusao)
 import type { PgBoss } from "pg-boss";
 
 export type BossGed = InstanceType<typeof PgBoss>;
 export type CtxJobsGed = { tz: string; log: (...a: unknown[]) => void };
 
 export async function registrarJobsGed(boss: BossGed, ctx: CtxJobsGed): Promise<void> {
-  const modulos = await Promise.all([import("./ged-texto"), import("./ged-assinaturas"), import("./ged-notificar"), import("./ged-backup"), import("./ged-importar")]);
+  const modulos = await Promise.all([import("./ged-texto"), import("./ged-assinaturas"), import("./ged-notificar"), import("./ged-backup"), import("./ged-importar"), import("./ged-excluir")]);
   for (const m of modulos) await m.registrar(boss, ctx);
   if (process.env.GED_OCR_DESATIVADO !== "true") await (await import("./ged-ocr")).registrar(boss, ctx);
 }

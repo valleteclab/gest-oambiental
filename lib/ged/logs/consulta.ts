@@ -45,7 +45,17 @@ async function numerosDocumentos(ctx: CtxGed, ids: (string | null)[]): Promise<M
   const lista = [...new Set(ids.filter((x): x is string => !!x))];
   if (!lista.length) return new Map();
   const ds = await ctx.db.gedDocumento.findMany({ where: { id: { in: lista } }, select: { id: true, numero: true } });
-  return new Map(ds.map((d) => [d.id, d.numero]));
+  const nums = new Map(ds.map((d) => [d.id, d.numero]));
+  // Documento excluído (exclusão controlada): o log de acesso é preservado e o número vem da auditoria imutável.
+  const faltam = lista.filter((id) => !nums.has(id));
+  if (faltam.length) {
+    const aud = await ctx.db.logAuditoria.findMany({ where: { organizacao_id: ctx.organizacao_id, acao: "GED_DOCUMENTO_EXCLUIDO", entidade_id: { in: faltam } }, select: { entidade_id: true, antes: true } });
+    for (const a of aud) {
+      const numero = (a.antes as { numero?: unknown } | null)?.numero;
+      if (a.entidade_id && typeof numero === "string") nums.set(a.entidade_id, `${numero} (excluído)`);
+    }
+  }
+  return nums;
 }
 
 // ───────────── Páginas ─────────────

@@ -228,7 +228,7 @@ async function duplicado(ctx: CtxGed, sha256: string): Promise<{ visivel: { id: 
   return { visivel: d };
 }
 
-const TALLY_ZERO = (): Tally => ({ RECEBIDO: 0, IMPORTADO: 0, DUPLICADO: 0, IGNORADO: 0, ERRO: 0 });
+const TALLY_ZERO = (): Tally => ({ RECEBIDO: 0, IMPORTADO: 0, DUPLICADO: 0, IGNORADO: 0, ERRO: 0, REMOVIDO: 0 });
 
 async function contagem(db: GedDb, importacaoId: string): Promise<{ tally: Tally; bytes: Record<GedStatusItemImportacao, number> }> {
   const t = TALLY_ZERO();
@@ -538,6 +538,7 @@ export type LinhaImportacao = {
   com_erro: number;
   ocultos: number;
   pastas_criadas: number;
+  conteudo_excluido_em: Date | null;
   criado_por: string;
   criado_por_id: string;
   origem: "ZIP" | "PASTA";
@@ -575,6 +576,7 @@ async function hidratar(ctx: CtxGed, rows: Prisma.GedImportacaoGetPayload<object
     com_erro: r.com_erro,
     ocultos: r.ocultos,
     pastas_criadas: r.pastas_criadas,
+    conteudo_excluido_em: r.conteudo_excluido_em,
     criado_por: nome.get(r.criado_por_id) ?? "—",
     criado_por_id: r.criado_por_id,
     origem: r.origem,
@@ -611,7 +613,7 @@ export async function listarItensImportacao(ctx: CtxGed, id: string, opc: { stat
   await obterImportacao(ctx, id); // 404 se for de outro cliente ou não for visível
   const size = Math.min(500, Math.max(1, opc.size ?? 50));
   const page = Math.max(1, opc.page ?? 1);
-  const status = (["RECEBIDO", "IMPORTADO", "DUPLICADO", "IGNORADO", "ERRO"] as const).find((s) => s === opc.status);
+  const status = (["RECEBIDO", "IMPORTADO", "DUPLICADO", "IGNORADO", "ERRO", "REMOVIDO"] as const).find((s) => s === opc.status);
   const where: Prisma.GedImportacaoItemWhereInput = { importacao_id: id, ...(status ? { status } : {}) };
   const [itens, total] = await Promise.all([
     ctx.db.gedImportacaoItem.findMany({ where, orderBy: { ordem: "asc" }, skip: (page - 1) * size, take: size, select: { id: true, ordem: true, caminho: true, status: true, motivo: true, documento_id: true, pasta_id: true, tamanho: true } }),

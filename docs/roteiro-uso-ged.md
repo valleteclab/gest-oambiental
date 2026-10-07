@@ -90,6 +90,14 @@ Um repositório digital de documentos por órgão, com busca pelo conteúdo, tra
 3. Entre como `servidor1.vac@`: documentos sigilosos que ele não pode ver ficam de fora e o manifesto só diz "omitido: sem permissao", sem título. Em **Logs** aparecem a exportação e um "Baixou" por documento.
 **Atenção:** o TCM-BA exige PDF digitalizado abaixo de 250 DPI. O sistema **não** confere a resolução (a coluna `dpi_ok` diz "nao verificado"): confira antes de enviar. Acima de 20.000 documentos, baixe por subpasta.
 
+## 15. Excluir (importou errado? refaça)
+**Para quê:** apagar uma importação feita por engano ou de teste e importar de novo, sem chamar o suporte.
+**Como mostrar (admin.vac@ ou gestor.vac@):**
+1. **Importar** → abra o lote → **Excluir documentos desta importação…**. A tela mostra quantas pastas, documentos, versões e MB serão apagados. Digite **EXCLUIR** e confirme. Documentos e pastas do lote somem; o relatório fica, com os itens marcados como "Removido".
+2. Para uma pasta qualquer: **Pastas** → escolha a pasta → **Excluir pasta e conteúdo…** (digite o **nome da pasta**). Em documento: botão **Excluir documento…** na ficha.
+3. Importe a mesma pasta de novo: funciona (o sistema não trata como duplicado o que foi excluído).
+**Atenção:** **documentos com valor jurídico não se excluem.** Se houver trâmite, comentário, pedido de assinatura (em qualquer situação), assinatura/selo ou protocolo, o sistema **não apaga nada** e lista os documentos com o motivo; use **Arquivar** neles. Há a opção "excluir apenas os que podem", que mantém os impeditivos. Só administradores e gestores excluem, e só o que podem administrar. Não há lixeira: **não tem volta**. Tudo fica registrado em **Logs → Alterações** (quem, quando, número, título, sha256), e os registros de acesso são mantidos. Exclusões grandes (mais de 100 documentos) rodam em segundo plano, com barra de progresso.
+
 ## Roteiro rápido de apresentação (15 min)
 1. Login e visão geral (1 min)
 2. Importar uma pasta digitalizada (ou um ZIP) (3 min)

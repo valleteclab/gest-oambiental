@@ -303,6 +303,7 @@ model Organizacao {
   ged_importacao_itens     GedImportacaoItem[]
   ged_preferencias         GedPreferenciaNotificacao[]
   ged_sequencias           GedSequencia[]
+  ged_exclusoes            GedExclusao[]
   ged_protocolos           GedProtocolo[]
   ged_protocolo_eventos    GedProtocoloEvento[]
   ged_protocolo_documentos GedProtocoloDocumento[]
@@ -2038,38 +2039,40 @@ enum GedStatusItemImportacao {
   DUPLICADO
   IGNORADO
   ERRO
+  REMOVIDO // exclusão controlada: o documento importado por este item foi excluído (docs/ged.md §17)
 }
 
 /// Lote de importação: o ZIP fica em ged/{org}/importacao/{id}.zip só até o fim do processamento.
 model GedImportacao {
-  id               String              @id @default(uuid()) @db.Uuid
-  organizacao_id   String              @db.Uuid
-  created_at       DateTime            @default(now())
-  updated_at       DateTime            @updatedAt
-  criado_por_id    String              @db.Uuid
-  nome_arquivo     String
-  tamanho_zip      Int
-  sha256_zip       String
-  storage_key      String? // null depois que o ZIP é removido
-  pasta_destino_id String?             @db.Uuid // null = raiz
-  tipo_id          String?             @db.Uuid
-  sensibilidade    GedSensibilidade
-  status           GedStatusImportacao @default(PENDENTE)
-  iniciado_em      DateTime?
-  concluido_em     DateTime?
-  erro             String? // falha do lote inteiro (ZIP inválido, limite excedido…)
-  total_arquivos   Int                 @default(0)
-  importados       Int                 @default(0)
-  duplicados       Int                 @default(0)
-  ignorados        Int                 @default(0)
-  com_erro         Int                 @default(0)
-  ocultos          Int                 @default(0) // lixo do sistema (__MACOSX, Thumbs.db, ocultos) – não viram item
-  pastas_criadas   Int                 @default(0)
+  id                   String              @id @default(uuid()) @db.Uuid
+  organizacao_id       String              @db.Uuid
+  created_at           DateTime            @default(now())
+  updated_at           DateTime            @updatedAt
+  criado_por_id        String              @db.Uuid
+  nome_arquivo         String
+  tamanho_zip          Int
+  sha256_zip           String
+  storage_key          String? // null depois que o ZIP é removido
+  pasta_destino_id     String?             @db.Uuid // null = raiz
+  tipo_id              String?             @db.Uuid
+  sensibilidade        GedSensibilidade
+  status               GedStatusImportacao @default(PENDENTE)
+  iniciado_em          DateTime?
+  concluido_em         DateTime?
+  erro                 String? // falha do lote inteiro (ZIP inválido, limite excedido…)
+  total_arquivos       Int                 @default(0)
+  importados           Int                 @default(0)
+  duplicados           Int                 @default(0)
+  ignorados            Int                 @default(0)
+  com_erro             Int                 @default(0)
+  ocultos              Int                 @default(0) // lixo do sistema (__MACOSX, Thumbs.db, ocultos) – não viram item
+  pastas_criadas       Int                 @default(0)
   // v2 (importação de pasta / ZIP em partes)
-  origem           GedOrigemImportacao @default(ZIP)
-  unir_pastas      Boolean             @default(false) // colapsa pastas repetidas consecutivas (A/A → A)
-  partes_total     Int                 @default(0) // ZIP em partes: quantas partes de 8 MB (0 = ZIP único em storage_key)
-  total_esperado   Int                 @default(0) // pasta: nº de arquivos que o navegador pretende enviar (informativo)
+  origem               GedOrigemImportacao @default(ZIP)
+  unir_pastas          Boolean             @default(false) // colapsa pastas repetidas consecutivas (A/A → A)
+  partes_total         Int                 @default(0) // ZIP em partes: quantas partes de 8 MB (0 = ZIP único em storage_key)
+  total_esperado       Int                 @default(0) // pasta: nº de arquivos que o navegador pretende enviar (informativo)
+  conteudo_excluido_em DateTime? // exclusão controlada do conteúdo do lote concluída (documentos e pastas vazias removidos)
 
   itens       GedImportacaoItem[]
   organizacao Organizacao         @relation(fields: [organizacao_id], references: [id])
@@ -2262,4 +2265,49 @@ model GedProtocoloAssunto {
   @@unique([organizacao_id, nome])
   @@index([organizacao_id, ativo, ordem])
   @@map("ged_protocolo_assunto")
+}
+
+// ───────────── GED – Exclusão controlada (documento, pasta com subárvore, lote de importação) ─────────────
+
+enum GedTipoExclusao {
+  DOCUMENTO
+  PASTA
+  IMPORTACAO
+}
+
+enum GedStatusExclusao {
+  PENDENTE
+  PROCESSANDO
+  CONCLUIDA
+  FALHOU
+}
+
+/// Execução de uma exclusão controlada (progresso e retomada do job `ged-excluir`). O alvo não tem FK: some ao fim.
+/// O histórico de cada documento/pasta excluído fica no log_auditoria (imutável), não aqui.
+model GedExclusao {
+  id                   String            @id @default(uuid()) @db.Uuid
+  organizacao_id       String            @db.Uuid
+  created_at           DateTime          @default(now())
+  updated_at           DateTime          @updatedAt
+  criado_por_id        String            @db.Uuid
+  tipo                 GedTipoExclusao
+  alvo_id              String            @db.Uuid
+  alvo_rotulo          String // nome da pasta / número do documento / nome do lote (para a tela e a auditoria)
+  apenas_possiveis     Boolean           @default(false) // false = tudo-ou-nada; true = só o que não tem impedimento
+  status               GedStatusExclusao @default(PENDENTE)
+  iniciado_em          DateTime?
+  concluido_em         DateTime?
+  erro                 String?
+  total_documentos     Int               @default(0)
+  documentos_excluidos Int               @default(0)
+  total_pastas         Int               @default(0)
+  pastas_excluidas     Int               @default(0)
+  versoes_excluidas    Int               @default(0)
+  bytes_excluidos      BigInt            @default(0)
+  bloqueados           Int               @default(0) // documentos que ficaram (impedimento) em modo apenas_possiveis
+  organizacao          Organizacao       @relation(fields: [organizacao_id], references: [id])
+
+  @@index([organizacao_id, status])
+  @@index([organizacao_id, created_at])
+  @@map("ged_exclusao")
 }

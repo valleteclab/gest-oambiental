@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { rota } from "@/lib/http";
 import { ctxGedApi } from "@/lib/ged/escopo";
 import { atualizarMetadadosDocumento } from "@/lib/ged/documentos/servico";
+import { lerEntradaExclusao, respostaInicio } from "@/lib/ged/exclusao/http";
+import { iniciarExclusao } from "@/lib/ged/exclusao/servico";
 import { marcadoresDoDocumento } from "@/lib/ged/marcadores";
 import { exigirDocumento } from "@/lib/ged/permissoes";
 
@@ -31,4 +33,13 @@ export const PATCH = rota(async (req: Request, { params }: Ctx) => {
   const corpo = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   await atualizarMetadadosDocumento(ctx, id, corpo);
   return NextResponse.json({ ok: true });
+});
+
+// DELETE /api/v1/ged/documentos/:id  { confirmacao: "EXCLUIR" } (ou ?confirmacao=EXCLUIR) – exclusão definitiva e auditada.
+// Só Admin/Gestor com Administrar + Ver no documento. Documento com trâmite, comentário, solicitação de assinatura, assinatura/selo ou
+// protocolo NÃO se exclui (409 com os motivos). Pré-visualização: GET /documentos/:id/excluir.
+export const DELETE = rota(async (req: Request, { params }: Ctx) => {
+  const ctx = await ctxGedApi();
+  const { id } = await params;
+  return respostaInicio(await iniciarExclusao(ctx, { tipo: "DOCUMENTO", id }, await lerEntradaExclusao(req)));
 });

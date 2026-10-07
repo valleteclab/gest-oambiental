@@ -3,13 +3,15 @@ import { notFound } from "next/navigation";
 import { Aviso, Badge, CabecalhoPagina, Card } from "@/components/ui";
 import { AclPainelServidor } from "@/components/ged/acl-painel-servidor";
 import { ArvorePastas } from "@/components/ged/arvore-pastas";
+import { ExcluirConteudo } from "@/components/ged/excluir-conteudo";
 import { FormGed } from "@/components/ged/form-ged";
 import { ListaDocumentos } from "@/components/ged/lista-documentos";
 import { ErroApi } from "@/lib/http";
 import { exigirGed } from "@/lib/ged/escopo";
 import { lerFiltros } from "@/lib/ged/documentos/filtros";
 import { listarDocumentos } from "@/lib/ged/documentos/listar";
-import { podeCriarDocumento, podeGerirEstruturaGed } from "@/lib/ged/papeis";
+import { exclusaoAtivaDoAlvo } from "@/lib/ged/exclusao/servico";
+import { podeCriarDocumento, podeExcluirGed, podeGerirEstruturaGed } from "@/lib/ged/papeis";
 import { exigirPasta } from "@/lib/ged/permissoes";
 import { listarPastas, montarArvore } from "@/lib/ged/pastas";
 import { ROTULO_SENSIBILIDADE_GED, SENSIBILIDADES_GED } from "@/lib/ged/tipos";
@@ -107,6 +109,8 @@ async function PainelPasta({ ctx, sel, acoes, todas, gerir }: {
   const docs = await listarDocumentos(ctx, { ...f, size: 10 }, { snippets: false });
   const podeEditar = gerir && acoes.includes("EDITAR");
   const podeAdmin = gerir && acoes.includes("ADMINISTRAR");
+  const podeExcluir = podeExcluirGed(ctx) && acoes.includes("ADMINISTRAR") && !sel.arquivada;
+  const exclusaoAtiva = podeExcluir ? await exclusaoAtivaDoAlvo(ctx, { tipo: "PASTA", id: sel.id }) : null;
   const destinos = todas.filter((p) => p.id !== sel.id && !p.caminho_nome.startsWith(`${sel.caminho_nome}/`));
   return (
     <>
@@ -167,6 +171,13 @@ async function PainelPasta({ ctx, sel, acoes, todas, gerir }: {
               </FormGed>
             )}
           </div>
+        </Card>
+      )}
+
+      {podeExcluir && (
+        <Card titulo="Excluir pasta e conteúdo">
+          <p className="mb-3 text-sm text-slate-600">Apaga esta pasta, todas as subpastas e os documentos dentro delas, <strong>sem volta</strong>. Se algum documento tiver valor jurídico (trâmite, comentários, assinatura/selo, protocolo), nada é excluído e você vê a lista. Para só esvaziar uma importação errada, use a página do lote em Importar.</p>
+          <ExcluirConteudo tipo="PASTA" id={sel.id} botao="Excluir pasta e conteúdo…" depois="/ged/pastas" ativa={exclusaoAtiva} />
         </Card>
       )}
 
