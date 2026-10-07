@@ -58,6 +58,7 @@ Login: usuário só-GED entra sem escolher órgão e cai em `/ged`; usuário só
 |---|---|
 | `CHROMIUM_PATH` | PDFs (editor, folha de assinaturas, seed). Container de dev: `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` |
 | `STORAGE_DRIVER`, `STORAGE_LOCAL_DIR`, `S3_*` | storage dos arquivos (local ou S3-compatível) |
+| `GED_IMPORTACAO_TMP` | disco temporário da importação (ZIP remontado; padrão `<tmp>/ged-importacao`; precisa de espaço para o maior ZIP, ~2 GB) |
 | `DATA_KEY` | cifra de telefone/dados pessoais e senha do backup (se não houver `BACKUP_PASSPHRASE`) |
 | `SMTP_URL`, `APP_URL` | e-mail e links das notificações |
 | `EVOLUTION_API_KEY` (e canal em `GedConfig.canal_whatsapp_id`) | WhatsApp (envio; sem pareamento use o modo simulado do canal) |
@@ -170,29 +171,49 @@ Banco isolado para trabalho paralelo: `CREATE DATABASE licenciagov_ged_x` + `DAT
 
 ~~OCR (fila `ged-ocr`, `ocrmypdf`, nova versão `origem=OCR`)~~ (entregue, §13) · ~~importação de pasta/ZIP~~ (entregue, §12) · portal do cliente para documentos publicados (exposição pública só de derivados anonimizados, `whereExposicaoPublica()`; o **protocolo online** já existe, §14) · fechamento mensal da digitalização · motor de anonimização (detecção de CPF/CNPJ/e-mail/telefone e IA opcional; o modelo já existe) · **hardening com RLS** (role `NOSUPERUSER NOBYPASSRLS`, role separado para migração, `set_config('app.org', …, true)` por transação) · assinatura ICP-Brasil por signatário (PAdES incremental) · carimbo de tempo/LTV · lixeira e retenção de documentos · replicação com versionamento/Object Lock no bucket de backup.
 
-## 12. Importação em lote de ZIP (fase 2)
+## 12. Importação em lote: pasta e ZIP (fase 2, v2)
 
-Para quem digitaliza no Windows, organiza em pastas por cliente (licitação, pagamentos, controle interno…) e envia cópias periódicas: o **ZIP inteiro** é enviado de uma vez e a **estrutura de pastas do ZIP vira a árvore de pastas do GED**. Quem pode: **GED_ADMIN e GED_GESTOR** (`podeImportarGed`, capacidade `importar` em `lib/ged/papeis.ts`).
+Para quem digitaliza no Windows, organiza em pastas (licitação, financeiro, contabilidade…) e envia cópias mensais: a **estrutura de pastas vira a árvore de pastas do GED**. Quem pode: **GED_ADMIN e GED_GESTOR** (`podeImportarGed`). A v2 aguenta pacotes de mais de 1 GB e milhares de arquivos.
 
-**Como usar (tela `/ged/importar`, menu "Importar ZIP")**: escolha o `.zip` (até 300 MB), a pasta de destino (padrão: raiz), o tipo de documento e a sensibilidade (valem para todos os documentos do lote; a sensibilidade sugerida vem da pasta). Ao enviar, a tela do lote (`/ged/importar/[id]`) se atualiza sozinha e mostra contadores e o **relatório por arquivo** (importado, duplicado, ignorado, erro + motivo), filtrável e com **CSV** (`?formato=csv`). O Admin vê todos os lotes do cliente; o Gestor só os que enviou.
+**Tela `/ged/importar` (menu "Importar pasta/ZIP")**, duas abas:
+- **Enviar pasta (recomendado)**: escolha a pasta (input `webkitdirectory`) ou **arraste** a pasta (recursivo, `webkitGetAsEntry`), sem zipar; o caminho relativo é preservado. Antes de enviar a tela mostra o **resumo**: nº de arquivos e tamanho, PDFs, ZIPs a abrir, ZIPs duplicados (não enviados), ignorados por formato, ocultos. Envio arquivo a arquivo com **concorrência 4**, barra geral + por arquivo, **retentativa** (5x, espera crescente) por arquivo, **pausar/retomar**, cancelar. sha256 calculado no navegador (`crypto.subtle`) e conferido no servidor.
+- **Enviar ZIP**: até ~2 GB, em **partes de 8 MB** (`PUT …/partes/{n}`, 6 retentativas, concorrência 2) porque proxies cortam requisições longas.
+- Em ambas: pasta de destino, tipo, sensibilidade e a opção **"Unir pastas repetidas (A/A → A)"** (desligada por padrão: a estrutura é preservada exatamente como veio; ligada, pastas consecutivas de mesmo nome, sem diferenciar maiúsculas, viram uma; o relatório mantém o caminho original).
+- **Retomada**: um lote cujo envio foi interrompido fica **"Aguardando envio"** (`RECEBENDO`); em `/ged/importar/{id}` escolha de novo a mesma pasta/ZIP e só o que falta é enviado (compara caminho + tamanho + sha256 com `GET …/recebidos`; ZIP: partes já recebidas). Lote nunca finalizado é descartado após 3 dias (job); só ocupa "vaga" por 2 h sem atividade.
+- Relatório (`/ged/importar/{id}`): contadores (arquivos, importados, duplicados, ignorados, erros, pastas criadas, tamanho importado/total), lista **filtrável e paginada** por situação e **CSV** (`?formato=csv`). Admin vê todos os lotes do cliente; Gestor só os seus.
 
-**Regras de importação** (`lib/ged/importacao/*`):
+**API** (`/api/v1/ged/importacoes`, todas com `ctxGedApi` + `importar`; lote de outro cliente/de outro usuário = 404):
+
+| Rota | Função |
+|---|---|
+| `POST /` (multipart) | ZIP pequeno (até 64 MB) de uma vez; vira `PENDENTE` |
+| `POST /pasta` (JSON) | abre lote de pasta (`RECEBENDO`): `nome, total_esperado, pasta_id, tipo_id, sensibilidade, unir_pastas` |
+| `POST /{id}/arquivos` | UM arquivo (corpo = bytes; cabeçalhos `X-Caminho` percent-encoded, `X-Sha256`); idempotente por caminho; só PDF/ZIP guardados (outros = "Ignorado"; oculto/lixo nem vira item; `..` = "Erro"; > 25 MB = "Erro" sem guardar) |
+| `POST /zip-partes` (JSON) | inicia ZIP em partes: `nome_arquivo, tamanho` → `partes_total, tamanho_parte` |
+| `PUT /{id}/partes/{n}` | parte n (tamanho exato; idempotente; ordem livre) |
+| `GET /{id}/recebidos?depois=` | o que o servidor já tem (itens paginados por 5000; `partes`) |
+| `POST /{id}/concluir` | fecha o envio → `PENDENTE` (ZIP exige todas as partes: 409 `PARTES_FALTANDO`; pasta aceita `ignorados[]` e `ocultos`); idempotente |
+| `DELETE /{id}` | cancela lote `RECEBENDO` e apaga o que foi enviado |
+
+**Regras** (`lib/ged/importacao/*`):
 
 | Tema | Regra |
 |---|---|
-| Pastas | cada pasta do ZIP é criada se faltar (via `criarPasta()`: exige EDITAR na pasta-pai) ou reaproveitada se já existir com o mesmo nome (sem diferenciar maiúsculas) no mesmo pai; pasta existente **arquivada** gera erro nos itens dela. Pastas novas herdam a ACL do pai (padrão) e recebem a sensibilidade escolhida como padrão. |
-| Documentos | um por PDF, via `criarDocumentoUpload()` (origem `UPLOAD`: antivírus, número `…-DOC-…`, versão 1, ACL do criador, texto indexável/OCR, auditoria `GED_DOCUMENTO_CRIADO`). Título = nome do arquivo sem `.pdf` (`_` vira espaço). Exige EDITAR na pasta de destino. |
-| Extensões | só **PDF** (mesma regra de `validarUploadGed`, fase 1); `.xlsx`, `.docx`, imagens etc. aparecem como "Ignorado". Conteúdo que não é PDF (sem `%PDF-`) vira "Erro". Máx. 25 MB por arquivo. |
-| Duplicados | mesmo **sha256** já existente na **organização** (documento não excluído) → pulado e relatado (também dentro do próprio ZIP e em reenvios da cópia mensal). O número/link do original só é mostrado se o usuário puder ver o documento. Nunca compara com outro cliente. |
-| Lixo | `__MACOSX`, `.DS_Store`, `Thumbs.db`, `desktop.ini`, `~$*` e qualquer item oculto (`.nome`) são ignorados sem aparecer no relatório (só um contador). |
-| Nomes | UTF-8 (flag 11), Info-ZIP `0x7075`, UTF-8 sem flag ou CP850 (Windows pt-BR antigo); normalizados em NFC; `\` vira `/`; segmentos até 120 caracteres. |
-| zip-slip | caminho absoluto, unidade (`C:`), `..` e caracteres de controle → o **item** vira "Erro" (nada é gravado fora da árvore; os arquivos nunca são gravados em disco com o nome do ZIP: só viram registros do banco e chaves `ged/{org}/{ano}/{doc}/v{n}-{sha8}.pdf`). Links simbólicos são ignorados. |
-| zip-bomb | limites em `lib/ged/importacao/limites.ts`: ZIP 300 MB; 10 000 entradas; 3 000 arquivos; 1 000 pastas; 10 níveis; 2 GB descompactados (soma **declarada**); 25 MB por arquivo; razão de compressão ≤ 250 (acima de 1 MiB). Violação global → recusa o ZIP (422 na hora). A inflação é cortada no tamanho declarado (`maxOutputLength`), conferindo CRC e tamanho (declaração mentirosa → erro do item). ZIP64 e arquivos com senha não são suportados (mensagem clara). |
-| Isolamento | tudo via `gedDb(organizacao_id)`; ZIP em `ged/{org}/importacao/{id}.zip` (só o job lê, nunca por URL); `ged_importacao`/`ged_importacao_item` com `organizacao_id` NOT NULL, trigger `ged_mesmo_tenant` (usuário, pasta, tipo, documento), regra em `filtroTabela()`/`DESCRICAO_TABELA`. Lote de outro cliente → 404. Pasta/tipo de destino de outro cliente → recusado. |
+| Pastas/documentos | como na v1: `criarPasta()` (EDITAR no pai) reaproveitando pasta de mesmo nome; `criarDocumentoUpload()` (origem `UPLOAD`, antivírus, número, versão 1, ACL do criador, auditoria). Título = nome sem `.pdf`. |
+| Duplicados | mesmo **sha256** na **organização** (documento não excluído) → pulado e relatado; índice `(organizacao_id, sha256)`; para pasta o sha256 vem do envio e o arquivo nem é relido. Nunca compara com outro cliente. |
+| Extensões / lixo | só **PDF** (e `.zip`, ver abaixo); `__MACOSX`, `.DS_Store`, `Thumbs.db`, `desktop.ini`, `~$*` e ocultos viram só um contador. |
+| **ZIP aninhado** | `.zip` com **pasta irmã de mesmo nome-base** no mesmo diretório (o zip é cópia da pasta) → **ignorado** ("ZIP duplicado da pasta irmã"); sem pasta irmã → **expandido como pasta** com o nome-base do zip, extraído em fluxo para disco temporário (até 512 MB). Aninhamento máx. 2 (ZIP > ZIP > ZIP); além disso o item vira erro. O ZIP aninhado aparece no relatório como "Ignorado" com a nota de expansão. Mesmas guardas; teto de arquivos vale para o lote todo. A regra roda no navegador (não envia o zip duplicado: economiza centenas de MB) **e** no servidor. |
+| zip-slip / zip-bomb | como na v1 (caminho absoluto, `C:`, `..`, controles → erro do item; inflação cortada no tamanho declarado, CRC e tamanho conferidos). Limites em `limites.ts`: ZIP 2 000 000 000 B (cabe em INTEGER); 40 000 entradas; **20 000 arquivos**; 5 000 pastas; 12 níveis; **6 GB** descompactados (por ZIP); 25 MB por arquivo; razão ≤ 250. |
+| ZIP grande | partes ficam em `ged/{org}/importacao/{id}/partes/…`; o job as remonta em **disco temporário** (`GED_IMPORTACAO_TMP`, padrão `<tmp>/ged-importacao`) e lê o diretório central e cada entrada **por posição** (`ZipDisco`); **ZIP64** suportado. Memória: uma parte (8 MB) ou um arquivo (≤ 25 MB) por vez. |
+| Pasta | arquivos em `ged/{org}/importacao/{id}/arq/{item}`; a fila de processamento é o próprio banco (`ged_importacao_item.status = RECEBIDO`, em ordem de caminho): memória constante, retomável. |
+| OCR | a importação **não espera**: `criarDocumentoUpload` já enfileira texto/OCR (PDF com texto indexa, escaneado vai para a fila `ged-ocr`). |
+| Isolamento | tudo via `gedDb(organizacao_id)`; chaves de storage validadas sob `ged/{org}/importacao/`; tabelas `ged_importacao`/`ged_importacao_item` (já com `ged_mesmo_tenant` e regra em `filtroTabela()`); nenhuma tabela nova na v2. |
 
-**Execução**: `POST /api/v1/ged/importacoes` (multipart: `arquivo`, `pasta_id?`, `tipo_id?`, `sensibilidade?`) valida o ZIP (diretório central e limites; 422 se inválido/sem PDF/limite), grava o ZIP e registra o lote `PENDENTE` (no máximo 3 lotes ativos por cliente; 429 acima). O job `ged-importar` (`jobs/ged-importar.ts`) processa em segundo plano: **sem worker no ar**, a própria API processa em segundo plano no processo web (mesmo critério do OCR/texto; `GED_IMPORTACAO_INLINE=true` força). Cada arquivo é independente (falha vira item "Erro" e o lote continua); o processamento é **retomável** (itens já gravados são pulados por `ordem`; um lote `PROCESSANDO` sem sinal de vida por 10 min é retomado). Ao fim o ZIP é **removido** (também em `FALHOU`), o status vira `CONCLUIDA`, `CONCLUIDA_COM_ERROS` ou `FALHOU` e a auditoria registra `GED_IMPORTACAO_CRIADA` / `GED_IMPORTACAO_CONCLUIDA` / `GED_IMPORTACAO_FALHOU`. `GET /api/v1/ged/importacoes` lista os lotes; `GET /api/v1/ged/importacoes/{id}?status=&page=&size=` traz o lote e os itens.
+**Execução**: no máximo 3 lotes ativos por cliente (429 acima). O job `ged-importar` processa em segundo plano (sem worker, o web processa inline; `GED_IMPORTACAO_INLINE=true` força); cada arquivo é independente; progresso persistido por item; lote `PROCESSANDO` sem sinal de vida por 10 min é retomado (itens já gravados são pulados; ZIP aninhado por caminho); ao fim storage e disco temporário são limpos (inclusive em `FALHOU`). Auditoria: `GED_IMPORTACAO_CRIADA` / `_ENVIADA` / `_CANCELADA` / `_CONCLUIDA` / `_FALHOU`. Estados do lote: `RECEBENDO` → `PENDENTE` → `PROCESSANDO` → `CONCLUIDA` | `CONCLUIDA_COM_ERROS` | `FALHOU`; item: `RECEBIDO` → `IMPORTADO` | `DUPLICADO` | `IGNORADO` | `ERRO`.
 
-**Testes**: `tests/unit/ged-importacao-zip.test.ts` (parser, nomes/encoding, zip-slip, lixo, zip-bomb, limites, permissão) e `tests/e2e/t21-ged-importacao.spec.ts` (ZIP gerado em memória contra VAC e AAC: pastas, duplicados, lixo, zip-slip, reenvio só duplica, isolamento e papéis). Limites desta fase: só PDF (outros formatos aguardam a ampliação de `validarUploadGed`), ZIP ≤ 300 MB lido em memória, sem ZIP64.
+**Teste de carga** (local, build de produção, web processando inline): pasta com 2 000 PDFs (210 MB, A/A): envio 15 s (concorrência 4), processamento 122 s, 2 000 importados; ZIP de 400 MB (40 PDFs de 10 MB incompressíveis, 51 partes): envio 2 s, processamento 14 s. RSS do servidor: 330 MB ocioso → ~635 MB (estável) na pasta → pico 733 MB no ZIP (a v1 precisaria > 1,2 GB só para o ZIP).
+
+**Testes**: `tests/unit/ged-importacao-zip.test.ts` e `ged-importacao-v2.test.ts` (ZIP em disco/ZIP64, aninhado, limites, caminhos, união, plano da pasta, fila/pausa/retentativa), E2E `t21-ged-importacao.spec.ts` (ZIP pela tela) e `t24-ged-importacao-pasta.spec.ts` (pasta via `setInputFiles`, retomada, ZIP em partes, ZIP aninhado, união, validações, isolamento). **Limites conhecidos**: ZIP aninhado > 25 MB sem pasta irmã não sobe pela aba "pasta" (use a aba ZIP); só PDF.
 
 ## 13. OCR no servidor (fase 2)
 

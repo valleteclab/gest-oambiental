@@ -2019,6 +2019,7 @@ model GedSequencia {
 // ───────── GED: importação em lote de ZIP (fase 2 – docs/ged.md "Importação em lote") ─────────
 
 enum GedStatusImportacao {
+  RECEBENDO // v2: lote aberto aguardando o envio dos arquivos/partes (o job só pega PENDENTE)
   PENDENTE
   PROCESSANDO
   CONCLUIDA
@@ -2026,7 +2027,13 @@ enum GedStatusImportacao {
   FALHOU
 }
 
+enum GedOrigemImportacao {
+  ZIP // um ZIP (envio simples ou em partes)
+  PASTA // pasta enviada arquivo a arquivo pelo navegador
+}
+
 enum GedStatusItemImportacao {
+  RECEBIDO // v2 (pasta): arquivo já está no storage e aguarda o processamento
   IMPORTADO
   DUPLICADO
   IGNORADO
@@ -2058,6 +2065,11 @@ model GedImportacao {
   com_erro         Int                 @default(0)
   ocultos          Int                 @default(0) // lixo do sistema (__MACOSX, Thumbs.db, ocultos) – não viram item
   pastas_criadas   Int                 @default(0)
+  // v2 (importação de pasta / ZIP em partes)
+  origem           GedOrigemImportacao @default(ZIP)
+  unir_pastas      Boolean             @default(false) // colapsa pastas repetidas consecutivas (A/A → A)
+  partes_total     Int                 @default(0) // ZIP em partes: quantas partes de 8 MB (0 = ZIP único em storage_key)
+  total_esperado   Int                 @default(0) // pasta: nº de arquivos que o navegador pretende enviar (informativo)
 
   itens       GedImportacaoItem[]
   organizacao Organizacao         @relation(fields: [organizacao_id], references: [id])
@@ -2080,12 +2092,14 @@ model GedImportacaoItem {
   pasta_id       String?                 @db.Uuid
   sha256         String?
   tamanho        Int?
+  storage_key    String? // v2 (pasta): arquivo recebido em ged/{org}/importacao/{id}/arq/{item}; some depois de processado
 
   importacao  GedImportacao @relation(fields: [importacao_id], references: [id])
   organizacao Organizacao   @relation(fields: [organizacao_id], references: [id])
 
   @@unique([importacao_id, ordem])
   @@index([organizacao_id, importacao_id, status])
+  @@index([importacao_id, caminho])
   @@map("ged_importacao_item")
 }
 

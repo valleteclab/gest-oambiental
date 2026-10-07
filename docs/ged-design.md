@@ -251,7 +251,13 @@ Decisões (detalhe operacional em `docs/ged.md` §12):
 - **Origem `UPLOAD`** (sem novo valor de enum): o documento é indistinguível de um envio manual, passa pelo antivírus e pelo mesmo `criarDocumentoUpload()` (permissões, número, versão, ACL, texto/OCR, auditoria). A rastreabilidade do lote fica em `ged_importacao_item` (caminho original → documento).
 - **Lote registrado** (`ged_importacao` + `ged_importacao_item`, `organizacao_id` NOT NULL, `ged_mesmo_tenant`, índice `(organizacao_id, sha256)` em `ged_versao_documento` para a deduplicação). Execução assíncrona pelo job `ged-importar` (varredura de pendentes, retomável por `ordem`); ZIP temporário em `ged/{org}/importacao/{id}.zip`, removido ao fim.
 - **Permissão**: capacidade `importar` = GED_ADMIN e GED_GESTOR (cria estrutura em massa). ACL: o documento herda a da pasta de destino; quem importa recebe a ACL de criador, como em qualquer upload.
-- **Fora desta fase**: formatos além de PDF, ZIP64/ZIPs > 300 MB (enviar em partes), metadados por planilha (data/remetente) e importação de pasta direto do navegador.
+- **Fora desta fase**: formatos além de PDF e metadados por planilha (data/remetente).
+
+### Importação v2 – pasta, ZIP grande e ZIP aninhado
+- **Pasta direto do navegador** (`webkitdirectory` + arrastar-e-soltar): lote `RECEBENDO` + um `POST` por arquivo (`/importacoes/{id}/arquivos`), idempotente por caminho, com sha256 conferido; `concluir` fecha o lote. A fila de trabalho é o banco (`ged_importacao_item` `RECEBIDO`), então a memória é constante e a retomada trivial (`GET …/recebidos`).
+- **ZIP grande**: envio em partes de 8 MB (proxies cortam requisições longas), remontagem em disco temporário no job e leitura por posição (`ZipDisco`, ZIP64). Escolha: partes como objetos no storage (e não arquivo local no web) porque web e worker podem ser contêineres diferentes.
+- **ZIP aninhado**: ZIP com pasta irmã de mesmo nome-base = cópia da pasta → ignorado; senão expandido como pasta (aninhamento ≤ 2, extração em fluxo para disco). **Pastas repetidas A/A não são unidas por padrão** (a estrutura é preservada); há opção por lote.
+- Sem tabela nova: colunas `origem`, `unir_pastas`, `partes_total`, `total_esperado` em `ged_importacao`, `storage_key` em `ged_importacao_item`, estados `RECEBENDO`/`RECEBIDO` (migração `20261010120000_ged_importacao_v2`). Descarte automático de lotes `RECEBENDO` com mais de 3 dias.
 
 ## 7. Permissões
 

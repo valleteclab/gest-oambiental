@@ -2,7 +2,7 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
 import JSZip from "jszip";
 import { USUARIOS_GED, aguardarHidratacao, auth, carregarIdsGed, gerarPdf, irPara, itensDe, loginGed, MOTIVO_SEM_IDS, sufixoUnico, tokenCache } from "./ged-helpers";
 
-// T21 – GED fase 2: importação em lote de ZIP (estrutura de pastas do ZIP vira árvore de pastas do GED).
+// T21 – GED fase 2: importação em lote de ZIP (v2: pela tela o ZIP sobe em partes de 8 MB; a API multipart simples continua valendo até 64 MB) (estrutura de pastas do ZIP vira árvore de pastas do GED).
 // Dados: seed `E2E_GED_IDS=1 npm run seed:ged-demo` (clientes fictícios VAC/AAC). ZIPs gerados em memória; cada execução usa sufixo único.
 // Sem worker no ar, a API processa o lote em segundo plano no próprio servidor (mesmo caminho do upload de PDF).
 test.beforeEach(() => {
@@ -57,8 +57,9 @@ test("T21a – o gestor importa um ZIP pela tela: pastas criadas, duplicados, li
 
   await loginGed(page, A.admin);
   await irPara(page, "/ged/importar");
-  await expect(page.getByRole("heading", { name: "Importar ZIP" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Importar pasta ou ZIP" })).toBeVisible();
   await aguardarHidratacao(page);
+  await page.getByRole("tab", { name: "Enviar ZIP" }).click(); // v2: a aba "Enviar pasta" é a padrão
   await page.locator("#arquivo-zip").setInputFiles({ name: `lote-${suf}.zip`, mimeType: "application/zip", buffer });
   await page.locator("#tipo_id").selectOption({ index: 1 });
   await page.getByRole("button", { name: "Importar ZIP" }).click();

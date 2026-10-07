@@ -26,7 +26,7 @@ Um repositório digital de documentos por órgão, com busca pelo conteúdo, tra
 ## 3. Importação em lote (ZIP) – o fluxo de "cópia mensal"
 **Para quê:** subir de uma vez as pastas digitalizadas do mês.
 **Como mostrar (admin.vac@):**
-1. **Importar ZIP** → envie um ZIP com subpastas (ex.: `Licitação/2026/edital.pdf`).
+1. **Importar pasta/ZIP** → na aba **Enviar pasta** (recomendada) escolha ou arraste a pasta do mês (ex.: `LICITAÇÃO-AGOSTO-2026`) sem zipar; confira o resumo (PDFs, ZIPs duplicados que não serão enviados, formatos ignorados) e clique em **Enviar pasta**. Se a internet cair, o lote fica "Aguardando envio": abra-o e escolha a mesma pasta de novo (só o que faltou é enviado). Pacotes já zipados: aba **Enviar ZIP** (até ~2 GB, em partes). Pastas repetidas (A/A) são mantidas; marque "Unir pastas repetidas" só se quiser colapsá-las.
 2. As pastas viram a árvore do GED; acompanhe o andamento e o relatório por arquivo.
 3. Reenvie o mesmo ZIP: tudo aparece como duplicado (comparação por hash).
 **Observação:** hoje só PDF; outros arquivos aparecem como "ignorado".
@@ -84,7 +84,7 @@ Um repositório digital de documentos por órgão, com busca pelo conteúdo, tra
 
 ## Roteiro rápido de apresentação (15 min)
 1. Login e visão geral (1 min)
-2. Importar ZIP de uma pasta digitalizada (3 min)
+2. Importar uma pasta digitalizada (ou um ZIP) (3 min)
 3. Busca pelo conteúdo, incluindo o scan com OCR (3 min)
 4. Trâmite entre dois servidores (2 min)
 5. Assinatura com dois signatários e verificação pública (4 min)
