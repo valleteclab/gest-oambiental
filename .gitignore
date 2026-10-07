@@ -45,3 +45,4 @@ test-results/
 playwright-report/
 !.env.example
 /.next*/
+tests/e2e/.ged-ids.json

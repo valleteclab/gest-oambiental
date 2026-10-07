@@ -42,10 +42,29 @@ export function diasRestantes(ate: Date, uteis = false, feriados: Set<string> = 
 
 export type Semaforo = "verde" | "amarelo" | "vermelho" | "cinza";
 
-export function semaforo(ate: Date | null | undefined, diasAlerta = 5, pausado = false): Semaforo {
+/**
+ * Semáforo do prazo: vermelho (vencido), amarelo (vence em até `diasAlerta`), verde (em dia),
+ * cinza (sem prazo ou relógio pausado). `hoje` e `uteis/feriados` são opcionais (testes / dias úteis).
+ */
+export function semaforo(
+  ate: Date | null | undefined,
+  diasAlerta = 5,
+  pausado = false,
+  hoje: Date = new Date(),
+  uteis = false,
+  feriados: Set<string> = new Set(),
+): Semaforo {
   if (!ate || pausado) return "cinza";
-  const r = diasRestantes(ate);
+  const r = diasRestantes(ate, uteis, feriados, hoje);
   if (r < 0) return "vermelho";
   if (r <= diasAlerta) return "amarelo";
   return "verde";
+}
+
+/** Texto curto para exibir o saldo: "vence hoje", "3 dias", "vencido há 2 dias". */
+export function rotuloDiasRestantes(r: number | null | undefined): string {
+  if (r === null || r === undefined) return "—";
+  if (r === 0) return "vence hoje";
+  if (r > 0) return `${r} dia${r === 1 ? "" : "s"}`;
+  return `vencido há ${-r} dia${r === -1 ? "" : "s"}`;
 }

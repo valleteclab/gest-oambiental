@@ -1,0 +1,435 @@
+# Gestão de Documentos (GED) – guia para desenvolvedores e operadores
+
+Módulo de gestão eletrônica de documentos da plataforma LicenciaGov, habilitado **por cliente** (organização/tenant). Nome exibido ao cliente: **"Gestão de Documentos"**. Sem cobrança/faturamento. Dados de demonstração são sempre **fictícios**.
+
+- Desenho aprovado (fonte da verdade das decisões): [`docs/ged-design.md`](ged-design.md).
+- Roteiro de demonstração da PoC (13 itens do edital, com cliques e logins): [`docs/poc-ged.md`](poc-ged.md).
+- Backup/restauração (inclui a **replicação dos arquivos**): [`docs/backup.md`](backup.md) §4 e [`docs/restore.md`](restore.md).
+
+> Estado: texto escrito para o que existe hoje na árvore. Itens de outras frentes marcados **"conforme entregue"** devem ser conferidos contra o código antes de uma demonstração (a lista de verificação está no fim de `poc-ged.md`).
+
+## 1. Arquitetura em resumo
+
+| Tema | Regra |
+|---|---|
+| Tenant | `Organizacao`. Campo `Organizacao.modulos` (`LICENCIAMENTO`, `GED`; padrão só `LICENCIAMENTO`). Cliente só-GED não tem município. |
+| Papéis | Tabela própria: `GedMembro` + `GedPapel` (`GED_ADMIN`, `GED_GESTOR`, `GED_USUARIO`, `GED_LEITOR`, `GED_AUDITOR`). **Não** usa `Papel`/`UsuarioPapel`: um usuário só-GED tem `Usuario.organizacao_id` e zero `UsuarioPapel`. Matriz em `lib/ged/papeis.ts`. |
+| Sessão | `exigirGed()` (páginas) e `ctxGedApi()` (rotas/ações) em `lib/ged/escopo.ts` → `CtxGed { usuario, organizacao_id, membro, setor_ids, db }`. Exige módulo GED ativo e `GedMembro` ativo. Usuário só de licenciamento → 403 em `/ged`. |
+| Banco | **Único ponto de acesso**: `lib/ged/db.ts` (`gedDb(organizacaoId)`, `ctx.db`). Injeta `organizacao_id` em todo modelo `Ged*`. `lib/db` direto, `$queryRaw` e `$executeRaw` são proibidos no GED (exceto `lib/ged/busca.ts`) – `tests/unit/ged-fontes.test.ts` varre os fontes. Código de **plataforma** (seed, onboarding, `lib/backup`, jobs que descobrem clientes) pode usar `prisma` direto, mas sempre com `organizacao_id` explícito. |
+| Defesa em profundidade | `organizacao_id` NOT NULL e primeiro campo dos índices; triggers `ged_mesmo_tenant()` comparam a organização da linha com a do pai; `tramite`, `comentario` e versões seladas são imutáveis (triggers). RLS do Postgres: **adiado** (ver roadmap). |
+| Storage | `ged/{organizacao_id}/{ano}/{documento_id}/v{n}-{sha8}.pdf`. Cliente nunca envia `storage_key`; `lerArquivoGed(orgId, key)` recusa chave de outro cliente. Download/preview só por `/api/v1/ged/documentos/[id]/arquivo` (autenticado, `Cache-Control: private, no-store`). |
+| Permissões | `podeNoDocumento(ctx, doc, acao)` e `whereGedVisivel(ctx, acao)` (`lib/ged/permissoes.ts`); ACL por usuário ou setor, em documento ou pasta (herança por `caminho_heranca`). Outro cliente → **404**; mesmo cliente sem `VER` → **404**; com `VER` sem a ação → **403**. `GED_ADMIN` administra tudo mas **não vê documento SIGILOSO sem ACL explícita**. |
+| Numeração | `{SIGLA}-DOC-{ano}-{000001}` por cliente (`GedSequencia`, `lib/ged/numeracao.ts`, dentro da transação). |
+| Auditoria | Toda escrita chama `auditarGed()` (→ `auditar()` com `organizacao_id`) na mesma transação. |
+| Assinatura | Assinatura eletrônica **avançada** por signatário (evidências no banco) + **selo PAdES A1 do órgão** no PDF final (`lib/ged/assinaturas`); verificação pública em `/verificar/[codigo]`. Sem carimbo de tempo/LTV na fase 1. |
+| Notificações | Outbox `GedComunicacao` + job `ged-notificar` (e-mail e WhatsApp, com modo simulado). |
+| Busca | `pdftotext` (poppler-utils) → `GedConteudoTexto.tsv` (português, sem acento) – job `ged-extrair-texto`. PDF só de imagem → `SEM_TEXTO` e, na fase 2, OCR no servidor (fila `ged-ocr`, §13) gera uma nova versão pesquisável. |
+
+## 2. Tabelas
+
+Todas com `organizacao_id`, `created_at`, `updated_at` e `@@map("ged_…")`:
+`ged_config`, `ged_membro`, `ged_setor`, `ged_setor_membro`, `ged_tipo_documento`, `ged_pasta`, `ged_documento`, `ged_versao_documento`, `ged_conteudo_texto`, `ged_deteccao_dado_pessoal`, `ged_marcador`, `ged_documento_marcador`, `ged_acl`, `ged_tramite`, `ged_solicitacao_assinatura`, `ged_assinante`, `ged_comentario`, `ged_acesso_log`, `ged_comunicacao`, `ged_preferencia_notificacao`, `ged_sequencia`, `ged_importacao`, `ged_importacao_item`, `ged_exclusao`, `ged_protocolo`, `ged_protocolo_evento`, `ged_protocolo_documento`, `ged_protocolo_assunto`, `ged_compartilhamento`, `ged_compartilhamento_otp`, `ged_compartilhamento_sessao`, `ged_compartilhamento_evento` (§18). Definição: `prisma/schema.prisma` e §2 do desenho.
+
+## 3. Rotas
+
+Páginas (`app/(ged)/ged/…`, todas `force-dynamic`; **conforme entregue** por cada frente): `/ged` (início), `/ged/documentos`, `/ged/documentos/novo`, `/ged/documentos/[id]`, `/ged/editor/novo`, `/ged/editor/[id]`, `/ged/pastas`, `/ged/importar` (+ `[id]`), `/ged/protocolo` (+ `novo`, `[id]`), `/ged/assinaturas`, `/ged/assinaturas/[id]`, `/ged/tramite`, `/ged/compartilhamentos` (+ `novo`, `[id]` – §18), `/ged/logs`, `/ged/minha-conta`, `/ged/minha-conta/notificacoes`, `/ged/admin` (+ `setores`, `marcadores`, `tipos`; membros/canal/certificado/exportação conforme entregue). Públicas (sem login): `/verificar` e `/verificar/[codigo]`, `/verificar/protocolo/[codigo]`, `/protocolo/[slug]` e `/protocolo/[slug]/consulta` (§14), `/compartilhado/[token]` (§18).
+
+API `/api/v1/ged/*` (sempre `rota()` + `ctxGedApi()`; a API **pública** do portal fica em `/api/v1/publico/protocolo/{slug}/…`, sem sessão, §14): `documentos` (+ `/[id]`, `/[id]/excluir`, `/[id]/arquivo`, `arquivar`, `restaurar`, `marcadores`, `dados-pessoais`), `busca`, `pastas` (+ `/[id]`, `/[id]/zip` – §16, `/[id]/excluir` – §17), `importacoes` (+ `/[id]`, `/[id]/excluir`), `exclusoes` (+ `/[id]`, `/[id]/retomar`), `protocolos` (+ `/[id]`, `/[id]/comprovante`), `compartilhamentos` (+ `/[id]`, `/[id]/revogar` – §18), `marcadores`, `tipos`, `setores`, `acl`, `comentarios`, `tramite` (+ `caixa`, `/[id]`), `editor` (+ `/[id]/rascunho|finalizar|reabrir`), e (conforme entregue) `assinaturas`, `logs`, `notificacoes`.
+
+Login: usuário só-GED entra sem escolher órgão e cai em `/ged`; usuário só-GED em `/dashboard` ou `/processos` é redirecionado para `/ged`.
+
+## 4. Jobs (worker `npm run jobs`; fuso `JOBS_TZ`, padrão America/Bahia)
+
+`registrarJobsGed()` (`jobs/ged.ts`) carrega um arquivo por frente:
+
+| Fila | Arquivo | Quando | O que faz |
+|---|---|---|---|
+| `ged-extrair-texto` | `jobs/ged-texto.ts` | varredura a cada `JOBS_GED_TEXTO_MS` (15 s) | extrai texto dos PDFs pendentes de todos os clientes (job com o escopo da organização) |
+| `ged-ocr` | `jobs/ged-ocr.ts` | varredura a cada `JOBS_GED_OCR_MS` (20 s) | OCR (`ocrmypdf`) das versões digitalizadas pendentes de todos os clientes, 1 por vez (§13); worker dedicado com `JOBS_FILAS=ged-ocr` |
+| `ged-importar` | `jobs/ged-importar.ts` | varredura a cada `JOBS_GED_IMPORTAR_MS` (10 s) | processa os lotes de importação de ZIP pendentes (ou parados há > 10 min) de todos os clientes (§12) |
+| `ged-excluir` | `jobs/ged-excluir.ts` | varredura a cada `JOBS_GED_EXCLUIR_MS` (10 s) | exclusão controlada grande (pasta/lote com mais de 100 documentos), em blocos, com progresso e retomada (§17); sem worker o web processa inline (`GED_EXCLUSAO_INLINE=true` força) |
+| `ged-assinaturas` | `jobs/ged-assinaturas.ts` | `JOBS_CRON_GED_ASSINATURAS` (padrão `7 * * * *`) | lembretes e expiração de solicitações |
+| `ged-notificar`, `ged-retencao-logs` | `jobs/ged-notificar.ts` | sob demanda / `JOBS_CRON_GED_RETENCAO` (padrão `40 3 * * *`) | envia a outbox (e-mail/WhatsApp); retenção de logs de acesso |
+| `ged-compartilhamento` | `jobs/ged-compartilhamento.ts` | `JOBS_CRON_GED_COMPARTILHAMENTO` (padrão `*/10 * * * *`) | expira links públicos vencidos (encerra sessões), apaga OTPs e sessões com mais de 1 dia e eventos de links encerrados além da retenção do log de acesso (§18) |
+| `storage-replicar` | `jobs/ged-backup.ts` | `JOBS_CRON_REPLICACAO` (padrão `0 3 * * *`) | copia arquivos novos para o destino de backup (ver §6) |
+| `storage-reconciliar` | `jobs/ged-backup.ts` | `JOBS_CRON_RECONCILIACAO` (padrão `30 4 * * 0`, domingo) | compara banco × destino e copia o que faltar |
+
+## 5. Variáveis de ambiente
+
+| Variável | Uso |
+|---|---|
+| `CHROMIUM_PATH` | PDFs (editor, folha de assinaturas, seed). Container de dev: `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` |
+| `STORAGE_DRIVER`, `STORAGE_LOCAL_DIR`, `S3_*` | storage dos arquivos (local ou S3-compatível) |
+| `GED_IMPORTACAO_TMP` | disco temporário da importação (ZIP remontado; padrão `<tmp>/ged-importacao`; precisa de espaço para o maior ZIP, ~2 GB) |
+| `DATA_KEY` | cifra de telefone/dados pessoais e senha do backup (se não houver `BACKUP_PASSPHRASE`) |
+| `SMTP_URL`, `APP_URL` | e-mail e links das notificações |
+| `EVOLUTION_API_KEY` (e canal em `GedConfig.canal_whatsapp_id`) | WhatsApp (envio; sem pareamento use o modo simulado do canal) |
+| `GED_TEXTO_INLINE=true` | extrai texto no próprio request (sem worker) – desenvolvimento |
+| `GED_OCR_BIN`, `GED_OCR_IDIOMA`, `GED_OCR_JOBS`, `GED_OCR_TIMEOUT_MS`, `GED_OCR_MAX_PAGINAS`, `GED_OCR_MAX_MB` | OCR (§13): binário (padrão `ocrmypdf`), idioma (`por`), `--jobs` (2), tempo máximo por arquivo (15 min), limites de páginas (300) e tamanho (25 MB) |
+| `GED_OCR_INLINE=true`, `GED_OCR_DESATIVADO=true`, `JOBS_FILAS=ged-ocr`, `JOBS_GED_OCR_MS` | OCR no próprio web mesmo havendo worker (dev) · desliga o OCR neste processo · worker dedicado só de OCR · intervalo da varredura |
+| `PROTOCOLO_LIMITE_ENVIO_IP`, `PROTOCOLO_LIMITE_ENVIO_JANELA_MIN`, `PROTOCOLO_LIMITE_ENVIO_PORTAL` | anti-abuso do portal de protocolo (§14): envios por IP na janela (8 em 60 min) e teto por portal (300) |
+| `COMPARTILHAMENTO_LIMITE_VOLUME`, `COMPARTILHAMENTO_LIMITE_OTP_IP`, `JOBS_CRON_GED_COMPARTILHAMENTO` | compartilhamento por link (§18): requisições públicas por IP em 10 min (600), pedidos de código por IP por hora (10) e agenda da manutenção |
+| `GED_NOTIFICAR_LOTE`, `GED_NOTIFICAR_VARREDURA_MS`, `GED_NOTIFICAR_VARREDURA_LIMITE` | vazão do envio de notificações |
+| `JOBS_CRON_REPLICACAO`, `JOBS_CRON_RECONCILIACAO` | agendas da replicação de arquivos |
+| `BACKUP_S3_*`, `BACKUP_ARQUIVOS_DIR`, `BACKUP_ARQUIVOS_PREFIX`, `REPLICACAO_LOTE`, `REPLICACAO_TEMPO_MAX_MIN` | destino e dimensionamento da replicação (docs/backup.md §4) |
+| `SEED_GED_DEMO=true` | `scripts/predeploy.sh` roda `npm run seed:ged-demo` (Railway) |
+| `GED_LIMPAR_ORG`, `GED_LIMPAR_EXECUTAR`, `GED_LIMPAR_CONFIRMAR` | limpeza do conteúdo do GED de um cliente no pré-deploy (§15); sem `EXECUTAR` só dry-run |
+| `E2E_GED_IDS=1`, `E2E_GED_IDS_FILE` | o seed grava o mapa de IDs usado pelo E2E (`tests/e2e/.ged-ids.json`) |
+| `ONBOARD_SENHA` | senha fixa no onboarding (sem `--demo` mantém a troca obrigatória) |
+
+## 6. Onboarding de um cliente GED – passo a passo
+
+> **Sem script:** o dono da plataforma também cadastra o cliente (GED e/ou licenciamento) pelo painel **`/plataforma`** (`docs/plataforma.md`): módulos, setores/tipos padrão, `GedConfig`, administrador como `GED_ADMIN`, senha temporária ou convite por e-mail, suspensão e reativação. Ele usa o **mesmo serviço** do `npm run onboard` (`lib/plataforma/onboarding.ts`); os passos abaixo continuam válidos para clientes com estrutura própria (pastas, marcadores, vários usuários) descrita em JSON. Cliente **suspenso** pelo operador: ninguém entra, `/protocolo/{slug}`, `/verificar/…` e links de compartilhamento respondem 404 e os jobs do GED o ignoram; módulo **GED desativado**: as telas respondem "módulo não contratado" (403) — dados sempre preservados.
+
+1. **Contrato/DPA**: o cliente é o controlador; o prestador é o operador (LGPD). Confirmar com o cliente: setores, tipos de documento, pastas, quem assina e se há certificado e-CNPJ A1.
+2. Crie `prisma/seed/clientes/<cliente>.json` (modelos: `ged-demo-a.json`, `ged-demo-b.json`):
+   ```json
+   {
+     "modulos": ["GED"],
+     "organizacao": { "nome": "…", "sigla": "XYZ", "cnpj": null, "logo_url": null },
+     "ged": {
+       "config": { "assinatura_prazo_dias": 15, "lembrete_dias": [3, 1, 0], "retencao_acesso_log_dias": 730 },
+       "setores": [{ "nome": "Protocolo", "sigla": "PROT" }],
+       "tipos_documento": ["Ofício", "Contrato"],
+       "marcadores": [{ "nome": "Urgente", "cor": "#dc2626" }],
+       "pastas": [{ "caminho": "Documentação da licitação/Editais", "sensibilidade_padrao": "PUBLICO" },
+                  { "caminho": "Pessoal", "herda_acl": false, "sensibilidade_padrao": "SIGILOSO" }],
+       "usuarios": [{ "email": "…", "nome": "…", "cargo": "…", "papel_ged": "GED_ADMIN", "setores": [{ "sigla": "PROT", "chefe": true }] }]
+     }
+   }
+   ```
+   Regras: `modulos` aceita `LICENCIAMENTO` e/ou `GED` (padrão `["LICENCIAMENTO"]`; cliente híbrido informa os dois). Sem `LICENCIAMENTO` não há `municipios`, `usuarios[]` de licenciamento nem `catalogo`. Pastas intermediárias são criadas sozinhas (`"A/B/C"` cria A, A/B e A/B/C); sensibilidade não informada herda a da pasta-pai; `herda_acl` padrão `true`.
+3. Execute: `npm run onboard -- <cliente> [--demo] [--atualizar] [--redefinir-senhas]`.
+   - Idempotente: organização por sigla, usuário por e-mail, setor por sigla, pasta por caminho, tipo/marcador por nome. Nunca apaga.
+   - **Aborta** (sem gravar nada) se um e-mail já pertence a **outra organização** ou é de um **requerente**.
+   - Senhas temporárias impressas **uma única vez** (troca obrigatória no 1º acesso); `ONBOARD_SENHA` fixa a senha; `--demo` usa `Demo@2026licencia` sem troca obrigatória.
+   - Organização que já existe sem o módulo GED só o habilita com `--atualizar` (união de módulos). Pasta existente com `herda_acl` diferente não é alterada pelo onboarding (use a tela de pastas, que recalcula as permissões).
+4. Entre como o administrador do cliente (`/login`, deixe o órgão em branco) e confira `/ged/admin`: setores, membros, canal de WhatsApp, certificado A1 do órgão (para o selo PAdES), exportação.
+5. Entregue as senhas por canal seguro. Registre o cliente no controle de backup: os arquivos entram na replicação automaticamente (prefixo `ged/<organizacao_id>/`).
+6. Módulo desativado (CLI `--atualizar` não remove; use o painel `/plataforma`) ou cliente suspenso depois: dados preservados; as telas respondem "módulo não contratado" / acesso suspenso.
+
+## 7. Contas de demonstração (`npm run seed:ged-demo`)
+
+Senha de todos: `Demo@2026licencia` · e-mails `@gestaodocumentos.demo` · entrar em `/login` com o órgão **em branco**.
+
+| Cliente | Usuário | Papel | Observações |
+|---|---|---|---|
+| **VAC** – Câmara Municipal de Vale das Acácias (DEMO) | `admin.vac@` | GED_ADMIN | não vê o documento SIGILOSO |
+| | `gestor.vac@` | GED_GESTOR | setor Licitações (chefe); 1º signatário do Contrato 001/2026; criador do documento sigiloso |
+| | `servidor1.vac@` | GED_USUARIO | Protocolo (chefe) e Licitações; autor da maioria dos documentos |
+| | `servidor2.vac@` | GED_USUARIO | Financeiro; recebe o Ofício 12/2026; VER no sigiloso por ACL (30 dias) |
+| | `vereador.vac@` | GED_LEITOR | signatário (1º do Termo Aditivo; recusou o Parecer 07/2026) |
+| | `auditor.vac@` | GED_AUDITOR | Controle Interno; lê `/ged/logs`; VER no sigiloso por ACL |
+| **AAC** – Autarquia de Águas do Cerrado (DEMO) | `admin.aac@`, `gestor.aac@`, `servidor.aac@` | ADMIN / GESTOR / USUARIO | documentos com os mesmos títulos de VAC (isolamento) |
+
+Dados criados (idempotente; reconhecidos pelo título dentro do cliente): ver o cabeçalho de `prisma/seed/ged-demo.ts` e o roteiro `docs/poc-ged.md`. Resumo VAC: Ofício 12/2026 (em trâmite), Contrato 001/2026 (aguardando assinaturas, comentários, ACL), Termo Aditivo 001/2026 (reservado para assinar ao vivo), Parecer 07/2026 (assinatura **recusada** com justificativa), Minuta de Ofício 15/2026 (rascunho do editor), Ofício recebido nº 0045 (PDF de imagem, `SEM_TEXTO`), Ata 018/2026 (dados pessoais + anonimização pendente), Processo Administrativo Disciplinar 003/2026 (SIGILOSO em `Pessoal`), Edital/Ata do Pregão 03/2026 (públicos), Empenho, Nota fiscal e Relatório; ACLs de pasta por setor e usuário; logs de acesso e de comunicação de exemplo. Também: **Termo de Cooperação 005/2026**, assinado (vereador → gestor) e **selado** pelo serviço real de assinaturas, com um certificado A1 de **TESTE** ("CERTIFICADO DE TESTE – SEM VALOR LEGAL", e-CNPJ, titular ORGAO) criado para VAC; o código verificador e os IDs vão para `tests/e2e/.ged-ids.json` com `E2E_GED_IDS=1`.
+
+## 8. Como rodar os testes
+
+```bash
+npm run typecheck && npm run lint
+npm test                                   # vitest (tests/unit): ged-*.test.ts, onboarding-ged.test.ts, backup-arquivos.test.ts
+# integração com banco (isolamento via gedDb): tests/integration/ged-isolamento-db.ts; assinaturas: tests/unit/ged-assinaturas.integracao.ts
+
+# E2E (Playwright) – o GED usa dois clientes fictícios (VAC e AAC) e roda no MESMO banco do licenciamento
+npx prisma migrate deploy && npm run seed:demo && npm run onboard -- riachao-das-neves --demo && npm run seed:riachao-demo
+E2E_GED_IDS=1 npm run seed:ged-demo        # precisa de CHROMIUM_PATH (PDFs e selo); grava tests/e2e/.ged-ids.json (não versionar)
+npm run test:e2e                           # suíte inteira (T1–T15 de licenciamento + T16–T23 do GED)
+npx playwright test tests/e2e/t1[6-9]* tests/e2e/t2[0-3]* --project=desktop-chromium   # só o GED
+```
+
+| Spec | O que cobre | Observações |
+|---|---|---|
+| `t16-ged-isolamento` | um cliente por ID direto no outro (páginas, arquivo, versão, comentários, trâmite, ACL, assinaturas, logs) = 404; listas/busca sem vazamento; login/redirecionos | somente leitura (um POST recusado); dois projetos |
+| `t17-ged-documentos` | upload, filtros (título, remetente, data, marcador, pasta), busca por conteúdo com trecho, marcadores (CRUD + aplicar), pastas (criar/subpasta/mover), ACL Ver/Editar/Assinar por usuário, sigiloso × administrador, "dados pessoais" rebaixa a sensibilidade | desktop; dados com sufixo único (re-executável) |
+| `t18-ged-editor-tramite` | editor (autosave → PDF), trâmite completo, linha do tempo imutável, comentários; triggers do banco recusam `UPDATE` | `t18c` usa `DATABASE_URL` (via `tests/e2e/t20-banco.ts`) |
+| `t19-ged-assinaturas` | solicitação sequencial com 2 signatários, ordem, comentário, senha errada, assinar, selo com código, recusa com justificativa, painel por status, PDF selado (PAdES, imagem do QR em cada página, folha de assinaturas), `/verificar/{codigo}` sem login, WebCrypto (íntegro / 1 byte alterado) e código inexistente | a parte "selado" usa o documento do seed |
+| `t22-ged-ocr` | PDF "escaneado" (só imagem, gerado no teste) → OCR real: nova versão `origem=OCR` pesquisável, scan original com o mesmo sha256, assinatura aberta **não** cancelada, busca (API e UI), outro cliente sem acesso; cota mensal de OCR em `/ged/admin/configuracoes` | desktop; precisa de `ocrmypdf`+`tesseract-ocr-por` no servidor (senão `test.skip` com o motivo); sem worker o web roda o OCR em segundo plano |
+| `t23-ged-protocolo` | servidor registra entrada (balcão) e saída pela UI e baixa o comprovante (PDF, CPF/CNPJ mascarado, sha256 dos anexos); andamento e máquina de situações; **cidadão** protocola no portal público (`/protocolo/{slug}`), baixa o comprovante e consulta o andamento só com número + código; e-mails ao interessado (confirmação e mudança de situação, "Enviado em … (horário de Brasília)"); `/verificar/protocolo/{código}` (autêntico, sem dados pessoais, hash conferido no navegador, 1 byte alterado = falha); registro imutável no banco; permissões (Leitor/Auditor só leem); portal desligado/slug inexistente = 404; consulta nunca cruza clientes; honeypot e limite de IP (429); ligar/desligar o portal em Configurações | desktop; precisa de `DATABASE_URL`/`DATA_KEY` no ambiente do teste (e-mails) e de `pdftotext`; o seed cria o portal fictício de VAC |
+| `t27-ged-compartilhamento` | link público + OTP: criar por API e pela UI; página sem código não lista arquivo; OTP errado/limite/bloqueio/reenvio; sessão (cookie, navegador, sair); visualizar/baixar com limite; pasta + ZIP só do conjunto permitido; dinâmico × congelado; revogar derruba a sessão; vencido/revogado/inexistente = mesmo 404; SIGILOSO/dados pessoais/RESTRITO; papéis; isolamento entre clientes; rate limit; UI completa | desktop; precisa de `DATABASE_URL`/`DATA_KEY` no teste e do **servidor com `CANAIS_ENVIO_SIMULADO=true`** (o código do OTP é lido do banco por `tests/e2e/t20-banco.ts`); o seed de VAC já tem canal de WhatsApp fictício |
+| `t20-ged-notificacoes-logs` | e-mail do trâmite (assunto, link, "Enviado em dd/mm/aaaa às HH:mm (horário de Brasília)", sem anexo), WhatsApp simulado com opt-in por código, `/ged/logs` (3 abas, filtros, CSV, 403 para Leitor/Usuário) | no E2E não há worker: `tests/e2e/t20-banco.ts` executa a mesma `processarComunicacao()` direto no banco (precisa de `DATABASE_URL` e `DATA_KEY` iguais aos do servidor; sem elas os testes de envio se pulam) |
+
+Dicas de robustez (helpers em `tests/e2e/ged-helpers.ts`): sem `networkidle`; `aguardarHidratacao()` espera o React hidratar (os `FormGed` só funcionam depois); `submeter()` repete o clique uma vez; formulários que **somem** depois de salvar (ciência, devolução, arquivamento, enviar para assinatura) são conferidos pelo resultado (linha do tempo, painel), não pela mensagem; `window.confirm` é aceito por `aceitarDialogos()`.
+
+**CI** (`.github/workflows/ci.yml`, job E2E): instala o Chromium do Playwright e define `CHROMIUM_PATH` **antes** dos seeds; instala `poppler-utils` (pdftotext, busca por conteúdo de upload) e `ocrmypdf tesseract-ocr tesseract-ocr-por` (t22: OCR real; sem eles o spec se pula); roda `seed:demo`, o onboarding/seed de Riachão e `E2E_GED_IDS=1 npm run seed:ged-demo`; só então faz o build e sobe o servidor. Sem `.ged-ids.json` os specs t16–t20 se pulam com a instrução no motivo. O seed do GED não altera os dados do licenciamento (organizações VAC/AAC são só-GED, sem municípios, e os usuários `@gestaodocumentos.demo` não têm papel de licenciamento).
+
+Banco isolado para trabalho paralelo: `CREATE DATABASE licenciagov_ged_x` + `DATABASE_URL=… npx prisma migrate deploy` (linhas imutáveis não podem ser apagadas).
+
+## 9. Como adicionar uma tabela ao GED
+
+1. Modelo `Ged…` no `schema.prisma` com `organizacao_id String @db.Uuid` (NOT NULL), relação para `Organizacao` e **índice com `organizacao_id` na frente**.
+2. Migração: trigger `ged_mesmo_tenant()` para cada FK para outra tabela do GED/usuário; trigger de imutabilidade se for trilha (`bloqueia_alteracao()`).
+3. Regra em `filtroTabela()` (`lib/export/exportar.ts`) e descrição em `DESCRICAO_TABELA`; coluna `tsv`/binária fora da exportação.
+4. Acesso **somente** via `ctx.db`/`gedDb()`; escrita com `auditarGed()` na mesma transação.
+5. `tests/unit/ged-schema.test.ts` falha se faltar `organizacao_id`, índice ou regra de exportação. Inclua a tabela em `TABELAS_APAGADAS` ou `TABELAS_PRESERVADAS` de `scripts/ged/plano-limpeza.ts` (o teste `ged-limpeza` falha sem isso; a ordem precisa respeitar as FKs). Se a tabela tiver arquivo no storage, inclua a chave na replicação (`inventarioDesde`/`inventarioCompleto` em `lib/backup/arquivos.ts`) e na exportação de anexos.
+
+## 10. Limites conhecidos (fase 1)
+
+- Upload somente **PDF**, até **25 MB**; cota por cliente em `GedConfig.cota_bytes` (aplicação conforme entregue).
+- PDF só de imagem só fica pesquisável depois do OCR (§13), que exige worker com `ocrmypdf`; sem ele o estado é "OCR indisponível".
+- Assinatura por signatário é eletrônica avançada; o selo PAdES é do **órgão** (e-CNPJ A1). Sem certificado cadastrado, o PDF recebe aviso de "assinatura eletrônica avançada". Sem carimbo de tempo RFC 3161 nem LTV. Certificado da PoC é de teste, sem valor legal.
+- Validade jurídica do digitalizado (Decreto 10.278/2020) a confirmar com a assessoria jurídica do cliente.
+- Replicação de arquivos cobre `Anexo`, `DocumentoOficial` e `GedVersaoDocumento`. **Não** cobre `ReuniaoConselho.ata_pdf_key`, `MensagemConversa.midia_key`, `Cobranca.comprovante_key` nem os ZIPs de `Exportacao` (transitórios).
+- Residência dos dados: a Railway não tem região no Brasil – risco de transferência internacional a tratar com o cliente.
+- WhatsApp: provedor não oficial tem risco de banimento; a API oficial exige templates. Ter o modo simulado como plano B.
+- `ged_acesso_log` cresce rápido: retenção por `GedConfig.retencao_acesso_log_dias` (job `ged-retencao-logs`); particionar por mês se passar de ~50 milhões de linhas.
+
+## 11. Roadmap
+
+~~OCR (fila `ged-ocr`, `ocrmypdf`, nova versão `origem=OCR`)~~ (entregue, §13) · ~~importação de pasta/ZIP~~ (entregue, §12) · portal do cliente para documentos publicados (exposição pública só de derivados anonimizados, `whereExposicaoPublica()`; o **protocolo online** já existe, §14) · fechamento mensal da digitalização · motor de anonimização (detecção de CPF/CNPJ/e-mail/telefone e IA opcional; o modelo já existe) · **hardening com RLS** (role `NOSUPERUSER NOBYPASSRLS`, role separado para migração, `set_config('app.org', …, true)` por transação) · assinatura ICP-Brasil por signatário (PAdES incremental) · carimbo de tempo/LTV · lixeira e retenção de documentos · replicação com versionamento/Object Lock no bucket de backup.
+
+## 12. Importação em lote: pasta e ZIP (fase 2, v2)
+
+Para quem digitaliza no Windows, organiza em pastas (licitação, financeiro, contabilidade…) e envia cópias mensais: a **estrutura de pastas vira a árvore de pastas do GED**. Quem pode: **GED_ADMIN e GED_GESTOR** (`podeImportarGed`). A v2 aguenta pacotes de mais de 1 GB e milhares de arquivos.
+
+**Tela `/ged/importar` (menu "Importar pasta/ZIP")**, duas abas:
+- **Enviar pasta (recomendado)**: escolha a pasta (input `webkitdirectory`) ou **arraste** a pasta (recursivo, `webkitGetAsEntry`), sem zipar; o caminho relativo é preservado. Antes de enviar a tela mostra o **resumo**: nº de arquivos e tamanho, PDFs, ZIPs a abrir, ZIPs duplicados (não enviados), ignorados por formato, ocultos. Envio arquivo a arquivo com **concorrência 4**, barra geral + por arquivo, **retentativa** (5x, espera crescente) por arquivo, **pausar/retomar**, cancelar. sha256 calculado no navegador (`crypto.subtle`) e conferido no servidor.
+- **Enviar ZIP**: até ~2 GB, em **partes de 8 MB** (`PUT …/partes/{n}`, 6 retentativas, concorrência 2) porque proxies cortam requisições longas.
+- Em ambas: pasta de destino, tipo, sensibilidade e a opção **"Unir pastas repetidas (A/A → A)"** (desligada por padrão: a estrutura é preservada exatamente como veio; ligada, pastas consecutivas de mesmo nome, sem diferenciar maiúsculas, viram uma; o relatório mantém o caminho original).
+- **Retomada**: um lote cujo envio foi interrompido fica **"Aguardando envio"** (`RECEBENDO`); em `/ged/importar/{id}` escolha de novo a mesma pasta/ZIP e só o que falta é enviado (compara caminho + tamanho + sha256 com `GET …/recebidos`; ZIP: partes já recebidas). Lote nunca finalizado é descartado após 3 dias (job); só ocupa "vaga" por 2 h sem atividade.
+- Relatório (`/ged/importar/{id}`): contadores (arquivos, importados, duplicados, ignorados, erros, pastas criadas, tamanho importado/total), lista **filtrável e paginada** por situação e **CSV** (`?formato=csv`). Admin vê todos os lotes do cliente; Gestor só os seus.
+
+**API** (`/api/v1/ged/importacoes`, todas com `ctxGedApi` + `importar`; lote de outro cliente/de outro usuário = 404):
+
+| Rota | Função |
+|---|---|
+| `POST /` (multipart) | ZIP pequeno (até 64 MB) de uma vez; vira `PENDENTE` |
+| `POST /pasta` (JSON) | abre lote de pasta (`RECEBENDO`): `nome, total_esperado, pasta_id, tipo_id, sensibilidade, unir_pastas` |
+| `POST /{id}/arquivos` | UM arquivo (corpo = bytes; cabeçalhos `X-Caminho` percent-encoded, `X-Sha256`); idempotente por caminho; só PDF/ZIP guardados (outros = "Ignorado"; oculto/lixo nem vira item; `..` = "Erro"; > 25 MB = "Erro" sem guardar) |
+| `POST /zip-partes` (JSON) | inicia ZIP em partes: `nome_arquivo, tamanho` → `partes_total, tamanho_parte` |
+| `PUT /{id}/partes/{n}` | parte n (tamanho exato; idempotente; ordem livre) |
+| `GET /{id}/recebidos?depois=` | o que o servidor já tem (itens paginados por 5000; `partes`) |
+| `POST /{id}/concluir` | fecha o envio → `PENDENTE` (ZIP exige todas as partes: 409 `PARTES_FALTANDO`; pasta aceita `ignorados[]` e `ocultos`); idempotente |
+| `DELETE /{id}` | cancela lote `RECEBENDO` e apaga o que foi enviado |
+
+**Regras** (`lib/ged/importacao/*`):
+
+| Tema | Regra |
+|---|---|
+| Pastas/documentos | como na v1: `criarPasta()` (EDITAR no pai) reaproveitando pasta de mesmo nome; `criarDocumentoUpload()` (origem `UPLOAD`, antivírus, número, versão 1, ACL do criador, auditoria). Título = nome sem `.pdf`. |
+| Duplicados | mesmo **sha256** na **organização** (documento não excluído) → pulado e relatado; índice `(organizacao_id, sha256)`; para pasta o sha256 vem do envio e o arquivo nem é relido. Nunca compara com outro cliente. |
+| Extensões / lixo | só **PDF** (e `.zip`, ver abaixo); `__MACOSX`, `.DS_Store`, `Thumbs.db`, `desktop.ini`, `~$*` e ocultos viram só um contador. |
+| **ZIP aninhado** | `.zip` com **pasta irmã de mesmo nome-base** no mesmo diretório (o zip é cópia da pasta) → **ignorado** ("ZIP duplicado da pasta irmã"); sem pasta irmã → **expandido como pasta** com o nome-base do zip, extraído em fluxo para disco temporário (até 512 MB). Aninhamento máx. 2 (ZIP > ZIP > ZIP); além disso o item vira erro. O ZIP aninhado aparece no relatório como "Ignorado" com a nota de expansão. Mesmas guardas; teto de arquivos vale para o lote todo. A regra roda no navegador (não envia o zip duplicado: economiza centenas de MB) **e** no servidor. |
+| zip-slip / zip-bomb | como na v1 (caminho absoluto, `C:`, `..`, controles → erro do item; inflação cortada no tamanho declarado, CRC e tamanho conferidos). Limites em `limites.ts`: ZIP 2 000 000 000 B (cabe em INTEGER); 40 000 entradas; **20 000 arquivos**; 5 000 pastas; 12 níveis; **6 GB** descompactados (por ZIP); 25 MB por arquivo; razão ≤ 250. |
+| ZIP grande | partes ficam em `ged/{org}/importacao/{id}/partes/…`; o job as remonta em **disco temporário** (`GED_IMPORTACAO_TMP`, padrão `<tmp>/ged-importacao`) e lê o diretório central e cada entrada **por posição** (`ZipDisco`); **ZIP64** suportado. Memória: uma parte (8 MB) ou um arquivo (≤ 25 MB) por vez. |
+| Pasta | arquivos em `ged/{org}/importacao/{id}/arq/{item}`; a fila de processamento é o próprio banco (`ged_importacao_item.status = RECEBIDO`, em ordem de caminho): memória constante, retomável. |
+| OCR | a importação **não espera**: `criarDocumentoUpload` já enfileira texto/OCR (PDF com texto indexa, escaneado vai para a fila `ged-ocr`). |
+| Isolamento | tudo via `gedDb(organizacao_id)`; chaves de storage validadas sob `ged/{org}/importacao/`; tabelas `ged_importacao`/`ged_importacao_item` (já com `ged_mesmo_tenant` e regra em `filtroTabela()`); nenhuma tabela nova na v2. |
+
+**Execução**: no máximo 3 lotes ativos por cliente (429 acima). O job `ged-importar` processa em segundo plano (sem worker, o web processa inline; `GED_IMPORTACAO_INLINE=true` força); cada arquivo é independente; progresso persistido por item; lote `PROCESSANDO` sem sinal de vida por 10 min é retomado (itens já gravados são pulados; ZIP aninhado por caminho); ao fim storage e disco temporário são limpos (inclusive em `FALHOU`). Auditoria: `GED_IMPORTACAO_CRIADA` / `_ENVIADA` / `_CANCELADA` / `_CONCLUIDA` / `_FALHOU`. Estados do lote: `RECEBENDO` → `PENDENTE` → `PROCESSANDO` → `CONCLUIDA` | `CONCLUIDA_COM_ERROS` | `FALHOU`; item: `RECEBIDO` → `IMPORTADO` | `DUPLICADO` | `IGNORADO` | `ERRO`.
+
+**Teste de carga** (local, build de produção, web processando inline): pasta com 2 000 PDFs (210 MB, A/A): envio 15 s (concorrência 4), processamento 122 s, 2 000 importados; ZIP de 400 MB (40 PDFs de 10 MB incompressíveis, 51 partes): envio 2 s, processamento 14 s. RSS do servidor: 330 MB ocioso → ~635 MB (estável) na pasta → pico 733 MB no ZIP (a v1 precisaria > 1,2 GB só para o ZIP).
+
+**Testes**: `tests/unit/ged-importacao-zip.test.ts` e `ged-importacao-v2.test.ts` (ZIP em disco/ZIP64, aninhado, limites, caminhos, união, plano da pasta, fila/pausa/retentativa), E2E `t21-ged-importacao.spec.ts` (ZIP pela tela) e `t24-ged-importacao-pasta.spec.ts` (pasta via `setInputFiles`, retomada, ZIP em partes, ZIP aninhado, união, validações, isolamento). **Limites conhecidos**: ZIP aninhado > 25 MB sem pasta irmã não sobe pela aba "pasta" (use a aba ZIP); só PDF.
+
+## 13. OCR no servidor (fase 2)
+
+PDFs digitalizados (só imagem) ficavam em `SEM_TEXTO` e a busca não os achava. Agora o servidor reconhece o texto com **`ocrmypdf`** (Tesseract, português) e o documento passa a ser pesquisável. Código em `lib/ged/ocr/*` (`decisao.ts` regras puras · `executar.ts` processo externo · `servico.ts` fila/cota/execução · `reprocessar.ts` ação do usuário) e fila `ged-ocr` (`jobs/ged-ocr.ts`).
+
+**Fluxo**
+1. Upload (ou importação de ZIP) → `ged-extrair-texto` roda `pdftotext`. Se o texto é escasso (< ~25 caracteres/página no total, **ou** metade ou mais das páginas sem texto – PDF misto) a versão recebe `ocr_status=PENDENTE`. Imagens PNG/JPG/TIFF sempre precisam de OCR (o upload do GED ainda só aceita PDF; a regra já cobre imagens).
+2. O worker (varredura de 20 s, `singletonKey` = versão, fila com `policy: short`) reivindica a versão (`PENDENTE → PROCESSANDO`, atômico), confere limites e **cota**, e executa `ocrmypdf -l por --skip-text --jobs 2 --output-type pdf` (timeout 15 min; `--skip-text` preserva as páginas que já têm texto). `PROCESSANDO` há mais de 30 min (worker caiu) volta a `PENDENTE`.
+3. Sucesso → **nova versão** `origem=OCR` (`derivada_de_id` = scan; torna-se a versão atual), com o texto em `GedConteudoTexto` (`metodo=OCR`, alimenta o `tsvector` existente) e `texto_status=EXTRAIDO`. A versão original **permanece** (mesmo sha256, baixável); a base fica `ocr_status=CONCLUIDO`. Auditoria `GED_OCR_CONCLUIDO` (com os hashes das duas versões).
+4. Sem texto reconhecido, limites estourados ou falha do processo → `ERRO` (com motivo curto); binário ausente → `OCR_INDISPONIVEL`; cota estourada → `COTA_EXCEDIDA`. O upload nunca falha por causa do OCR.
+
+**Regras de segurança do documento**
+- A versão OCR **não cancela** solicitação de assinatura aberta (`OCR` não está em `ORIGENS_QUE_CANCELAM_ASSINATURA`: só acrescenta camada de texto; a solicitação continua apontando para a versão que foi enviada à assinatura).
+- OCR **nunca** roda em versão selada, em documento `ASSINADO`/`ARQUIVADO`, nem sobre versões `OCR/SELO/EDITOR/ANONIMIZACAO` (sem laços). Se o documento recebeu outra versão ou foi assinado enquanto o OCR rodava, o resultado é descartado.
+- Autor da versão OCR: o autor da versão-base (ou um `GED_ADMIN` ativo); a auditoria marca `automatico: true`.
+- Tudo via `gedDb(organizacao_id)`; sem SQL cru; colunas novas em tabelas já cobertas pela exportação (`GedVersaoDocumento`, `GedConfig`).
+
+**Cota** – `GedConfig.ocr_cota_paginas_mes` (padrão **5000** páginas/mês por cliente; vazio = sem limite; 0 = OCR desligado), editável por GED_ADMIN em `/ged/admin/configuracoes`, que também mostra o uso do mês. O consumo é a soma de `paginas` das versões `OCR` criadas no mês (fuso de Brasília); tentativas que falham não consomem. Ao estourar: `COTA_EXCEDIDA`, aviso na ficha do documento e auditoria `GED_OCR_COTA_EXCEDIDA`.
+
+**Interface** – na tabela de versões da ficha do documento: **OCR pendente / processando / concluído / indisponível / cota excedida / falhou** (`data-testid="ocr-status"`). **Reprocessar OCR** (GED_ADMIN e GED_GESTOR com EDITAR) aparece quando a versão atual está em `ERRO`, `OCR_INDISPONIVEL`, `COTA_EXCEDIDA` ou é um scan antigo (`SEM_TEXTO` sem tentativa de OCR); auditoria `GED_OCR_REPROCESSADO`. A API de documento (`GET /api/v1/ged/documentos/:id`) devolve `ocr_status` por versão.
+
+**Operação**
+- O OCR é pesado (CPU/memória): rode-o em **worker dedicado** (`JOBS_FILAS=ged-ocr npm run jobs` – só essa fila, `application_name` diferente, sem os agendamentos gerais) e, no worker geral, `GED_OCR_DESATIVADO=true` se ele não deve concorrer. Importações grandes enfileiram muitos scans: um worker processa um por vez.
+- Imagem: `ocrmypdf ghostscript tesseract-ocr tesseract-ocr-por qpdf unpaper` instalados no estágio `worker` de `Dockerfile`/`Dockerfile.worker` (**+400–600 MB**; o estágio `app` não os carrega). Veja `deploy/railway.md`.
+- Sem worker e **com** o binário no próprio web (dev/CI), o OCR roda em segundo plano no processo web; sem o binário a versão fica `PENDENTE` até um worker pegá-la. `GED_OCR_BIN` aponta outro executável (ex.: wrapper).
+- Limites: 300 páginas e 25 MB por arquivo (`GED_OCR_MAX_PAGINAS`, `GED_OCR_MAX_MB`). Não otimiza nem converte para PDF/A (`--output-type pdf`).
+
+**Testes**: `tests/unit/ged-ocr.test.ts` (decisão, elegibilidade, cota, status, chamada do binário com `spawn` mockado, timeout) e `tests/e2e/t22-ged-ocr.spec.ts` (OCR real).
+
+## 14. Protocolo (livro de entrada, saída e interno; portal do cidadão)
+
+Hoje o GED numera documentos (`VAC-DOC-2026-…`) e tramita. O **protocolo** acrescenta o *ato de protocolar* e o *comprovante*: um **livro por cliente** com três livros — **ENTRADA** (recebido de pessoa/órgão externo: balcão ou portal), **SAÍDA** (enviado a externo) e **INTERNO** (entre setores/pessoas) — e um **portal público** em que o cidadão ou fornecedor entrega documentos sem login. Código em `lib/ged/protocolo/*`; desenho e decisões em `docs/ged-design.md` §12.
+
+**Tabelas** (`organizacao_id` NOT NULL, primeiro campo dos índices, trigger `ged_mesmo_tenant`, regras em `filtroTabela()`/`DESCRICAO_TABELA`): `ged_protocolo` (o registro), `ged_protocolo_evento` (andamento), `ged_protocolo_documento` (anexos) e `ged_protocolo_assunto` (assuntos do portal). Também: `organizacao.slug_publico` (único), `ged_config.protocolo_*` (portal ligado, orientação, limites, responsável) e `ged_comunicacao.protocolo_id` (aviso por e-mail ao interessado; `usuario_id` passou a ser opcional).
+
+| Tema | Regra |
+|---|---|
+| Numeração | anual, sequencial **por cliente e por livro**, dentro da transação (`proximoValorSequencia`, concorrente-safe): `PROT-ENT-2026-000123`, `PROT-SAI-2026-000045`, `PROT-INT-2026-000007`. O ano vira à meia-noite de Brasília. O número é único só **dentro do cliente** (dois clientes têm `PROT-ENT-2026-000001`): toda consulta é escopada pela organização. |
+| Imutabilidade | trigger `ged_protocolo_imutavel`: número, data, interessado, assunto, destino original e códigos **não mudam** e o protocolo **não se exclui**; só variam `situacao`, posse atual (`setor_atual_id`/`responsavel_id`), `concluido_em` e o comprovante (preenchido **uma vez**). Andamento (`ged_protocolo_evento`) e anexos (`ged_protocolo_documento`) são só-INSERT (`bloqueia_alteracao`). |
+| Situações | RECEBIDO → EM_ANÁLISE / ENCAMINHADO → RESPONDIDO / DEVOLVIDO / INDEFERIDO → ARQUIVADO (terminal). Ações: iniciar análise, encaminhar, responder, arquivar, devolver, indeferir (`regras.ts`: `ACOES_POR_SITUACAO`). Devolver e indeferir exigem **justificativa**; responder, devolver e indeferir **mostram o texto ao interessado**. |
+| Dados pessoais | nome, CPF/CNPJ, e-mail e telefone do interessado **cifrados** (`cifrar/decifrar`), busca por `hashBusca` (CPF/CNPJ). Anexos recebidos do público nascem como documentos **restritos**, com "contém dados pessoais" e anonimização pendente. Não há busca por nome (a coluna é cifrada). |
+| Permissões | registrar/movimentar = Admin, Gestor e Usuário (`protocolar`); ver o livro todo = Admin, Gestor e Auditor (`protocolo_geral`); Usuário e Leitor veem só o que os envolve (autor, responsável, destinatário ou setor envolvido); Leitor e Auditor **nunca escrevem**. Admin/Gestor movimentam qualquer um; Usuário, os que o envolvem. Outro cliente ou sem acesso = 404. Abrir o **anexo** segue a permissão do documento (`whereGedVisivel`/sigilo): sem `VER`, a ficha mostra "Anexo restrito". |
+| Anexos | cada PDF vira `GedDocumento` (`criarDocumentoNaTransacao`, mesma transação do protocolo). Havendo destino (entrada/interno), cada documento segue ao setor/pessoa pelo **trâmite** existente (`registrarTramite`); quem não tem `TRAMITAR` no documento (sigilo) não o move, e o protocolo muda de posse mesmo assim. |
+| Comprovante | PDF (`htmlParaPdf`) com brasão/logo, número, data/hora de Brasília, interessado com **CPF/CNPJ mascarado**, assunto, anexos com **sha256**, código de consulta (entrada com portal ativo) e **QR** para `/verificar/protocolo/{código}`. Assinado em **PAdES com o certificado A1 do órgão** quando houver (`certificadoDoCliente`/`assinarComCertificado`); senão, assinatura eletrônica simples (o QR e o código conferem). Guardado como `GedDocumento` de origem `COMPROVANTE` (backup/exportação/OCR/texto ficam por conta do que já existe); o hash final fica no protocolo e **não muda mais**. Falha do Chromium não impede o protocolo: o comprovante pode ser emitido depois ("Emitir comprovante" na ficha). |
+| Códigos | `codigo_consulta` (o cidadão acompanha com número + código) e `codigo_verificacao` (QR) são **diferentes**, aleatórios (12 caracteres de alfabeto sem ambiguidade, 60 bits), formato `XXXX-XXXX-XXXX`; o de verificação é único na plataforma. |
+
+### Telas internas
+
+`/ged/protocolo` (livro: filtros por livro, ano, situação, setor, "só os meus/do meu setor" e busca por número, assunto, descrição ou CPF/CNPJ), `/ged/protocolo/novo` (entrada no balcão, saída ou interno; vários PDFs) e `/ged/protocolo/[id]` (ficha, andamento, anexos, comprovante e ações). API: `GET/POST /api/v1/ged/protocolos` (JSON, ou multipart com `dados` + `arquivos`), `GET/POST /api/v1/ged/protocolos/{id}` (ficha; ação `ANALISAR|ENCAMINHAR|RESPONDER|ARQUIVAR|DEVOLVER|INDEFERIR`), `GET/POST …/{id}/comprovante` (baixa/emite). Toda escrita grava `auditarGed` (`GED_PROTOCOLO_*`); o download do comprovante entra no log de acesso do documento.
+
+### Portal do cidadão (público, sem login)
+
+Desligado por padrão. O GED_ADMIN liga em **`/ged/admin/configuracoes` → "Protocolo online"**: endereço público (`slug`, `/protocolo/<slug>`, único na plataforma), responsável que guarda o que chega, texto de orientação, máximo de arquivos (0–10) e tamanho por arquivo (1–25 MB) e a lista de **assuntos** (cada assunto → setor de destino, tipo de documento, prioridade e prazo de resposta; o cidadão escolhe o assunto, nunca o destino). Para ligar é preciso slug, responsável e ao menos um assunto ativo; o setor de cada assunto precisa de participante apto a receber.
+
+- **`/protocolo/[slug]`**: formulário (nome, CPF/CNPJ, e-mail, telefone opcional, assunto, descrição, PDFs, **aceite de LGPD**). Ao enviar: cria o protocolo ENTRADA, mostra número + código de consulta, oferece o **comprovante em PDF**, e enfileira o e-mail de confirmação (sem anexo, só o link de consulta; "Enviado em dd/mm/aaaa às HH:mm (horário de Brasília)"). Os documentos nascem do **responsável** configurado.
+- **`/protocolo/[slug]/consulta`**: número + código → situação e andamento **públicos** (rótulos, datas e as mensagens de resposta/devolução/indeferimento), sem dados pessoais, anexos ou despachos internos. Erros são genéricos ("Confira o número e o código").
+- **E-mails ao interessado**: confirmação do registro e cada mudança de situação (menos "iniciar análise"), pela mesma caixa de saída do GED (`GedComunicacao` com `protocolo_id`; job `ged-notificar`); aparecem em `/ged/logs` como "Interessado (protocolo)".
+- **`/verificar/protocolo/[código]`** (QR do comprovante): órgão, número, livro, data, situação e **conferência do hash** (servidor + arquivo escolhido no navegador, nada é enviado); nunca assunto, interessado ou anexos. Código inexistente = "NÃO ENCONTRADO" (igual para qualquer formato inválido).
+- **API pública** `/api/v1/publico/protocolo/{slug}` (`GET` dados do portal, `POST` multipart envia), `…/consulta` (`POST {numero,codigo}`) e `…/comprovante?numero=&codigo=` (PDF), com validação zod.
+
+**Isolamento (requisito nº 1)**: o slug resolve **uma** organização (`resolverSlugPortal`, só devolve o id); tudo depois passa por `gedDb(orgId)`. Slug inexistente, mal formado **ou portal desligado** = 404 idêntico; número de um cliente com o código de outro não consulta nada; o código de consulta não serve de código de verificação. Páginas e API públicas saem com `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow` e `Referrer-Policy: no-referrer` (`next.config.ts`); acesso liberado, indexação não.
+
+**Anti-abuso** (`lib/ged/protocolo/limites.ts`, mesmo mecanismo do login): **honeypot** (`website`, fora da tela; preenchido = sucesso genérico sem criar nada), **limite de envios por IP** (8/hora; toda tentativa conta, inclusive a inválida) e **teto por portal** (300/hora), limite de **consultas** (falhas por IP e por protocolo-alvo → 429), limites de tamanho/quantidade de arquivos, apenas PDF (`validarUploadGed`, antivírus se configurado) e mensagens genéricas. Em memória por processo, como o login; atrás de proxy o IP vem de `X-Forwarded-For`.
+
+**Testes**: `tests/unit/ged-protocolo.test.ts` (numeração, máquina de situações, validação do formulário público e do registro, máscara de CPF/CNPJ, cifra, e-mail e comprovante em HTML, rate limit, permissões), `ged-schema` (4 modelos novos) e E2E `t23-ged-protocolo` + `t16` (protocolo de A inacessível a B).
+
+## 15. Operação: limpar o conteúdo do GED de um cliente
+
+A exclusão do dia a dia (documento, pasta, lote de importação) tem tela e API próprias: ver **§17**. Esta seção é a ferramenta de **operação** para zerar um cliente inteiro (sem tela). As trilhas são imutáveis por trigger (`ged_tramite`, `ged_comentario`, versões seladas, assinantes decididos, protocolo e andamento). Para **zerar um ambiente de teste/demonstração** (ex.: "Câmara Municipal de Vale das Acácias (DEMO)", sigla `VAC`) existe a ferramenta `scripts/ged/limpar-organizacao.ts`:
+
+```bash
+npm run ged:limpar -- VAC                                  # DRY-RUN (padrão): só imprime contagens por tabela Ged* e nº/tamanho de arquivos em ged/{org}/
+npm run ged:limpar -- VAC --executar --confirmar=VAC       # apaga (a confirmação precisa ser a sigla exata da organização)
+```
+
+`<sigla|id>`: sigla (sem diferenciar maiúsculas) ou uuid; sigla que case com mais de uma organização, organização inexistente ou **sem o módulo `GED`** abortam sem alterar nada. Uma organização por execução.
+
+**Apaga** (só linhas com `organizacao_id` = a organização; filhos antes dos pais): importações e itens, protocolos (registro, andamento, anexos), comunicações, assinantes e solicitações de assinatura, detecções de dados pessoais, conteúdo de texto, versões, documentos, marcadores e vínculos, ACLs, trâmites, comentários, logs de acesso, **pastas** e contadores de numeração (`GedSequencia`: os próximos números voltam a 000001); e **todos os arquivos** do storage sob `ged/{organizacao_id}/` (inclusive resíduos de importação).
+**Preserva**: membros, setores e participantes, configuração (`GedConfig`, inclusive o portal de protocolo), tipos de documento, assuntos de protocolo, preferências de notificação, canais, certificado digital, usuários, o licenciamento, **o `log_auditoria`** (a limpeza grava `GED_LIMPEZA_ORGANIZACAO` com as contagens e `GED_LIMPEZA_ARQUIVOS`) e todos os outros clientes.
+
+**Como contorna as travas:** dentro de **uma** transação, `SET LOCAL session_replication_role = 'replica'` (local à transação; não persiste nem afeta outras conexões; exige superusuário ou, no PG ≥ 15, privilégio `SET` no parâmetro – o usuário `postgres` do Railway é superusuário). Em `replica` as FKs também não são checadas, por isso a ordem de dependência é fixa e testada contra o `schema.prisma`. Sem esse privilégio o script cai sozinho no método `triggers` (`ALTER TABLE … DISABLE TRIGGER` só dos triggers de DELETE das tabelas apagadas, na mesma transação – DDL transacional, mas com lock exclusivo nessas tabelas até o COMMIT; exige ser dono). Toda instrução leva `WHERE organizacao_id = $1` e passa por `validarSqlLimpeza` antes de executar; ao fim a transação confere que nada da organização sobrou (senão ROLLBACK). O banco é apagado primeiro e o storage depois: falha no meio deixa no máximo arquivos órfãos (rode de novo), nunca registros sem arquivo.
+
+**`--manter-demo` NÃO é suportado** (a flag é recusada com explicação): os documentos criados pelo seed não têm marca confiável – a numeração `{SIGLA}-DOC-ano-nnnnnn` é a mesma dos reais, o criador é um usuário comum e o seed os reconhece apenas pelo título dentro do cliente. Para voltar à massa de exemplo, limpe tudo e rode `npm run seed:ged-demo`.
+
+**Railway (sem acesso ao banco):** variáveis do **worker**, lidas por `scripts/predeploy.sh` (ver `deploy/railway.md` §3): `GED_LIMPAR_ORG=VAC` sozinha = dry-run nos logs; com `GED_LIMPAR_EXECUTAR=true` e `GED_LIMPAR_CONFIRMAR=VAC` apaga. **Remova as variáveis depois** (senão todo deploy limpa de novo).
+
+> **Aviso – `SEED_GED_DEMO`:** com `SEED_GED_DEMO=true` o pré-deploy roda `seed:ged-demo`, que **recria os documentos de exemplo** de VAC e AAC (idempotente por título). Depois de limpar, remova `SEED_GED_DEMO` do worker, senão o deploy seguinte repovoa o cliente. Na mesma execução a limpeza roda **depois** dos seeds.
+
+**Testes:** `tests/unit/ged-limpeza.test.ts` (puro: toda tabela `Ged*` do schema consta no plano, ordem filho→pai contra as FKs, preservadas sem FK para apagadas, todo SQL com filtro por organização, prefixo de storage, argumentos e confirmação) e, com banco/storage descartáveis, `tests/integration/ged-limpeza-db.ts` (seed VAC+AAC, limpa VAC pelos dois métodos, AAC idêntica em linhas e arquivos, VAC vazia salvo membros/setores/config/tipos, log preservado).
+
+## 16. Baixar pasta como ZIP (exportação para fora: TCM-BA / SIGA / e-TCM)
+
+**Uso:** em `/ged/pastas`, ao escolher uma pasta, o botão **Baixar pasta (ZIP)** entrega a pasta e **todas as subpastas**, com a mesma árvore e os nomes originais. Serve ao órgão que precisa subir a prestação de contas mensal no TCM-BA (PDF digitalizado, abaixo de 250 DPI, pastas por tipo de documento). API equivalente: `GET /api/v1/ged/pastas/{id}/zip[?versao=atual|original]` (cookie ou Bearer).
+
+**Código:** `lib/ged/exportacao-pasta/regras.ts` (puro: nomes Windows, desambiguação, limites, manifesto CSV, LEIAME), `lib/ged/exportacao-pasta/servico.ts` (`planejarExportacaoPasta`, `criarStreamZip`), rota `app/api/v1/ged/pastas/[id]/zip/route.ts`. Testes: `tests/unit/ged-exportacao-pasta.test.ts`, E2E `tests/e2e/t25-ged-baixar-pasta.spec.ts`.
+
+**Decisão: streaming direto, sem job.** O ZIP é gerado na própria requisição com `archiver` (já dependência; modo STORE, pois PDF não comprime) e enviado em `Transfer-Encoding: chunked`, sem `Content-Length`. Cada arquivo (máx. 25 MB) é lido do storage, escrito e liberado antes do próximo (a entrada seguinte só é anexada quando a anterior termina: contrapressão do consumidor). Medido em build de produção: ZIP de 604 MB (24 PDFs de 24 MB) com o RSS do servidor subindo ~50 MB. Como os bytes saem continuamente, o proxy da Railway não encerra a conexão por ociosidade; a rota declara `maxDuration=3600`. Um job + link autenticado só vale a pena se um dia o limite de 20.000 documentos subir muito ou se os arquivos passarem a vir de um storage lento; hoje seria complexidade sem ganho.
+- **ZIP64:** `archiver` entra em ZIP64 sozinho quando o diretório central ou um deslocamento passa de 4 GB; além disso `forceZip64` é ligado quando o total estimado é >= 3,5 GB ou há >= 60.000 entradas. Não há teste automatizado de >4 GB (custo de disco); foi validada a leitura de um ZIP64 forçado.
+- **Limite:** 20.000 documentos por download (`LIMITE_ARQUIVOS_ZIP`). Acima disso a API responde 422 com a orientação de baixar por subpasta (a tela mostra o aviso).
+- **Cliente cancelou/rede caiu:** o gerador para na hora e a auditoria registra o que foi entregue (`interrompida: true`).
+
+**Conteúdo do ZIP** (raiz = nome da pasta; arquivo `NOME-AAAA-MM-DD.zip`, data de Brasília):
+- Árvore das subpastas visíveis; nomes sanitizados para Windows (`<>:"/\|?*` e controles viram `_`, sem ponto/espaço final, nomes reservados como `CON` ganham `_`, NFC, máx. **120** caracteres por segmento, caminho total limitado a 200 reduzindo só o nome do arquivo). Duplicados (sem diferenciar maiúsculas) ganham ` (2)`, ` (3)`…
+- Nome do arquivo = nome original do envio (UPLOAD/SCAN mais recente até a versão exportada); sem ele, o número do documento (`VAC-DOC-2026-000123.pdf`).
+- Versão: a **atual** do documento (se houve OCR, é a versão com texto). `?versao=original` troca a versão OCR pela de origem. **Assinado/selado: sempre o PDF selado.**
+- `MANIFESTO.csv` (UTF-8 com BOM, `;`, anti-injeção de fórmula): `caminho; numero_documento; titulo; tipo; data_documento; situacao_documento; situacao_assinatura; versao_exportada; sha256; tamanho_bytes; paginas; dpi_ok; situacao_exportacao`. `dpi_ok` é sempre **"nao verificado"**: o sistema NÃO mede a resolução; o LEIAME avisa que o TCM exige PDF abaixo de 250 DPI e manda conferir. Manifesto e LEIAME vão ao **final** do ZIP para refletir o resultado real (arquivo ilegível no storage vira linha `erro: …` e o ZIP segue).
+- `LEIAME.txt`: data/hora de Brasília, quem exportou, cliente, pasta, contagens e o aviso do TCM-BA.
+
+**Permissões e isolamento:** `exigirPasta(…, "VER")` (outro cliente ou sem VER: **404**); tudo via `ctx.db` (`gedDb`). "Baixar" = **VER** no documento, como na rota `/documentos/{id}/arquivo`, então o teto do papel já vale (Auditor/Leitor só com ACL). Só entram documentos de `whereGedVisivel(ctx,"VER")`, não arquivados nem na lixeira, em pastas visíveis. O que fica de fora (sigiloso sem ACL, subpasta sem VER) entra no manifesto como `omitido: sem permissao`, **sem título nem número** (só a pasta; para subpasta invisível, "(pasta sem acesso)"). O cálculo dos omitidos é por diferença de contagens (não use `NOT` sobre `whereGedVisivel`: com colunas NULL o SQL descarta as linhas).
+
+**Auditoria:** ao fim (inclusive se interrompido) `auditarGed` grava `GED_PASTA_EXPORTADA_ZIP` (pasta, modo, nº de documentos, omitidos, bytes, interrompida) e um `ged_acesso_log` **BAIXAR por documento entregue** (em lote, `user_agent = exportacao-pasta-zip`), visíveis em `/ged/logs`.
+
+**Limites:** pastas arquivadas e documentos arquivados não entram; não verifica DPI nem converte/reduz PDFs; sem opção de filtrar por período/tipo (use subpastas); sem fila/link por e-mail.
+
+## 17. Exclusão controlada: documento, pasta e lote de importação
+
+**Para quê:** o administrador do cliente subiu uma pasta errada (ou de teste) e precisa apagá-la e refazer a importação, sem acesso ao banco. Antes só existia arquivar (§3) e a limpeza de operação do cliente inteiro (§15).
+
+**Onde:** botão **Excluir documento…** na ficha do documento; **Excluir pasta e conteúdo…** em `/ged/pastas` (junto de "Baixar pasta (ZIP)"); **Excluir documentos desta importação…** em `/ged/importar/{id}` (caso principal: "importei errado, quero refazer"). Cada um abre um painel que mostra **o que será apagado** (nº de pastas, documentos, versões e MB), **o que impede** (lista com número, título, pasta e motivo) e exige digitar **o nome da pasta** (pasta) ou **EXCLUIR** (documento e lote). O texto avisa que não tem volta.
+
+### Quem pode
+Capacidade nova `excluir` (`lib/ged/papeis.ts`): **GED_ADMIN e GED_GESTOR**. Usuário, Leitor e Auditor: 403. Além do papel, a permissão no recurso:
+- **documento:** `VER` **e** `ADMINISTRAR` (mesma régua de arquivar/mover). O Admin tem Administrar em todos, mas **não vê SIGILOSO sem ACL**, então esses ficam como "sem permissão" (contados, nunca identificados: sem número nem título);
+- **pasta:** `ADMINISTRAR` na pasta raiz e em cada subpasta (subpasta sem permissão não é removida);
+- **lote:** `importar` e ser o dono do lote (Admin vê todos). Só depois de **concluído** (`CONCLUIDA`, `CONCLUIDA_COM_ERROS` ou `FALHOU`); lote recebendo/na fila/processando → 409.
+Outro cliente ou recurso invisível → **404**. Tudo via `gedDb(organizacao_id)`; nenhum SQL cru; as Server Actions/rotas refazem a checagem.
+
+### O que NUNCA é excluído (valor jurídico / registro imutável)
+Documento com qualquer um destes é **impeditivo** (`lib/ged/exclusao/regras.ts`, `motivosDeBloqueio`):
+
+| Motivo | Quando |
+|---|---|
+| `TRAMITE` | tem linha em `ged_tramite` (imutável) |
+| `COMENTARIO` | tem linha em `ged_comentario` (imutável por trigger). **Decisão:** comentário bloqueia; não há exclusão em cascata autorizada e nenhum trigger é desligado |
+| `ASSINATURA` | tem solicitação de assinatura de **qualquer** situação (aberta, concluída, recusada, cancelada, expirada) ou está `EM_ASSINATURA` |
+| `SELADA` | `ASSINADO`, com código verificador, versão selada ou versão de origem `SELO`/`COMPROVANTE` |
+| `PROTOCOLO` | é anexo de protocolo (`ged_protocolo_documento`) ou o comprovante de um protocolo |
+| `DERIVADO` | tem versão derivada (anonimizada) que não sairia junto |
+| `SEM_PERMISSAO` | o usuário não tem Ver + Administrar |
+O banco também recusa, por conta própria (a regra não depende só do app): FK `RESTRICT` de trâmite/comentário/solicitação para o documento, triggers de imutabilidade, o trigger novo `ged_documento_protegido` (recusa `DELETE` de documento assinado/com código/vinculado a protocolo) e o `ged_versao_imutavel` (que agora permite apagar **somente** versão não selada, que não seja SELO/COMPROVANTE nem referenciada por protocolo). **Nenhuma trava é desligada** e `session_replication_role` não é usado.
+
+### Tudo-ou-nada × "apenas os que podem"
+Excluir **pasta** ou **lote** é **tudo-ou-nada**: se um documento é impeditivo, **nada** é apagado, a API responde **409 `EXCLUSAO_BLOQUEADA`** e a tela lista os documentos (até 200; o total vem em `bloqueados_total`) com o motivo. A opção explícita **"Excluir apenas os que podem ser excluídos"** (`apenas_possiveis: true`) apaga o resto e **mantém** os impeditivos e as pastas que ainda os contêm. Documento isolado impeditivo: 409 com o motivo.
+
+### Pastas
+Só se remove pasta **vazia**: primeiro saem os documentos, depois as pastas, **filhas antes das mães** (`pastasRemoviveis`). Uma pasta que ainda tem documento, subpasta que não foi candidata ou sem permissão fica. **Lote:** o lote não guarda quais pastas criou; são candidatas as ancestrais-ou-próprias das pastas dos seus itens, **criadas a partir do início do lote** e abaixo da pasta de destino (nunca o destino nem seus ancestrais; pasta que já existia antes do lote nunca entra) e que fiquem vazias. Funciona também para lotes antigos.
+
+### Execução, progresso e retomada
+`lib/ged/exclusao/*`: o plano (`planejarExclusao`, só leitura) é refeito a cada início. **Pequeno** (até 100 documentos e 100 pastas): síncrono, resposta **200** com o resultado. **Grande:** resposta **202** e execução pelo job `ged-excluir` (`jobs/ged-excluir.ts`, registrado em `jobs/ged.ts`; sem worker, o web processa inline) com acompanhamento em `GET /api/v1/ged/exclusoes/{id}` (status, contadores, percentual) e barra na tela. Uma exclusão ativa por cliente (409 `EXCLUSAO_EM_ANDAMENTO`). **Blocos:** 100 documentos por transação (reavaliando os impedimentos dentro da transação; se o bloco falha, cai para um por vez); depois pastas (100 por transação, conferindo "sem documento e sem subpasta" no banco). **Retomável:** exclusão `PROCESSANDO` sem sinal de vida por 10 min é retomada pela varredura; `FALHOU` é retomada por `POST /exclusoes/{id}/retomar` (ou botão na tela); o que já foi excluído não volta nem é refeito. **Storage:** os arquivos (`ged/{org}/…`) são removidos **depois** do commit do banco; falha deixa só arquivo órfão (nunca registro sem arquivo).
+
+### Dependentes (o que acontece com cada tabela)
+Apagados com o documento: versões, texto indexado, detecções de dados pessoais, vínculos de marcador, ACLs, o documento. **Comunicações pendentes** do documento viram `IGNORADA` (as já enviadas ficam, sem FK). **Itens de importação** do documento viram `REMOVIDO` (`documento_id` nulo, motivo com data e quem; o relatório do lote permanece e o lote ganha `conteudo_excluido_em`); itens `DUPLICADO` que apontavam para o documento só perdem o link. Em pasta excluída: ACLs da pasta e as referências em itens/lotes são limpas (`pasta_destino_id` do lote vira nulo). **`ged_acesso_log` NÃO é apagado:** não tem FK para o documento; `/ged/logs` mostra o número como `NUMERO (excluído)`, lido da auditoria. A numeração (`GedSequencia`) **não volta**: reimportar gera números novos.
+**Reimportar:** a deduplicação por sha256 olha as versões existentes; como a exclusão remove as versões, o mesmo conteúdo importa de novo normalmente.
+
+### Auditoria
+`auditarGed` na mesma transação: `GED_DOCUMENTO_EXCLUIDO` **por documento** (antes: número, título, pasta/caminho, sha256 da versão atual, nº de versões e bytes, status, sensibilidade, criador; depois: via, origem, `exclusao_id`), `GED_PASTA_EXCLUIDA` por pasta, e o resumo `GED_EXCLUSAO_INICIADA` / `GED_EXCLUSAO_CONCLUIDA` (/`FALHOU`/`RETOMADA`) com quem, quando e contagens. O `log_auditoria` é imutável e continua depois da exclusão; aparece em **Logs → Alterações** (filtro por ação "EXCLU" ou pelo documento).
+
+### API
+Pré-visualizar e executar (corpo JSON ou querystring `confirmacao`, `apenas_possiveis`):
+
+| Rota | Função |
+|---|---|
+| `GET /documentos/{id}/excluir` · `POST …/excluir` · `DELETE /documentos/{id}` | plano / exclui o documento (`confirmacao: "EXCLUIR"`) |
+| `GET /pastas/{id}/excluir` · `POST …/excluir` · `DELETE /pastas/{id}?excluir=true` | plano / exclui a pasta e a subárvore (`confirmacao` = nome da pasta). `DELETE /pastas/{id}` sem o parâmetro **continua só arquivando** a pasta vazia |
+| `GET /importacoes/{id}/excluir` · `POST …/excluir` · `DELETE /importacoes/{id}?documentos=true` | plano / exclui os documentos do lote e as pastas que ele criou. `DELETE /importacoes/{id}` sem o parâmetro **continua só cancelando** o lote `RECEBENDO` |
+| `GET /exclusoes` · `GET /exclusoes/{id}` · `POST /exclusoes/{id}/retomar` | lista (Admin: todas; Gestor: as suas), progresso, retomada |
+Códigos: 200 concluída (síncrona), 202 em segundo plano, 403 sem papel/permissão, 404 outro cliente ou invisível, 409 `EXCLUSAO_BLOQUEADA` (corpo com a lista), `NADA_A_EXCLUIR`, `EXCLUSAO_EM_ANDAMENTO`, `IMPORTACAO_EM_ANDAMENTO`, 422 confirmação errada.
+
+### Testes e limites conhecidos
+`tests/unit/ged-exclusao.test.ts` (impedimentos, derivados, decisão, confirmação, ordem de pastas, pastas do lote, blocos/limites, ausência de `session_replication_role`/SQL cru, migração) e E2E `tests/e2e/t26-ged-exclusao.spec.ts` (importa pasta, exclui o lote, confere documentos/pastas/arquivos/busca, reimporta, bloqueios com motivo, tudo-ou-nada × apenas os que podem, 403/404, auditoria e logs, exclusão grande em segundo plano, telas). **Limites:** não há lixeira nem desfazer; exclusão ativa é uma por cliente; documentos com comentário nunca saem (inclusive comentários de recusa/assinatura); o ajuste fino do "documento de outro usuário que o Gestor não administra" é por ACL (o Gestor só exclui o que administra); `ged_comunicacao` já enviada mantém o `documento_id` sem FK.
+
+## 18. Compartilhamento externo por link público + código (OTP) no WhatsApp
+
+**Para quê:** enviar um documento ou uma pasta a quem **não tem usuário** (fornecedor, vereador, parte interessada) sem e-mail com anexo. Quem compartilha cria o link e informa o **WhatsApp do destinatário**; o destinatário abre o link, mas só vê/baixa os arquivos depois de digitar um código de 6 dígitos que o sistema envia a esse WhatsApp. Ele **não digita número nenhum**.
+
+**Código:** `lib/ged/compartilhamento/*` — `regras.ts` (puro: token, OTP, limites, elegibilidade, sessão, zod), `servico.ts` (criar/listar/detalhar/revogar/config/preparo da tela), `publico.ts` (link → OTP → sessão → conteúdo, sem login), `conteudo.ts` (conjunto permitido), `limites.ts` (anti-abuso por IP), `http.ts` (cabeçalhos e cookie), `whatsapp.ts` (envio), `eventos.ts`, `manutencao.ts`. Telas: `/ged/compartilhamentos` (lista), `/novo?documento=|pasta=`, `/[id]` (acessos e Revogar); público `/compartilhado/[token]`. API: `POST|GET /api/v1/ged/compartilhamentos`, `GET|DELETE …/[id]`, `POST …/[id]/revogar`; pública (zod, sem sessão do GED): `/api/v1/publico/compartilhado/[token]/{otp,validar,itens,arquivo,zip,sair}`. Migração `20261012120000_ged_compartilhamento`. Testes: `tests/unit/ged-compartilhamento.test.ts` e E2E `tests/e2e/t27-ged-compartilhamento.spec.ts`.
+
+### Quem pode compartilhar
+Capacidade `compartilhar` (`papeis.ts`): **Admin, Gestor e Usuário**; Leitor e Auditor nunca (403). No recurso exige **VER**; o **Usuário** ainda precisa ser o autor do documento ou ter EDITAR (pasta: EDITAR/ADMINISTRAR). Sem VER, 404. *Decisão:* não foi criada uma ação `COMPARTILHAR` própria na ACL (mexeria no enum, na tela de permissões e em todos os testes de matriz); a régua acima dá o mesmo efeito prático. Se o dono quiser conceder "Compartilhar" a um usuário específico, é a evolução natural (pendência registrada).
+
+### O que NUNCA/SÓ COM CONFIRMAÇÃO sai
+- **SIGILOSO: nunca** (422 `SIGILOSO_NAO_COMPARTILHAVEL` na criação; em pasta, simplesmente fica de fora). Documentos arquivados/excluídos também.
+- **Dados pessoais / anonimização:** mesma régua de `whereExposicaoPublica`: o original com `contem_dados_pessoais` (ou anonimização PENDENTE/ANONIMIZADA) **não sai**; só o derivado anonimizado (`documento_original_id`) sem a marca. Na dúvida, bloqueia e explica.
+- **RESTRITO:** exige `confirmar_restrito=true` (409 `CONFIRMACAO_NECESSARIA`). Em pasta a confirmação é sempre pedida (o padrão das pastas é RESTRITO e, no modo dinâmico, documentos futuros entram).
+- **Sem canal de WhatsApp ativo** no cliente (Administração › Canal de WhatsApp; Evolution ou Z-API, não a API oficial): o link **não é criado** (409 `SEM_CANAL_WHATSAPP`) e a tela explica.
+
+### O que o destinatário vê (decisão: dinâmico, limitado ao que o criador vê AGORA)
+O conjunto é recalculado **a cada requisição**: documentos que o **criador do link pode VER no momento do acesso** (`whereGedVisivel`) ∩ compartilháveis (acima) ∩ o recurso (o documento, ou a subárvore da pasta, só pastas que o criador vê). Consequências: documento novo na pasta **entra**; documento que vira sigiloso, é arquivado, excluído ou deixa de ser visível ao criador **sai**; se o criador perde o acesso ao GED, ao papel ou à pasta, o link passa a responder 404. Pastas sem nenhum documento permitido (nem nas subpastas) nem aparecem. **"Congelar a lista"** (opção, só pasta): guarda os ids dos documentos da criação (até 5.000); entram apenas eles, ainda sujeitos às regras acima. Documento: versão **atual** (assinado = PDF selado). Nada de `storage_key` sai; arquivo só por rota autenticada pela sessão do link.
+
+### Fluxo do destinatário e segurança
+1. **Link** `/compartilhado/{token}`: token de **32 bytes** (CSPRNG, base64url, 43 caracteres); no banco só o **sha256**. O link completo é exibido **uma vez** (criação) e não se recupera. Antes do código a página mostra só o órgão, quem compartilhou, o título e a validade — **nenhum arquivo** (a mensagem do remetente só aparece depois do código). Link inválido, vencido, revogado, recurso excluído ou criador sem acesso = **o mesmo 404** (mesmo corpo), sem pista do motivo.
+2. **Código (OTP):** 6 dígitos (CSPRNG), guardado como **HMAC com sal**, ligado ao link, validade **10 min**, **uso único**, **5 tentativas**; novo envio invalida os anteriores. Reenvio mínimo **60 s** e no máximo **5 envios/hora por link** (banco); **10 pedidos/hora por IP** (memória). Falhas seguidas bloqueiam o link de forma **progressiva** (5 → 1 min, 10 → 10 min, 15 → 1 h, 20+ → 24 h; zera no acerto) e o IP também (5/10/20 falhas). Comparação em tempo constante. Texto enviado: *"Seu código para acessar documentos compartilhados por {Órgão}: 123456. Válido por 10 minutos. Não compartilhe."* Envio **direto** pelo canal "somente envio" do cliente (não pela caixa de saída: o código tem de chegar na hora e o telefone não fica na outbox).
+   A resposta do envio é sempre a mesma: *"Se o link for válido, enviamos o código para o número terminado em ••88."* (só os 2 últimos dígitos). *Desvio consciente:* para token inexistente a rota responde 404 igual ao resto (a própria página já responde 404 para token inválido; ocultar só aqui não protegeria nada).
+3. **Sessão:** após o código, cookie `ged_comp` **httpOnly**, `SameSite=Lax` (Lax porque o link é aberto a partir do WhatsApp), `Secure` quando o acesso é HTTPS (direto ou `x-forwarded-proto`), com **Path restrito** a `/compartilhado/{token}` e `/api/v1/publico/compartilhado/{token}`. Só o hash do valor fica no banco; presa ao **hash do user-agent**; **30 min deslizantes, teto 2 h**. Sessão de um link não vale em outro. "Sair" encerra no servidor.
+4. **Conteúdo:** lista/pastas, **visualização inline** (PDF no navegador), download (conta no limite, atômico), ZIP da pasta/subpasta (se permitido) **em streaming**, reaproveitando `planejarExportacaoPasta`/`criarStreamZip` com o conjunto permitido (sem linhas de "omitido" no manifesto e LEIAME próprio). Cabeçalhos `Cache-Control: no-store`, `X-Robots-Tag: noindex`, `Referrer-Policy: no-referrer` nas páginas, rotas e arquivos (`next.config.ts`). **Revogar tem efeito imediato**: o status do link é conferido em toda requisição, sessões são encerradas e o ZIP em andamento é interrompido (checagem a cada 10 arquivos).
+   *Limite honesto:* "só visualizar" não impede cópia (quem vê o PDF no navegador pode salvá-lo); para impedir download use o limite de downloads e a validade curta. Sem marca d'água (fora de escopo).
+
+### Permissões do link, validade e limites
+Visualizar / Baixar / Baixar pasta em ZIP (exige baixar; só pasta); validade padrão **7 dias**, máximo **30** (`GedConfig.compartilhamento_validade_padrao_dias`/`_max_dias`, em Administração › Configurações; o teto do cliente nunca passa de 30); **limite de downloads** opcional (ZIP conta 1); mensagem opcional ao destinatário; liga/desliga por cliente (`compartilhamento_ativo`). Status `ATIVO`/`REVOGADO`/`EXPIRADO` (um ATIVO vencido já aparece como expirado; o job e o primeiro acesso gravam o status).
+
+### Transparência e LGPD
+`ged_compartilhamento_evento` (e `log_auditoria`: `GED_COMPARTILHAMENTO_CRIADO/REVOGADO/CONFIG_ALTERADA`): link criado, link enviado por WhatsApp, código enviado/falhou/validado/bloqueado, visualização e download **por documento**, ZIP, sessão encerrada, revogação, expiração, recurso excluído. **Sem dado pessoal completo:** IP truncado (/24 ou /48), user-agent resumido ("Chrome em Windows"), telefone **nunca** (mascarado `(75) 9****-8888` para quem compartilha; `••88` para o destinatário). Quem compartilhou vê tudo em `/ged/compartilhamentos/[id]` e pode **revogar**; o Admin vê/revoga os de todos (`?escopo=todos`); Usuário/Gestor só os próprios (outros: 404). A página pública informa que os acessos são registrados e que o WhatsApp só serve ao código. **Aviso opcional** de primeiro acesso ao criador, por **e-mail** (padrão do cliente, ajustável por link; não passa pela caixa de saída de notificações). **Opcional:** "enviar também o link por WhatsApp" (mensagem **sem** o código). O WhatsApp do destinatário: cifrado (`cifrar`) + `hashBusca`, só usado para o código e o envio do link; nunca devolvido por API.
+
+### Retenção e exclusão
+O job `ged-compartilhamento` apaga OTPs e sessões vencidos há > 1 dia e eventos de links encerrados além da retenção do log de acesso (mín. 90 dias). **Excluir o documento/pasta revoga os links** (a exclusão controlada do §17 chama `revogarLinksDoRecurso` na mesma transação; o alvo não tem FK). A exportação do cliente leva as 4 tabelas **sem** `token_hash`, hashes de OTP/sessão, sal nem o WhatsApp cifrado em claro (cifrado fica como coluna cifrada); a limpeza do §15 apaga as 4 (eventos → sessões → OTPs → links).
+
+### Isolamento (requisito nº 1)
+Toda tabela tem `organizacao_id` NOT NULL (primeiro campo dos índices), trigger `ged_mesmo_tenant` (criador/revogador na criação e atualização; documento/pasta só na criação, para o link poder ser revogado depois de o recurso ser excluído) e regra em `filtroTabela()`/`DESCRICAO_TABELA`. O token resolve **só ids** (`resolverTokenCompartilhamento` em `lib/ged/db.ts`); o resto passa por `gedDb(organizacao_id)`. Os arquivos novos entram na varredura do `ged-fontes.test.ts` (não importam `lib/db`; páginas e rotas `force-dynamic`; rotas com `rota()`).
+
+### Testes (ensaio) e operação
+Com `CANAIS_ENVIO_SIMULADO=true` nada é enviado; o código fica **cifrado** em `ged_compartilhamento_otp.codigo_teste_cifrado` (só nesse modo; nunca em produção) para o E2E ler (`tests/e2e/t20-banco.ts codigo-compartilhamento <linkId>`). Demo: `npm run seed:ged-demo` cria em VAC o link do "Edital do Pregão 03/2026" com WhatsApp fictício `(75) 9****-0000` e **token fixo** (impresso no final do seed; só demonstração) e, se não houver, um canal Evolution fictício; `--sem-compartilhamento` pula.
+**Limites conhecidos:** os contadores por IP são em memória (por processo; com várias réplicas, limite também no proxy/WAF); só PDF/arquivos como armazenados (sem marca d'água); sem ação `COMPARTILHAR` própria na ACL; aviso de primeiro acesso só por e-mail; a API oficial do WhatsApp (janela de 24 h/template) não é suportada para o código.

@@ -32,9 +32,13 @@ export async function feriadosDe(tx: Cliente, municipioId: string | null) {
   return conjuntoFeriados(f.map((x) => x.data));
 }
 
-/** Data-limite da etapa a partir de `inicio` (ou saldo de dias, quando retomando de pausa). */
-export async function calcularPrazo(tx: Cliente, p: { organizacao_id: string; municipio_id: string; etapa: Etapa; inicio?: Date; dias?: number }) {
-  const cfg = await configPrazo(tx, p.organizacao_id, p.municipio_id, p.etapa);
+/**
+ * Data-limite da etapa a partir de `inicio` (ou saldo de dias, quando retomando de pausa).
+ * `uteis` sobrepõe a contagem em dias úteis da etapa (ex.: prazo próprio das demandas urbanas – lib/demandas).
+ */
+export async function calcularPrazo(tx: Cliente, p: { organizacao_id: string; municipio_id: string; etapa: Etapa; inicio?: Date; dias?: number; uteis?: boolean }) {
+  const base = await configPrazo(tx, p.organizacao_id, p.municipio_id, p.etapa);
+  const cfg = p.uteis === undefined ? base : { ...base, conta_dias_uteis: p.uteis };
   const feriados = cfg.conta_dias_uteis ? await feriadosDe(tx, p.municipio_id) : new Set<string>();
   const dias = p.dias ?? cfg.dias;
   return { ...cfg, ate: somarDias(p.inicio ?? new Date(), dias, cfg.conta_dias_uteis, feriados), dias };

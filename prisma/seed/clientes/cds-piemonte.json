@@ -1,0 +1,34 @@
+{
+  "$comentario": "Cliente da PoC do Pregão SRP 005/2026 – CDS Piemonte do Paraguaçu (BA). USO EXCLUSIVO DO AMBIENTE DA PoC (nunca na demonstração pública – ver docs/poc-cds.md). Executar: npm run onboard -- cds-piemonte --demo && npm run seed:cds-poc. Códigos IBGE conferidos na API de localidades do IBGE (servicodados.ibge.gov.br/api/v1/localidades/estados/BA/municipios) em 28/09/2026; lat/lng = sede municipal (base de municípios derivada do IBGE), conferidas dentro da malha municipal oficial (api/v3/malhas). Endereço, e-mail e telefone dos órgãos ficam nulos até o consórcio informar (editar em /admin/municipios). Usuários e nomes são genéricos (sem pessoas reais); a senha do --demo é a de ensaio e DEVE ser trocada antes da sessão oficial da PoC.",
+  "organizacao": {
+    "nome": "Consórcio de Desenvolvimento Sustentável do Piemonte do Paraguaçu",
+    "sigla": "CDS-PIEMONTE",
+    "cnpj": null,
+    "logo_url": "/brasao-generico.svg"
+  },
+  "municipios": [
+    { "nome": "Iaçu", "sigla": "IAC", "codigo_ibge": "2911907", "uf": "BA", "orgao_ambiental_nome": "Secretaria Municipal de Meio Ambiente de Iaçu", "endereco": null, "email": null, "telefone": null, "lat": -12.7666, "lng": -40.2056, "brasao_url": "/brasao-generico.svg" },
+    { "nome": "Ibiquera", "sigla": "IBQ", "codigo_ibge": "2912608", "uf": "BA", "orgao_ambiental_nome": "Secretaria Municipal de Meio Ambiente de Ibiquera", "endereco": null, "email": null, "telefone": null, "lat": -12.6444, "lng": -40.9338, "brasao_url": "/brasao-generico.svg" },
+    { "nome": "Itaberaba", "sigla": "ITB", "codigo_ibge": "2914703", "uf": "BA", "orgao_ambiental_nome": "Secretaria Municipal de Meio Ambiente de Itaberaba", "endereco": null, "email": null, "telefone": null, "lat": -12.5242, "lng": -40.3059, "brasao_url": "/brasao-generico.svg" },
+    { "nome": "Itatim", "sigla": "ITT", "codigo_ibge": "2916856", "uf": "BA", "orgao_ambiental_nome": "Secretaria Municipal de Meio Ambiente de Itatim", "endereco": null, "email": null, "telefone": null, "lat": -12.7099, "lng": -39.6952, "brasao_url": "/brasao-generico.svg" },
+    { "nome": "Mundo Novo", "sigla": "MNV", "codigo_ibge": "2922102", "uf": "BA", "orgao_ambiental_nome": "Secretaria Municipal de Meio Ambiente de Mundo Novo", "endereco": null, "email": null, "telefone": null, "lat": -11.8541, "lng": -40.4714, "brasao_url": "/brasao-generico.svg" },
+    { "nome": "Rafael Jambeiro", "sigla": "RJB", "codigo_ibge": "2925956", "uf": "BA", "orgao_ambiental_nome": "Secretaria Municipal de Meio Ambiente de Rafael Jambeiro", "endereco": null, "email": null, "telefone": null, "lat": -12.4053, "lng": -39.5007, "brasao_url": "/brasao-generico.svg" },
+    { "nome": "Ruy Barbosa", "sigla": "RUY", "codigo_ibge": "2927200", "uf": "BA", "orgao_ambiental_nome": "Secretaria Municipal de Meio Ambiente de Ruy Barbosa", "endereco": null, "email": null, "telefone": null, "lat": -12.2816, "lng": -40.4931, "brasao_url": "/brasao-generico.svg" },
+    { "nome": "Tapiramutá", "sigla": "TPM", "codigo_ibge": "2931301", "uf": "BA", "orgao_ambiental_nome": "Secretaria Municipal de Meio Ambiente de Tapiramutá", "endereco": null, "email": null, "telefone": null, "lat": -11.8475, "lng": -40.7927, "brasao_url": "/brasao-generico.svg" }
+  ],
+  "usuarios": [
+    { "email": "admin.cds@poc.licenciagov.app", "nome": "Administrador(a) do Consórcio", "cargo": "Administrador(a) do sistema", "papeis": [{ "papel": "ADMIN" }] },
+    { "email": "tec.consorcio1@poc.licenciagov.app", "nome": "Técnico(a) do Consórcio 1", "cargo": "Analista Ambiental do Consórcio", "papeis": [{ "papel": "TEC_CONSORCIO" }] },
+    { "email": "tec.consorcio2@poc.licenciagov.app", "nome": "Técnico(a) do Consórcio 2", "cargo": "Analista Ambiental do Consórcio", "papeis": [{ "papel": "TEC_CONSORCIO" }] },
+    { "email": "sema@poc.licenciagov.app", "nome": "Analista SEMA/INEMA", "cargo": "Acompanhamento estadual (somente leitura)", "papeis": [{ "papel": "SEMA_INEMA" }] },
+    { "email": "tecnico.itb@poc.licenciagov.app", "nome": "Técnico(a) de Itaberaba", "cargo": "Técnico Ambiental Municipal", "papeis": [{ "papel": "TEC_MUNICIPAL", "municipio": "ITB" }] },
+    { "email": "gestor.itb@poc.licenciagov.app", "nome": "Gestor(a) de Itaberaba", "cargo": "Secretário(a) Municipal de Meio Ambiente", "papeis": [{ "papel": "GESTOR_MUNICIPAL", "municipio": "ITB" }] },
+    { "email": "fiscal.itb@poc.licenciagov.app", "nome": "Fiscal de Itaberaba", "cargo": "Fiscal Ambiental", "papeis": [{ "papel": "FISCAL", "municipio": "ITB" }] },
+    { "email": "tecnico.ruy@poc.licenciagov.app", "nome": "Técnico(a) de Ruy Barbosa", "cargo": "Técnico Ambiental Municipal", "papeis": [{ "papel": "TEC_MUNICIPAL", "municipio": "RUY" }] },
+    { "email": "gestor.ruy@poc.licenciagov.app", "nome": "Gestor(a) de Ruy Barbosa", "cargo": "Secretário(a) Municipal de Meio Ambiente", "papeis": [{ "papel": "GESTOR_MUNICIPAL", "municipio": "RUY" }] },
+    { "email": "fiscal.ruy@poc.licenciagov.app", "nome": "Fiscal de Ruy Barbosa", "cargo": "Fiscal Ambiental", "papeis": [{ "papel": "FISCAL", "municipio": "RUY" }] },
+    { "email": "tecnico.iac@poc.licenciagov.app", "nome": "Técnico(a) de Iaçu", "cargo": "Técnico Ambiental Municipal", "papeis": [{ "papel": "TEC_MUNICIPAL", "municipio": "IAC" }] },
+    { "email": "gestor.iac@poc.licenciagov.app", "nome": "Gestor(a) de Iaçu", "cargo": "Secretário(a) Municipal de Meio Ambiente", "papeis": [{ "papel": "GESTOR_MUNICIPAL", "municipio": "IAC" }] },
+    { "email": "fiscal.iac@poc.licenciagov.app", "nome": "Fiscal de Iaçu", "cargo": "Fiscal Ambiental", "papeis": [{ "papel": "FISCAL", "municipio": "IAC" }] }
+  ]
+}
