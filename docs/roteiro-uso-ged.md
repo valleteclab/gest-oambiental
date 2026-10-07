@@ -82,6 +82,14 @@ Um repositório digital de documentos por órgão, com busca pelo conteúdo, tra
 **Ligar o portal de outro órgão (admin.aac@):** **Administração → Configurações → Protocolo online**: endereço público, responsável, orientação, limites e assuntos. Vem desligado; enquanto estiver, o endereço responde "não encontrado".
 **Ponto forte:** cada cliente tem seu próprio livro e numeração; um órgão nunca enxerga o protocolo do outro, nem pelo portal.
 
+## 14. Baixar pasta como ZIP (prestação de contas no TCM-BA)
+**Para quê:** levar a pasta do mês, com as subpastas, para subir no SIGA/e-TCM.
+**Como mostrar (admin.vac@):**
+1. **Pastas** → escolha a pasta (ex.: *Processos de pagamento*) → **Baixar pasta (ZIP)**. O arquivo se chama `NOME-AAAA-MM-DD.zip`.
+2. Abra o ZIP: a mesma árvore de pastas, os PDFs com o nome do envio original (repetidos viram `nome (2).pdf`), mais `MANIFESTO.csv` (número, título, tipo, data, sha256, tamanho, páginas, assinatura) e `LEIAME.txt` (data/hora de Brasília, quem exportou).
+3. Entre como `servidor1.vac@`: documentos sigilosos que ele não pode ver ficam de fora e o manifesto só diz "omitido: sem permissao", sem título. Em **Logs** aparecem a exportação e um "Baixou" por documento.
+**Atenção:** o TCM-BA exige PDF digitalizado abaixo de 250 DPI. O sistema **não** confere a resolução (a coluna `dpi_ok` diz "nao verificado"): confira antes de enviar. Acima de 20.000 documentos, baixe por subpasta.
+
 ## Roteiro rápido de apresentação (15 min)
 1. Login e visão geral (1 min)
 2. Importar uma pasta digitalizada (ou um ZIP) (3 min)
@@ -92,4 +100,4 @@ Um repositório digital de documentos por órgão, com busca pelo conteúdo, tra
 7. (opcional, +3 min) Protocolo: registrar uma entrada no balcão, protocolar pelo portal do cidadão e verificar o comprovante pelo QR
 
 ## O que ainda não existe
-Upload de imagens e Word, scanner direto pela web (agente local), metadados por IA, portal do cliente para consulta de documentos publicados (o protocolo online já existe), pacote de fechamento mensal, temporalidade e retenção, motor de anonimização. No protocolo: busca por nome do interessado, anexar arquivos depois de registrado, WhatsApp ao cidadão e captcha.
+Upload de imagens e Word, scanner direto pela web (agente local), metadados por IA, portal do cliente para consulta de documentos publicados (o protocolo online já existe), pacote de fechamento mensal (hoje há o ZIP por pasta, sem verificação de DPI), temporalidade e retenção, motor de anonimização. No protocolo: busca por nome do interessado, anexar arquivos depois de registrado, WhatsApp ao cidadão e captcha.

@@ -117,7 +117,9 @@ async function PainelPasta({ ctx, sel, acoes, todas, gerir }: {
         <div className="flex flex-wrap gap-2">
           {podeCriarDocumento(ctx) && acoes.includes("EDITAR") && <Link href={`/ged/documentos/novo?pasta=${sel.id}`} prefetch={false} className="btn-primario btn-sm">Novo documento nesta pasta</Link>}
           <Link href={`/ged/documentos?pasta=${sel.id}`} prefetch={false} className="btn-secundario btn-sm">Buscar nesta pasta</Link>
+          {!sel.arquivada && <a href={`/api/v1/ged/pastas/${sel.id}/zip`} download className="btn-secundario btn-sm">Baixar pasta (ZIP)</a>}
         </div>
+        {!sel.arquivada && <p className="mt-2 text-xs text-slate-500">O ZIP leva esta pasta e as subpastas, na mesma organização, só com os documentos que você pode ver (versão atual), mais MANIFESTO.csv e LEIAME.txt. Acima de 20.000 documentos, baixe por subpasta.</p>}
         <h3 className="mb-2 mt-4 text-sm font-semibold">Documentos ({docs.total})</h3>
         <ListaDocumentos linhas={docs.linhas} comBusca={false} />
         {docs.total > docs.linhas.length && <p className="mt-2 text-sm"><Link className="text-primaria-700 underline" href={`/ged/documentos?pasta=${sel.id}`} prefetch={false}>Ver todos os {docs.total} documentos</Link></p>}
