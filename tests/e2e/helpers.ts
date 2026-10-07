@@ -24,7 +24,23 @@ export function orgaoPadrao(usuario: UsuarioDemo | string): string {
 }
 
 /** Login pela UI (/login: "Órgão", "E-mail" e "Senha"). Aguarda sair da tela de login. */
+// Mapas: as páginas carregam imagens/WMS de servidores públicos externos (Esri, INPE, CAR, INCRA, IBGE/INDE, OSM) que, no CI,
+// às vezes ficam lentos ou penduram a conexão – e `waitForLoadState("networkidle")` (usado para esperar a hidratação) nunca
+// "assenta" (timeout de 60 s, sem relação com o código testado). Respondemos essas imagens localmente com um PNG transparente
+// 1×1: o mapa continua montando normalmente (container, marcadores, popups) e os testes não dependem de rede externa.
+// APIs de dados (ex.: servicodados.ibge.gov.br) NÃO são interceptadas.
+const PNG_1X1 = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+const HOSTS_TILES_EXTERNOS = /^https?:\/\/(server\.arcgisonline\.com|wayback\.maptiles\.arcgis\.com|tile\.openstreetmap\.org|terrabrasilis\.dpi\.inpe\.br|geoserver\.car\.gov\.br|acervofundiario\.incra\.gov\.br|geoservicos\.(ibge|inde)\.gov\.br|maps\.googleapis\.com\/maps\/vt)\//i;
+const contextosComBloqueio = new WeakSet<object>();
+export async function bloquearMapasExternos(page: Page) {
+  const ctx = page.context();
+  if (contextosComBloqueio.has(ctx)) return;
+  contextosComBloqueio.add(ctx);
+  await ctx.route(HOSTS_TILES_EXTERNOS, (route) => route.fulfill({ status: 200, contentType: "image/png", body: PNG_1X1 }));
+}
+
 export async function login(page: Page, usuario: UsuarioDemo | string, senha = SENHA_DEMO, orgao = orgaoPadrao(usuario)) {
+  await bloquearMapasExternos(page);
   const email = usuario in USUARIOS ? USUARIOS[usuario as UsuarioDemo] : usuario;
   await page.goto("/login");
   await page.getByLabel("Órgão").selectOption(orgao);
