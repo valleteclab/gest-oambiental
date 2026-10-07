@@ -69,7 +69,7 @@ export async function notificar(tx: GedTx, ctx: CtxGed, evento: EventoGed, input
     }),
   ]);
   const prefPor = new Map(prefs.map((p) => [p.usuario_id, p]));
-  const existentes = new Set(recentes.map((r) => chaveDedup(r.usuario_id, evento, r.documento_id, r.canal)));
+  const existentes = new Set(recentes.filter((r) => r.usuario_id).map((r) => chaveDedup(r.usuario_id as string, evento, r.documento_id, r.canal)));
   const canalWhatsapp = !!config?.canal_whatsapp_id;
   const assunto = assuntoEvento(evento, numero);
 

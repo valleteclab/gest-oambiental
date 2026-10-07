@@ -12,6 +12,13 @@ const nextConfig: NextConfig = {
       { key: "Cache-Control", value: "private, no-store" },
       { key: "X-Robots-Tag", value: "noindex, nofollow" },
     ];
+    // Páginas PÚBLICAS do protocolo (acesso liberado, sem login): nunca em cache compartilhado nem indexadas; o código de consulta
+    // pode estar na URL, então também sem Referer. Estas regras vêm DEPOIS da regra geral para vencer o Referrer-Policy dela.
+    const publicoSemRastro = [
+      { key: "Cache-Control", value: "no-store" },
+      { key: "X-Robots-Tag", value: "noindex, nofollow" },
+      { key: "Referrer-Policy", value: "no-referrer" },
+    ];
     return [
       { source: "/ged/:path*", headers: semCacheGed },
       { source: "/api/v1/ged/:path*", headers: semCacheGed },
@@ -25,6 +32,9 @@ const nextConfig: NextConfig = {
           { key: "Permissions-Policy", value: "geolocation=(self), camera=(self)" },
         ],
       },
+      { source: "/protocolo/:path*", headers: publicoSemRastro },
+      { source: "/verificar/protocolo/:path*", headers: publicoSemRastro },
+      { source: "/api/v1/publico/:path*", headers: publicoSemRastro },
     ];
   },
 };

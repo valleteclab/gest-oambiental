@@ -11,7 +11,7 @@ import { aplicarMarcaDadosPessoais, erroSensibilidade } from "../anonimizacao";
 import { concederAclAoCriador } from "../acl";
 import { auditarGed } from "../auditoria";
 import type { CtxGed } from "../contratos";
-import { exigirEncontrado } from "../db";
+import { exigirEncontrado, type GedTx } from "../db";
 import { podeCriarDocumento } from "../papeis";
 import { proximoNumeroGed } from "../numeracao";
 import { exigirDocumento, exigirPasta } from "../permissoes";
@@ -94,6 +94,55 @@ export async function criarDocumentoUpload(ctx: CtxGed, entrada: EntradaUpload):
   });
   void iniciarExtracaoAposUpload(ctx.organizacao_id, r.versao_id).catch(() => {});
   return r;
+}
+
+export type EntradaDocumentoNaTransacao = {
+  titulo: string;
+  tipo_id?: string | null;
+  remetente?: string | null;
+  sensibilidade?: GedSensibilidade;
+  arquivo: Buffer;
+  nome_arquivo: string;
+  mime: string;
+  /** UPLOAD = arquivo enviado por pessoa (antivírus); COMPROVANTE = PDF gerado pelo sistema (comprovante de protocolo). */
+  origem?: "UPLOAD" | "COMPROVANTE";
+  /** Marca "contém dados pessoais" (anonimização PENDENTE; o documento nunca é público até lá). */
+  dados_pessoais?: boolean;
+  /** Informação extra gravada na auditoria (ex.: { protocolo: "PROT-ENT-2026-000001" }). */
+  auditoria?: Record<string, unknown>;
+};
+
+/**
+ * Cria documento + versão 1 + ACL do criador DENTRO da transação do chamador (protocolo: o registro e os anexos entram juntos).
+ * Não verifica o papel nem abre transação; quem chama já validou (ex.: protocolar). O arquivo precisa ser PDF válido.
+ */
+export async function criarDocumentoNaTransacao(tx: GedTx, ctx: CtxGed, d: EntradaDocumentoNaTransacao): Promise<{ id: string; numero: string; versao_id: string; sha256: string; tamanho: number; nome_arquivo: string }> {
+  const arq = exigirUploadGedValido(d.arquivo, d.nome_arquivo, d.mime);
+  const sensibilidade: GedSensibilidade = d.sensibilidade ?? "RESTRITO";
+  const origem = d.origem ?? "UPLOAD";
+  const numero = await proximoNumeroGed(tx, ctx.organizacao_id, "DOC");
+  const doc = await tx.gedDocumento.create({
+    data: {
+      numero,
+      titulo: d.titulo.slice(0, 250),
+      tipo_id: d.tipo_id ?? null,
+      remetente: d.remetente ?? null,
+      data_documento: dataDe(new Date().toISOString().slice(0, 10)),
+      status: "PUBLICADO",
+      sensibilidade,
+      criado_por_id: ctx.usuario.id,
+      ...(d.dados_pessoais ? { contem_dados_pessoais: true, anonimizacao_status: "PENDENTE" as const } : {}),
+    } as Prisma.GedDocumentoUncheckedCreateInput,
+    select: { id: true, numero: true },
+  });
+  const v = await criarVersao(tx, ctx, { documento_id: doc.id, origem, arquivo: d.arquivo, nome_arquivo: arq.nome, mime: arq.mime });
+  await concederAclAoCriador(tx, ctx, { tipo: "documento", id: doc.id });
+  await auditarGed(
+    ctx,
+    { acao: "GED_DOCUMENTO_CRIADO", entidade: "ged_documento", entidade_id: doc.id, depois: { numero: doc.numero, titulo: d.titulo.slice(0, 250), sensibilidade, origem, sha256: v.sha256, ...(d.auditoria ?? {}) } },
+    tx,
+  );
+  return { id: doc.id, numero: doc.numero, versao_id: v.id, sha256: v.sha256, tamanho: d.arquivo.length, nome_arquivo: arq.nome };
 }
 
 export const zEdicaoDocumento = zMetadadosDocumento.omit({ marcador_ids: true }).partial({ titulo: true });

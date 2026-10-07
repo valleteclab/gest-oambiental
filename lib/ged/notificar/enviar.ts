@@ -11,6 +11,7 @@ import { decifrar } from "@/lib/crypto";
 import { enviarEmail } from "@/lib/email";
 import { comRitmo, envioSimulado, montarRuntime, provedor, urlBase } from "@/lib/canais";
 import { gedDb, type GedDb } from "../db";
+import { enviarAvisoProtocolo } from "../protocolo/aviso";
 import { renderEmail, renderWhatsapp, type ContextoTemplate } from "../templates";
 import {
   chaveOptinDoServidor, codigoOptin, erroComTentativa, esperaTentativaMs, lerPendente, MAX_TENTATIVAS_ENVIO, PREFIXO_RESERVA, RESERVA_EXPIRA_MS, tentativasDoErro,
@@ -75,6 +76,9 @@ export async function processarComunicacao(organizacaoId: string, id: string, op
 }
 
 async function enviar(db: GedDb, organizacaoId: string, linha: Linha, agora: Date): Promise<Desfecho> {
+  // Comunicação ao interessado externo de um protocolo (sem usuário interno): lib/ged/protocolo/aviso.ts
+  if (linha.protocolo_id) return enviarAvisoProtocolo(db, organizacaoId, linha, agora);
+  if (!linha.usuario_id) return { status: "IGNORADA", erro: "Comunicação sem destinatário." };
   const membro = await db.gedMembro.findFirst({
     where: { usuario_id: linha.usuario_id },
     select: { ativo: true, telefone_cifrado: true, whatsapp_optin_em: true, usuario: { select: { nome: true, email: true, ativo: true, organizacao_id: true } } },

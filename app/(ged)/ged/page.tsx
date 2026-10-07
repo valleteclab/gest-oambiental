@@ -23,6 +23,7 @@ export default async function InicioGed() {
     { href: "/ged/documentos", rotulo: "Documentos", texto: "Buscar e consultar documentos por título, data, remetente ou conteúdo.", mostrar: true },
     { href: "/ged/documentos/novo", rotulo: "Novo documento", texto: "Enviar um PDF ou criar um documento no editor.", mostrar: podeCriarDocumento(ctx) },
     { href: "/ged/assinaturas", rotulo: "Assinaturas", texto: "Documentos aguardando a sua assinatura e solicitações enviadas.", mostrar: true },
+    { href: "/ged/protocolo", rotulo: "Protocolo", texto: "Livro de entrada, saída e controle interno, com comprovante e andamento.", mostrar: true },
     { href: "/ged/tramite", rotulo: "Trâmite", texto: "Documentos recebidos e enviados a outros setores.", mostrar: true },
     { href: "/ged/pastas", rotulo: "Pastas", texto: "Organização dos documentos por pastas e permissões.", mostrar: true },
     { href: "/ged/logs", rotulo: "Logs", texto: "Acessos, alterações e comunicações.", mostrar: podeVerLogs(ctx) },

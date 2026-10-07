@@ -24,6 +24,11 @@
 //   ("CERTIFICADO DE TESTE – SEM VALOR LEGAL", e-CNPJ, titular ORGAO) criado para VAC. Esse passo roda em um processo filho SEM a condição
 //   `react-server` (o serviço importa next/navigation): `npx tsx prisma/seed/ged-demo.ts --assinado` (o seed principal já o chama).
 //   `--sem-assinatura` pula o passo. "Termo Aditivo 001/2026" continua aguardando assinatura para a demonstração ao vivo.
+//
+// Protocolo (docs/ged.md §14): outro processo filho (`--protocolos`, também sem `react-server`) cria pelos serviços REAIS alguns protocolos
+//   fictícios nos dois clientes – entrada no balcão, entrada pelo portal público, saída e interno, em situações variadas (recebido, em
+//   análise, encaminhado, respondido, devolvido, arquivado), todos com comprovante em PDF – e liga o portal do cidadão de VAC em
+//   /protocolo/vale-das-acacias-demo (AAC tem o endereço aguas-do-cerrado-demo com o portal DESLIGADO). `--sem-protocolos` pula o passo.
 import path from "node:path";
 import { randomUUID, createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -186,6 +191,9 @@ type IdsTenant = {
   acls: { id: string; documento: string | null; pasta: string | null }[];
   comunicacoes: string[];
   acessos: string[];
+  /** Protocolos fictícios (chave = assunto) e portal público do cliente (slug; ativo = portal ligado). */
+  protocolos?: Record<string, { id: string; numero: string; livro: string; situacao: string; codigo_consulta: string; codigo_verificacao: string; origem: string }>;
+  portal?: { slug: string | null; ativo: boolean };
 };
 
 // ───────────────────────── Geração de PDFs ─────────────────────────
@@ -745,6 +753,13 @@ async function main() {
     await atualizarIds(a.c, a.spec);
   }
 
+  // Protocolos fictícios (processo filho sem a condição react-server) e portal público de VAC.
+  if (!process.argv.includes("--sem-protocolos")) {
+    const f = spawnSync("npx", ["tsx", __filename, "--protocolos"], { stdio: "inherit", env: process.env });
+    if (f.status !== 0) throw new Error("passo dos protocolos falhou (ver mensagens acima).");
+  }
+  for (const r of resultados) await coletarProtocolosIds(r.c);
+
   // Mapa de IDs para os testes E2E (tests/e2e/ged-helpers.ts): E2E_GED_IDS=1 (ou --ids).
   if (process.env.E2E_GED_IDS === "1" || process.argv.includes("--ids")) {
     const arq = process.env.E2E_GED_IDS_FILE || path.join(RAIZ, "tests/e2e/.ged-ids.json");
@@ -763,6 +778,15 @@ async function main() {
   console.log("Documento assinado e selado: \"Termo de Cooperação 005/2026\" (VAC) – certificado A1 de TESTE, sem valor legal.");
   await prisma.$disconnect();
   process.exit(0);
+}
+
+/** Protocolos e portal público do cliente para o mapa de IDs do E2E (códigos de consulta/verificação ficam só no arquivo local de testes). */
+async function coletarProtocolosIds(c: ContextoTenant) {
+  const ps = await c.db.gedProtocolo.findMany({ select: { id: true, numero: true, livro: true, situacao: true, assunto: true, origem: true, codigo_consulta: true, codigo_verificacao: true }, orderBy: { created_at: "asc" } });
+  c.ids.protocolos = Object.fromEntries(ps.map((p) => [p.assunto, { id: p.id, numero: p.numero, livro: p.livro, situacao: p.situacao, origem: p.origem, codigo_consulta: p.codigo_consulta, codigo_verificacao: p.codigo_verificacao }]));
+  const org = await c.db.organizacao.findUnique({ where: { id: c.orgId }, select: { slug_publico: true } });
+  const cfg = await c.db.gedConfig.findFirst({ select: { protocolo_portal_ativo: true } });
+  c.ids.portal = { slug: org?.slug_publico ?? null, ativo: !!cfg?.protocolo_portal_ativo };
 }
 
 /**
@@ -841,11 +865,156 @@ export async function criarDocumentoAssinadoDemo(): Promise<void> {
   }
 }
 
+/**
+ * Protocolos fictícios (e o portal do cidadão de VAC) pelos serviços reais. Idempotente: cada protocolo é reconhecido pelo assunto
+ * dentro do cliente. Roda SEM a condição react-server (os serviços importam next/navigation).
+ */
+export async function criarProtocolosDemo(): Promise<void> {
+  const { PrismaClient } = await import("@prisma/client");
+  const { gedDb } = await import("../../lib/ged/db");
+  const { ctxGedDeUsuario } = await import("../../lib/ged/escopo");
+  const { sessaoPorEmail } = await import("../../lib/sessao");
+  const { registrarProtocolo, executarAcaoProtocolo } = await import("../../lib/ged/protocolo/servico");
+  const { carregarPortal, protocolarPeloPortal } = await import("../../lib/ged/protocolo/publico");
+
+  const pdfs = await criarPdfs();
+  const prisma = new PrismaClient();
+  try {
+    for (const t of [{ spec: tenantA, slug: "vale-das-acacias-demo", ligado: true }, { spec: tenantB, slug: "aguas-do-cerrado-demo", ligado: false }]) {
+      const org = await prisma.organizacao.findFirst({ where: { sigla: t.spec.sigla } });
+      if (!org) throw new Error(`cliente ${t.spec.sigla} não encontrado – rode o seed principal.`);
+      const db = gedDb(org.id);
+      const ctxDe = async (chave: string) => {
+        const r = await ctxGedDeUsuario(await sessaoPorEmail(t.spec.usuarios[chave]));
+        if (!r.ok) throw new Error(`${t.spec.usuarios[chave]}: sem acesso ao GED (${r.motivo})`);
+        return r.ctx;
+      };
+      const setor = async (sigla: string) => (await db.gedSetor.findFirstOrThrow({ where: { sigla }, select: { id: true } })).id;
+      const tipo = async (nome: string) => (await db.gedTipoDocumento.findFirst({ where: { nome }, select: { id: true } }))?.id;
+      const existe = async (assunto: string) => (await db.gedProtocolo.findFirst({ where: { assunto }, select: { id: true } }))?.id ?? null;
+      const pdf = (titulo: string, par: string[]) => pdfs.texto(org.nome, titulo, par);
+      const anexo = async (nome: string, titulo: string, par: string[]) => ({ arquivo: await pdf(titulo, par), nome_arquivo: nome, mime: "application/pdf" });
+
+      // Portal público: endereço fictício, assuntos e responsável. VAC liga; AAC só tem o endereço (portal desligado).
+      const resp = await db.usuario.findFirstOrThrow({ where: { email: t.spec.usuarios.s1 }, select: { id: true } });
+      const assuntosPortal = t.spec === tenantA
+        ? [
+            { nome: "Solicitação de certidão ou cópia de documento", setor: "PROT", prazo: 10, tipo: "Ofício", descricao: "Certidões de atos, atas e cópias de documentos públicos." },
+            { nome: "Documentos de licitação (fornecedores)", setor: "LIC", prazo: 5, tipo: "Contrato", descricao: "Propostas, habilitação e recursos de licitações em andamento." },
+            { nome: "Reclamação ou sugestão", setor: "CI", prazo: 15, tipo: undefined, descricao: "Manifestações ao controle interno." },
+          ]
+        : [{ nome: "Solicitação de serviço de água e esgoto", setor: "PROT", prazo: 7, tipo: "Ofício", descricao: "Ligações, religações e segundas vias." }];
+      for (const a of assuntosPortal) {
+        const ja = await db.gedProtocoloAssunto.findFirst({ where: { nome: a.nome }, select: { id: true } });
+        if (!ja) await db.gedProtocoloAssunto.create({ data: { nome: a.nome, descricao: a.descricao, destino_setor_id: await setor(a.setor), tipo_documento_id: a.tipo ? (await tipo(a.tipo)) ?? null : null, prioridade: "NORMAL", prazo_dias: a.prazo, ordem: assuntosPortal.indexOf(a) } as never });
+      }
+      await prisma.organizacao.update({ where: { id: org.id }, data: { slug_publico: t.slug } });
+      await db.gedConfig.upsert({
+        where: { organizacao_id: org.id },
+        create: { protocolo_portal_ativo: t.ligado, protocolo_orientacao: "Atendimento de segunda a sexta, das 8h às 14h. Anexe os documentos em PDF (até 5 arquivos de 10 MB). Ambiente de demonstração: dados fictícios.", protocolo_responsavel_id: resp.id } as never,
+        update: { protocolo_portal_ativo: t.ligado, protocolo_orientacao: "Atendimento de segunda a sexta, das 8h às 14h. Anexe os documentos em PDF (até 5 arquivos de 10 MB). Ambiente de demonstração: dados fictícios.", protocolo_responsavel_id: resp.id },
+      });
+
+      if (t.spec === tenantA) {
+        const s1 = await ctxDe("s1");
+        const gestor = await ctxDe("gestor");
+        const s2 = await ctxDe("s2");
+        const oficio = await tipo("Ofício");
+
+        const a1 = "Solicitação de certidão de atos legislativos";
+        if (!(await existe(a1))) {
+          await registrarProtocolo(s1, {
+            livro: "ENTRADA", assunto: a1, descricao: "Cidadã solicita certidão dos atos legislativos de 2025 para instruir processo de aposentadoria (dados fictícios).",
+            interessado: { nome: "Marina Albuquerque Teixeira (DEMO)", cpf_cnpj: "529.982.247-25", email: "marina.teixeira@exemplo.demo", telefone: "(74) 99999-0101" },
+            destino_setor_id: await setor("LIC"), tipo_documento_id: oficio, prioridade: "NORMAL",
+          }, [await anexo("requerimento-certidao.pdf", "Requerimento de certidão", ["Requerimento de certidão dos atos legislativos de 2025.", "Documento fictício de demonstração."])]);
+        }
+        const a2 = "Pedido de vistas ao Contrato 001/2026";
+        if (!(await existe(a2))) {
+          const r = await registrarProtocolo(s1, {
+            livro: "ENTRADA", assunto: a2, descricao: "Fornecedor pede vistas ao processo do Contrato 001/2026 (fictício).", prioridade: "ALTA",
+            interessado: { nome: "Comercial Serra Azul Ltda (DEMO)", cpf_cnpj: cnpj("45678901"), email: "contato@serraazul.exemplo.demo", telefone: "(74) 3333-0102" },
+            destino_setor_id: await setor("LIC"), prazo_resposta: new Date(Date.now() + 5 * DIA).toISOString().slice(0, 10),
+          }, [await anexo("pedido-vistas.pdf", "Pedido de vistas", ["Solicitamos vistas ao processo do Contrato 001/2026.", "Documento fictício de demonstração."])]);
+          await executarAcaoProtocolo(gestor, r.id, { acao: "ANALISAR", texto: "Assumido pela chefia de Licitações." });
+          await executarAcaoProtocolo(gestor, r.id, { acao: "ENCAMINHAR", destino_setor_id: await setor("FIN"), texto: "Para parecer financeiro sobre o empenho." });
+        }
+        const a3 = "Requerimento sem a documentação mínima";
+        if (!(await existe(a3))) {
+          const r = await registrarProtocolo(s1, {
+            livro: "ENTRADA", assunto: a3, descricao: "Requerimento entregue sem cópia do documento de identificação (fictício).",
+            interessado: { nome: "Paulo Henrique Cordeiro (DEMO)", cpf_cnpj: "111.444.777-35", email: "paulo.cordeiro@exemplo.demo" }, destino_setor_id: await setor("PROT"),
+          });
+          await executarAcaoProtocolo(s1, r.id, { acao: "DEVOLVER", texto: "Devolvido: falta cópia do documento de identificação. Protocole novamente com o documento anexado." });
+        }
+        const a4 = "Ofício 15/2026 – resposta à diligência do tribunal de contas";
+        if (!(await existe(a4))) {
+          await registrarProtocolo(s1, {
+            livro: "SAIDA", assunto: a4, descricao: "Resposta à diligência sobre o processo de pagamento 112/2026 (fictício).", origem_setor_id: await setor("LIC"),
+            interessado: { nome: "Tribunal de Contas Fictício (DEMO)", cpf_cnpj: cnpj("12345678") },
+          }, [await anexo("oficio-15-2026.pdf", "Ofício 15/2026", ["Em resposta à diligência, encaminhamos a documentação do processo de pagamento 112/2026.", "Documento fictício de demonstração."])]);
+        }
+        const a5 = "Memorando 08/2026 – solicitação de empenho";
+        if (!(await existe(a5))) {
+          await registrarProtocolo(s2, {
+            livro: "INTERNO", assunto: a5, descricao: "Financeiro solicita a Licitações a minuta do empenho do Contrato 001/2026 (fictício).", prioridade: "URGENTE",
+            origem_setor_id: await setor("FIN"), destino_setor_id: await setor("LIC"), prazo_resposta: new Date(Date.now() + 3 * DIA).toISOString().slice(0, 10),
+          }, [await anexo("memorando-08-2026.pdf", "Memorando 08/2026", ["Solicitamos a minuta do empenho referente ao Contrato 001/2026.", "Documento fictício de demonstração."])]);
+        }
+        const a6 = "Memorando 03/2026 – ciência da nova rotina de protocolo";
+        if (!(await existe(a6))) {
+          const r = await registrarProtocolo(s1, { livro: "INTERNO", assunto: a6, descricao: "Comunicado interno sobre a rotina de protocolo (fictício).", origem_setor_id: await setor("PROT"), destino_usuario_id: s2.usuario.id });
+          await executarAcaoProtocolo(s2, r.id, { acao: "ARQUIVAR", texto: "Ciente. Arquivado." });
+        }
+
+        // Entrada pelo portal público, respondida pelo servidor (o cidadão vê a resposta na consulta).
+        const a7 = "Solicitação de certidão ou cópia de documento";
+        if (!(await existe(a7))) {
+          const portal = await carregarPortal(t.slug);
+          if (!portal) throw new Error("portal de VAC não ficou disponível após a configuração.");
+          const assunto = portal.assuntos.find((x) => x.nome === a7)!;
+          const r = await protocolarPeloPortal(portal, {
+            nome: "Rafael Mendes Nogueira (DEMO)", cpf_cnpj: "168.995.350-09", email: "rafael.nogueira@exemplo.demo", telefone: "(74) 99999-0103",
+            assunto_id: assunto.id, descricao: "Solicito segunda via da certidão de homenagem concedida em 2024 (dados fictícios).", aceite_lgpd: "true",
+          }, [await anexo("documento-de-identificacao.pdf", "Documento de identificação", ["Cópia fictícia de documento de identificação.", "Documento de demonstração."])]);
+          if ("numero" in r) {
+            const p = await db.gedProtocolo.findFirstOrThrow({ where: { numero: r.numero }, select: { id: true } });
+            await executarAcaoProtocolo(s1, p.id, { acao: "RESPONDER", texto: "A segunda via da certidão está pronta e pode ser retirada na Secretaria, com documento de identificação." });
+          }
+        }
+      } else {
+        const s1 = await ctxDe("s1");
+        const a1 = "Pedido de religação de água – rua das Palmeiras";
+        if (!(await existe(a1))) {
+          await registrarProtocolo(s1, {
+            livro: "ENTRADA", assunto: a1, descricao: "Munícipe pede religação do abastecimento (fictício).", interessado: { nome: "Helena Carvalho Prado (DEMO)", cpf_cnpj: "390.533.447-05", email: "helena.prado@exemplo.demo" },
+            destino_setor_id: await setor("PROT"),
+          }, [await anexo("pedido-religacao.pdf", "Pedido de religação", ["Solicito a religação do abastecimento de água.", "Documento fictício de demonstração."])]);
+        }
+        const a2 = "Memorando 01/2026 – escala de plantão";
+        if (!(await existe(a2))) {
+          await registrarProtocolo(s1, { livro: "INTERNO", assunto: a2, descricao: "Escala de plantão da operação (fictício).", origem_setor_id: await setor("PROT"), destino_setor_id: await setor("OPE") });
+        }
+      }
+      console.log(`[ged-demo] protocolos de ${t.spec.sigla} prontos – portal ${t.ligado ? `LIGADO em /protocolo/${t.slug}` : `desligado (endereço /protocolo/${t.slug} responde 404)`}.`);
+    }
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
 if (typeof require !== "undefined" && require.main === module && process.argv.includes("--assinado")) {
   criarDocumentoAssinadoDemo()
     .then(() => process.exit(0))
     .catch((e) => {
       console.error("[ged-demo] documento assinado falhou:", e);
+      process.exit(1);
+    });
+} else if (typeof require !== "undefined" && require.main === module && process.argv.includes("--protocolos")) {
+  criarProtocolosDemo()
+    .then(() => process.exit(0))
+    .catch((e) => {
+      console.error("[ged-demo] protocolos falhou:", e);
       process.exit(1);
     });
 } else if (typeof require !== "undefined" && require.main === module) {

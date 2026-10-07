@@ -7,6 +7,7 @@ import { auditarGed } from "../auditoria";
 import type { CtxGed } from "../escopo";
 import { podeVerLogs } from "../papeis";
 import { ROTULO_EVENTO } from "../notificar/regras";
+import { ROTULO_EVENTO_PROTOCOLO } from "../protocolo/templates";
 import { BOM_UTF8, linhaCsv } from "./csv";
 import {
   documentoEhId, paramsDosFiltros, TAMANHO_PAGINA_LOGS, whereAcessos, whereAlteracoes, whereComunicacoes, type AlvoDocumento, type FiltrosLogs,
@@ -63,8 +64,8 @@ async function comunicacoesDe(ctx: CtxGed, where: ReturnType<typeof whereComunic
   const [nomes, nums] = await Promise.all([nomesUsuarios(ctx, rows.map((r) => r.usuario_id)), numerosDocumentos(ctx, rows.map((r) => r.documento_id))]);
   return rows.map((r) => ({
     id: r.id, quando: r.created_at, enviado_em: r.enviado_em, canal: r.canal, destinatario_mascarado: r.destinatario_mascarado, evento: r.evento,
-    evento_rotulo: (ROTULO_EVENTO as Record<string, string>)[r.evento] ?? r.evento, status: r.status, erro: r.erro ? r.erro.replace(/^\[t\d+\]\s*/, "") : null,
-    usuario: nomes.get(r.usuario_id) ?? "—", documento_id: r.documento_id, documento_numero: r.documento_id ? nums.get(r.documento_id) ?? null : null,
+    evento_rotulo: ({ ...ROTULO_EVENTO, ...ROTULO_EVENTO_PROTOCOLO } as Record<string, string>)[r.evento] ?? r.evento, status: r.status, erro: r.erro ? r.erro.replace(/^\[t\d+\]\s*/, "") : null,
+    usuario: r.usuario_id ? nomes.get(r.usuario_id) ?? "—" : "Interessado (protocolo)", documento_id: r.documento_id, documento_numero: r.documento_id ? nums.get(r.documento_id) ?? null : null,
   }));
 }
 

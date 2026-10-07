@@ -246,3 +246,50 @@ test.describe("T16 – quem pode entrar no GED (e onde cai)", () => {
     expect([403, 404]).toContain(resp2?.status());
   });
 });
+
+test.describe("T16 – protocolo (docs/ged.md §14): protocolo de um cliente é inacessível ao outro", () => {
+  for (const origem of ["B", "A"] as const) {
+    const alvo = OUTRO[origem];
+    test(`T16k – ${origem} → ${alvo}: ficha, comprovante, ações e lista (API) = 404 / sem vazamento`, async ({ request }) => {
+      const protocolos = Object.values(ids[alvo].protocolos ?? {});
+      test.skip(protocolos.length === 0, "Seed sem protocolos: rode  E2E_GED_IDS=1 npm run seed:ged-demo  de novo.");
+      for (const quem of [dono[origem], admin[origem]]) {
+        const h = auth(await token(request, quem));
+        for (const p of protocolos) {
+          const rotulo = `${quem} → ${alvo}/${p.numero}`;
+          expect((await request.get(`/api/v1/ged/protocolos/${p.id}`, { headers: h })).status(), `${rotulo}: ficha`).toBe(404);
+          expect((await request.get(`/api/v1/ged/protocolos/${p.id}/comprovante`, { headers: h })).status(), `${rotulo}: comprovante`).toBe(404);
+          expect((await request.post(`/api/v1/ged/protocolos/${p.id}/comprovante`, { headers: h })).status(), `${rotulo}: emitir comprovante`).toBe(404);
+          for (const acao of ["ARQUIVAR", "ANALISAR"]) {
+            expect((await request.post(`/api/v1/ged/protocolos/${p.id}`, { headers: h, data: { acao } })).status(), `${rotulo}: ${acao}`).toBe(404);
+          }
+        }
+        // lista (e busca por assunto/número/código do outro cliente): nenhuma marca do outro cliente
+        for (const url of ["/api/v1/ged/protocolos?size=100", ...protocolos.slice(0, 3).map((p) => `/api/v1/ged/protocolos?q=${encodeURIComponent(p.numero)}`)]) {
+          const r = await request.get(url, { headers: h });
+          expect(r.status(), url).toBe(200);
+          const corpo = await r.text();
+          semVazamento(corpo, marcasDe(ids[alvo]), `${quem}: ${url}`);
+          for (const p of protocolos) {
+            expect(corpo, `${url}: código de consulta de ${alvo}`).not.toContain(p.codigo_consulta);
+            expect(corpo, `${url}: assunto de ${alvo}`).not.toContain(Object.entries(ids[alvo].protocolos ?? {}).find(([, v]) => v.id === p.id)![0]);
+          }
+        }
+      }
+    });
+
+    test(`T16l – ${origem}: abrir por URL a ficha de protocolo de ${alvo} = 404`, async ({ page }) => {
+      const protocolos = Object.values(ids[alvo].protocolos ?? {});
+      test.skip(protocolos.length === 0, "Seed sem protocolos.");
+      await loginGed(page, dono[origem]);
+      for (const p of protocolos) {
+        const resp = await page.goto(`/ged/protocolo/${p.id}`).catch(() => page.goto(`/ged/protocolo/${p.id}`));
+        if (resp) expect(resp.status(), `${origem}: /ged/protocolo/${p.id}`).toBe(404);
+        await expect(page.getByText(p.codigo_consulta)).toHaveCount(0);
+      }
+      // o livro do próprio cliente não traz assunto do outro
+      await page.goto("/ged/protocolo");
+      for (const assunto of Object.keys(ids[alvo].protocolos ?? {})) await expect(page.getByText(assunto, { exact: true })).toHaveCount(0);
+    });
+  }
+});

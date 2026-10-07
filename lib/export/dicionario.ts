@@ -18,6 +18,7 @@ export const COLUNAS_CIFRADAS: Record<string, string[]> = {
   Conversa: ["destino_cifrado", "contato_cifrado"],
   CertificadoDigital: ["documento_titular"],
   GedMembro: ["telefone_cifrado"],
+  GedProtocolo: ["interessado_nome_cifrado", "interessado_doc_cifrado", "interessado_email_cifrado", "interessado_telefone_cifrado"],
 };
 
 export const DESCRICAO_TABELA: Record<string, string> = {
@@ -89,6 +90,10 @@ export const DESCRICAO_TABELA: Record<string, string> = {
   GedImportacaoItem: "GED – relatório da importação em lote: um item por arquivo do ZIP (importado, duplicado, ignorado ou com erro e o motivo).",
   GedComunicacao: "GED – comunicações enviadas (e-mail/WhatsApp): evento, destinatário mascarado, data/hora e situação.",
   GedPreferenciaNotificacao: "GED – preferências de notificação por usuário e evento.",
+  GedProtocolo: "GED – livro de protocolo (entrada, saída, interno): número, assunto, situação, destino e comprovante. Dados pessoais do interessado cifrados; registro imutável.",
+  GedProtocoloEvento: "GED – andamento imutável do protocolo (registro, análise, encaminhamento, resposta, arquivamento, devolução, indeferimento).",
+  GedProtocoloDocumento: "GED – anexos do protocolo (documento, versão, nome, tamanho e sha256 do arquivo no ato).",
+  GedProtocoloAssunto: "GED – assuntos oferecidos no portal público de protocolo e o setor de destino de cada um.",
   GedSequencia: "GED – contador de numeração de documentos por cliente/tipo/ano.",
   CertificadoDigital: "Certificados digitais A1 (e-CNPJ do órgão / e-CPF do servidor) usados para assinar documentos: somente metadados; arquivo .pfx e senha NÃO são exportados.",
 };

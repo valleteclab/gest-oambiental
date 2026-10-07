@@ -35,6 +35,9 @@ export type IdsTenantGed = {
   acls: { id: string; documento: string | null; pasta: string | null }[];
   comunicacoes: string[];
   acessos: string[];
+  /** Protocolos fictícios do seed (chave = assunto) e portal público (slug; ativo = ligado). */
+  protocolos?: Record<string, { id: string; numero: string; livro: string; situacao: string; origem: string; codigo_consulta: string; codigo_verificacao: string }>;
+  portal?: { slug: string | null; ativo: boolean };
 };
 export type IdsGed = { A: IdsTenantGed; B: IdsTenantGed };
 
@@ -84,6 +87,8 @@ export function marcasDe(t: IdsTenantGed): string[] {
     ...Object.values(t.pastas),
     ...t.comentarios.map((c) => c.id),
     ...Object.values(t.solicitacoes).flatMap((s) => [s.id, ...s.assinantes.map((a) => a.id)]),
+    // protocolo: id, códigos secretos e o endereço público (os NÚMEROS dos protocolos se repetem entre clientes, por isso ficam de fora)
+    ...Object.values(t.protocolos ?? {}).flatMap((p) => [p.id, p.codigo_consulta, p.codigo_verificacao]),
   ];
 }
 

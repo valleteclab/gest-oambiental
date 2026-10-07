@@ -254,14 +254,16 @@ enum TitularCertificado {
 // ───────────────────────── 5.1 Configuração ─────────────────────────
 
 model Organizacao {
-  id         String   @id @default(uuid()) @db.Uuid
-  nome       String
-  cnpj       String?
-  sigla      String
-  logo_url   String?
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
-  created_by String?  @db.Uuid
+  id           String   @id @default(uuid()) @db.Uuid
+  nome         String
+  cnpj         String?
+  sigla        String
+  logo_url     String?
+  // Endereço público do portal de protocolo do GED (/protocolo/{slug}); único na plataforma, minúsculas/números/hífen.
+  slug_publico String?  @unique
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+  created_by   String?  @db.Uuid
 
   municipios               Municipio[]
   tipologias               Tipologia[]
@@ -301,6 +303,10 @@ model Organizacao {
   ged_importacao_itens     GedImportacaoItem[]
   ged_preferencias         GedPreferenciaNotificacao[]
   ged_sequencias           GedSequencia[]
+  ged_protocolos           GedProtocolo[]
+  ged_protocolo_eventos    GedProtocoloEvento[]
+  ged_protocolo_documentos GedProtocoloDocumento[]
+  ged_protocolo_assuntos   GedProtocoloAssunto[]
 
   @@map("organizacao")
 }
@@ -1462,6 +1468,7 @@ enum GedOrigemVersao {
   OCR
   ANONIMIZACAO
   SELO
+  COMPROVANTE // comprovante de protocolo (PDF gerado pelo sistema)
 }
 
 enum GedStatusTexto {
@@ -1556,6 +1563,12 @@ model GedConfig {
   lembrete_dias            Int[]       @default([3, 1, 0])
   retencao_acesso_log_dias Int         @default(730)
   ocr_cota_paginas_mes     Int?        @default(5000) // páginas de OCR por mês (null = sem limite; 0 = OCR desligado)
+  // Protocolo online (portal do cidadão /protocolo/{slug}) – DESLIGADO por padrão.
+  protocolo_portal_ativo   Boolean     @default(false)
+  protocolo_orientacao     String? // texto de orientação exibido no formulário público
+  protocolo_max_anexos     Int         @default(5)
+  protocolo_max_mb         Int         @default(10) // por arquivo (teto geral: 25 MB)
+  protocolo_responsavel_id String?     @db.Uuid // membro que recebe/guarda os documentos enviados pelo portal
   organizacao              Organizacao @relation(fields: [organizacao_id], references: [id])
 
   @@unique([organizacao_id])
@@ -1955,7 +1968,8 @@ model GedComunicacao {
   updated_at             DateTime     @updatedAt
   documento_id           String?      @db.Uuid
   assinante_id           String?      @db.Uuid
-  usuario_id             String       @db.Uuid
+  usuario_id             String?      @db.Uuid // nulo = comunicação ao interessado externo de um protocolo (protocolo_id)
+  protocolo_id           String?      @db.Uuid
   evento                 String
   canal                  GedCanalCom
   destinatario_mascarado String
@@ -1969,6 +1983,7 @@ model GedComunicacao {
 
   @@index([organizacao_id, created_at])
   @@index([organizacao_id, documento_id])
+  @@index([organizacao_id, protocolo_id])
   @@map("ged_comunicacao")
 }
 
@@ -2072,4 +2087,165 @@ model GedImportacaoItem {
   @@unique([importacao_id, ordem])
   @@index([organizacao_id, importacao_id, status])
   @@map("ged_importacao_item")
+}
+
+// ───────────── GED – Protocolo (livro de entrada, saída e interno; portal do cidadão) ─────────────
+
+enum GedLivroProtocolo {
+  ENTRADA // documento recebido de pessoa/órgão externo (balcão ou portal)
+  SAIDA // documento enviado a pessoa/órgão externo
+  INTERNO // entre setores/pessoas do próprio órgão
+}
+
+enum GedSituacaoProtocolo {
+  RECEBIDO
+  EM_ANALISE
+  ENCAMINHADO
+  RESPONDIDO
+  ARQUIVADO
+  INDEFERIDO
+  DEVOLVIDO
+}
+
+enum GedPrioridadeProtocolo {
+  BAIXA
+  NORMAL
+  ALTA
+  URGENTE
+}
+
+enum GedOrigemProtocolo {
+  BALCAO // registrado por servidor
+  PORTAL // enviado pelo cidadão no portal público
+}
+
+enum GedTipoEventoProtocolo {
+  REGISTRO
+  ANALISE
+  ENCAMINHAMENTO
+  RESPOSTA
+  ARQUIVAMENTO
+  DEVOLUCAO
+  INDEFERIMENTO
+}
+
+/// Livro de protocolo. Identidade (número, data, interessado, assunto, destino original, códigos) é IMUTÁVEL (trigger);
+/// só mudam a situação, a posse atual (setor/responsável), a conclusão e o comprovante (preenchido uma única vez).
+/// Dados pessoais do interessado externo (nome, CPF/CNPJ, e-mail, telefone) ficam CIFRADOS; busca por hash do CPF/CNPJ.
+model GedProtocolo {
+  id                           String                 @id @default(uuid()) @db.Uuid
+  organizacao_id               String                 @db.Uuid
+  created_at                   DateTime               @default(now())
+  updated_at                   DateTime               @updatedAt
+  livro                        GedLivroProtocolo
+  ano                          Int
+  sequencia                    Int
+  numero                       String // PROT-ENT-2026-000123
+  origem                       GedOrigemProtocolo
+  assunto                      String
+  descricao                    String?
+  tipo_documento_id            String?                @db.Uuid
+  prioridade                   GedPrioridadeProtocolo @default(NORMAL)
+  prazo_resposta_em            DateTime?
+  origem_setor_id              String?                @db.Uuid // setor emissor (SAIDA/INTERNO)
+  interessado_nome_cifrado     String? // remetente (ENTRADA) ou destinatário externo (SAIDA)
+  interessado_doc_cifrado      String?
+  interessado_doc_hash         String? // hashBusca(CPF/CNPJ)
+  interessado_email_cifrado    String?
+  interessado_telefone_cifrado String?
+  destino_setor_id             String?                @db.Uuid
+  destino_usuario_id           String?                @db.Uuid
+  criado_por_id                String?                @db.Uuid // nulo = enviado pelo portal público
+  consentimento_lgpd_em        DateTime?
+  codigo_consulta              String // o interessado acompanha com número + este código
+  codigo_verificacao           String                 @unique // QR do comprovante (/verificar/protocolo/{codigo})
+  situacao                     GedSituacaoProtocolo   @default(RECEBIDO)
+  setor_atual_id               String?                @db.Uuid
+  responsavel_id               String?                @db.Uuid
+  concluido_em                 DateTime?
+  comprovante_documento_id     String?                @db.Uuid
+  comprovante_versao_id        String?                @db.Uuid
+  comprovante_sha256           String?
+  comprovante_emitido_em       DateTime?
+  comprovante_assinado         Boolean? // true = PAdES com o certificado A1 do órgão
+
+  eventos     GedProtocoloEvento[]
+  documentos  GedProtocoloDocumento[]
+  organizacao Organizacao             @relation(fields: [organizacao_id], references: [id])
+
+  @@unique([organizacao_id, numero])
+  @@unique([organizacao_id, livro, ano, sequencia])
+  @@unique([organizacao_id, codigo_consulta])
+  @@index([organizacao_id, livro, ano, situacao])
+  @@index([organizacao_id, created_at])
+  @@index([organizacao_id, interessado_doc_hash])
+  @@index([organizacao_id, setor_atual_id, situacao])
+  @@map("ged_protocolo")
+}
+
+/// Andamento do protocolo (imutável: só INSERT). `texto_publico` é o único texto que o interessado vê na consulta pública.
+model GedProtocoloEvento {
+  id              String                 @id @default(uuid()) @db.Uuid
+  organizacao_id  String                 @db.Uuid
+  created_at      DateTime               @default(now())
+  protocolo_id    String                 @db.Uuid
+  tipo            GedTipoEventoProtocolo
+  situacao_de     GedSituacaoProtocolo?
+  situacao_para   GedSituacaoProtocolo
+  usuario_id      String?                @db.Uuid // nulo = interessado (portal)
+  para_setor_id   String?                @db.Uuid
+  para_usuario_id String?                @db.Uuid
+  texto           String? // despacho/justificativa interna
+  texto_publico   String? // mensagem exibida ao interessado (resposta, devolução, indeferimento)
+
+  protocolo   GedProtocolo @relation(fields: [protocolo_id], references: [id])
+  organizacao Organizacao  @relation(fields: [organizacao_id], references: [id])
+
+  @@index([organizacao_id, protocolo_id, created_at])
+  @@map("ged_protocolo_evento")
+}
+
+/// Anexos do protocolo (cada PDF vira um GedDocumento). Imutável: só INSERT.
+model GedProtocoloDocumento {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizacao_id String   @db.Uuid
+  created_at     DateTime @default(now())
+  protocolo_id   String   @db.Uuid
+  documento_id   String   @db.Uuid
+  versao_id      String   @db.Uuid
+  evento_id      String?  @db.Uuid
+  finalidade     String   @default("ANEXO") // ANEXO | RESPOSTA
+  nome_arquivo   String
+  tamanho        Int
+  sha256         String
+  ordem          Int
+
+  protocolo   GedProtocolo @relation(fields: [protocolo_id], references: [id])
+  organizacao Organizacao  @relation(fields: [organizacao_id], references: [id])
+
+  @@unique([protocolo_id, documento_id])
+  @@index([organizacao_id, protocolo_id])
+  @@index([organizacao_id, documento_id])
+  @@map("ged_protocolo_documento")
+}
+
+/// Assuntos oferecidos no portal público (e seu setor de destino). O interessado escolhe o assunto, nunca o destino.
+model GedProtocoloAssunto {
+  id                String                 @id @default(uuid()) @db.Uuid
+  organizacao_id    String                 @db.Uuid
+  created_at        DateTime               @default(now())
+  updated_at        DateTime               @updatedAt
+  nome              String
+  descricao         String?
+  destino_setor_id  String                 @db.Uuid
+  tipo_documento_id String?                @db.Uuid
+  prioridade        GedPrioridadeProtocolo @default(NORMAL)
+  prazo_dias        Int? // prazo de resposta sugerido
+  ativo             Boolean                @default(true)
+  ordem             Int                    @default(0)
+  organizacao       Organizacao            @relation(fields: [organizacao_id], references: [id])
+
+  @@unique([organizacao_id, nome])
+  @@index([organizacao_id, ativo, ordem])
+  @@map("ged_protocolo_assunto")
 }

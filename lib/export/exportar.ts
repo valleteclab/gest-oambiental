@@ -180,6 +180,10 @@ export function filtroTabela(modelo: string, e: EscopoExportacao): Record<string
     case "GedSequencia":
     case "GedImportacao":
     case "GedImportacaoItem":
+    case "GedProtocolo":
+    case "GedProtocoloEvento":
+    case "GedProtocoloDocumento":
+    case "GedProtocoloAssunto":
       return { organizacao_id: e.organizacao.id };
     // Cobrança de taxas (chave da API Asaas e token do webhook NÃO são exportados – COLUNAS_EXCLUIDAS)
     case "ConfigCobranca":

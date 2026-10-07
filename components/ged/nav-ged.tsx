@@ -11,6 +11,7 @@ export const ITENS_NAV_GED: ItemMenu[] = [
   { href: "/ged/pastas", rotulo: "Pastas", visivel: () => true },
   { href: "/ged/importar", rotulo: "Importar ZIP", visivel: (ctx) => podeImportarGed(ctx) },
   { href: "/ged/assinaturas", rotulo: "Assinaturas", visivel: () => true },
+  { href: "/ged/protocolo", rotulo: "Protocolo", visivel: () => true },
   { href: "/ged/tramite", rotulo: "Trâmite", visivel: () => true },
   { href: "/ged/minha-conta/notificacoes", rotulo: "Notificações", visivel: () => true },
   { href: "/ged/logs", rotulo: "Logs", visivel: (ctx) => podeVerLogs(ctx) },

@@ -17,7 +17,9 @@ function listar(rel: string): string[] {
 
 function fontesGed(): string[] {
   const jobs = existsSync(path.join(RAIZ, "jobs")) ? readdirSync(path.join(RAIZ, "jobs")).filter((n) => /^ged/.test(n)).map((n) => path.posix.join("jobs", n)) : [];
-  return [...listar("lib/ged"), ...listar("app/(ged)"), ...listar("app/api/v1/ged"), ...listar("components/ged"), ...jobs.flatMap(listar)];
+  return [...listar("lib/ged"), ...listar("app/(ged)"), ...listar("app/api/v1/ged"), ...listar("components/ged"), ...jobs.flatMap(listar),
+    // protocolo público (sem sessão): o cliente vem do slug e TUDO passa por gedDb
+    ...listar("app/(protocolo-publico)"), ...listar("app/api/v1/publico"), ...listar("components/protocolo"), ...listar("app/(publico)/verificar")];
 }
 
 /** Remove comentários (// e /* *​/) preservando strings simples; suficiente para a varredura. */

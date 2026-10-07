@@ -83,6 +83,7 @@ export const ROTULO_ORIGEM_VERSAO_GED: Record<GedOrigemVersao, string> = {
   OCR: "Reconhecimento de texto (OCR)",
   ANONIMIZACAO: "Anonimização",
   SELO: "Selo de assinatura",
+  COMPROVANTE: "Comprovante de protocolo",
 };
 
 export const ROTULO_TIPO_TRAMITE_GED: Record<GedTipoTramite, string> = {

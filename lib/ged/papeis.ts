@@ -14,6 +14,9 @@
 //   GED_LEITOR    VER ASSINAR (pode ser signatário)                         –
 //   GED_AUDITOR   VER (somente via ACL)                                     ler logs (acesso, comunicação, auditoria)
 //
+// Protocolo (lib/ged/protocolo): registrar/movimentar = Admin, Gestor e Usuário (`protocolar`); ver o livro inteiro = Admin, Gestor
+// e Auditor (`protocolo_geral`); Usuário e Leitor veem os protocolos do seu setor/envolvimento; Leitor e Auditor nunca escrevem.
+//
 // Observação: GED_USUARIO nunca tem ADMINISTRAR (nem como criador): quem precisa gerir permissões é Gestor/Admin.
 import type { GedAcao, GedPapel } from "@prisma/client";
 import type { CtxGed } from "./escopo";
@@ -43,7 +46,9 @@ export type CapacidadeGed =
   | "tipos" // criar/editar tipos de documento
   | "criar_documento" // criar/enviar documentos
   | "solicitar_assinatura" // abrir solicitação de assinatura (além de EDITAR no documento)
-  | "importar"; // importação em lote de ZIP (cria pastas e documentos em massa)
+  | "importar" // importação em lote de ZIP (cria pastas e documentos em massa)
+  | "protocolar" // registrar e movimentar protocolos (entrada/saída/interno) – Leitor e Auditor só consultam
+  | "protocolo_geral"; // enxergar TODOS os protocolos do cliente (demais papéis: só os do seu setor/envolvimento)
 
 export const CAPACIDADES_POR_PAPEL: Record<CapacidadeGed, readonly GedPapel[]> = {
   membros: ["GED_ADMIN"],
@@ -57,6 +62,8 @@ export const CAPACIDADES_POR_PAPEL: Record<CapacidadeGed, readonly GedPapel[]> =
   criar_documento: ["GED_ADMIN", "GED_GESTOR", "GED_USUARIO"],
   solicitar_assinatura: ["GED_ADMIN", "GED_GESTOR", "GED_USUARIO"],
   importar: ["GED_ADMIN", "GED_GESTOR"],
+  protocolar: ["GED_ADMIN", "GED_GESTOR", "GED_USUARIO"],
+  protocolo_geral: ["GED_ADMIN", "GED_GESTOR", "GED_AUDITOR"],
 };
 
 type ComPapel = { membro: Pick<CtxGed["membro"], "papel"> };
@@ -75,6 +82,10 @@ export const podeVerLogs = (ctx: ComPapel) => podeGed(ctx, "logs");
 export const podeCriarDocumento = (ctx: ComPapel) => podeGed(ctx, "criar_documento");
 /** Importação em lote de ZIP (Admin e Gestor). */
 export const podeImportarGed = (ctx: ComPapel) => podeGed(ctx, "importar");
+/** Protocolo: registrar entrada/saída/interno e movimentar (Admin, Gestor e Usuário). */
+export const podeProtocolar = (ctx: ComPapel) => podeGed(ctx, "protocolar");
+/** Protocolo: ver todo o livro do cliente (Admin, Gestor e Auditor). */
+export const veTodosProtocolos = (ctx: ComPapel) => podeGed(ctx, "protocolo_geral");
 export const podeSolicitarAssinatura = (ctx: ComPapel) => podeGed(ctx, "solicitar_assinatura");
 /** Somente leitura de fato (Leitor/Auditor): esconda botões de escrita. */
 export const isSomenteLeituraGed = (ctx: ComPapel) => ctx.membro.papel === "GED_LEITOR" || ctx.membro.papel === "GED_AUDITOR";

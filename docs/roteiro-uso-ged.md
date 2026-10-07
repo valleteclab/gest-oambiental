@@ -71,6 +71,17 @@ Um repositório digital de documentos por órgão, com busca pelo conteúdo, tra
 ## 12. Isolamento entre clientes (o argumento de venda)
 **Como mostrar:** entre como `admin.aac@`. Nenhum documento da Câmara aparece, nem na busca, nem em links diretos (o sistema responde "não encontrado"). A separação é garantida no código e no banco de dados, e vale também para arquivos e exportações.
 
+## 13. Protocolo: entrada, saída, controle interno e portal do cidadão
+**Para quê:** dar número, data e comprovante a tudo que entra, sai ou circula, e deixar o cidadão ou o fornecedor entregar documentos sem ir ao balcão.
+**Como mostrar (servidor1.vac@):**
+1. Menu **Protocolo** → o livro, com filtros por livro (entrada, saída, interno), ano, situação, setor e busca (inclusive por CPF/CNPJ).
+2. **Novo protocolo** → *Entrada*: remetente, assunto, destino (setor ou pessoa) e os PDFs. Ao registrar saem o número (`PROT-ENT-2026-…`) e o **comprovante em PDF** (CPF/CNPJ mascarado, lista de arquivos com hash, QR). Repita com *Saída* e *Interno*.
+3. Abra o protocolo: andamento, anexos (que já seguiram ao setor pelo trâmite) e ações — iniciar análise, encaminhar, responder, devolver ou indeferir (com justificativa) e arquivar. O histórico não pode ser alterado.
+**Portal do cidadão (sem login):** abra `/protocolo/vale-das-acacias-demo`, preencha como cidadão (CPF válido fictício, e-mail, assunto, descrição, um PDF, aceite da LGPD) e envie. A tela mostra o **número** e o **código de consulta** e oferece o comprovante. Em **Acompanhar** informe número e código: aparecem a situação e o andamento, sem dados pessoais. Respondendo o protocolo como servidor, o cidadão vê a resposta e recebe o e-mail ("Enviado em dd/mm/aaaa às HH:mm (horário de Brasília)", sem anexo).
+**Verificação pública:** leia o QR do comprovante (ou abra `/verificar/protocolo/<código>`): o site mostra órgão, número, data e situação e confere o arquivo; arrastar o PDF recebido compara o hash no navegador, e um byte alterado falha.
+**Ligar o portal de outro órgão (admin.aac@):** **Administração → Configurações → Protocolo online**: endereço público, responsável, orientação, limites e assuntos. Vem desligado; enquanto estiver, o endereço responde "não encontrado".
+**Ponto forte:** cada cliente tem seu próprio livro e numeração; um órgão nunca enxerga o protocolo do outro, nem pelo portal.
+
 ## Roteiro rápido de apresentação (15 min)
 1. Login e visão geral (1 min)
 2. Importar ZIP de uma pasta digitalizada (3 min)
@@ -78,6 +89,7 @@ Um repositório digital de documentos por órgão, com busca pelo conteúdo, tra
 4. Trâmite entre dois servidores (2 min)
 5. Assinatura com dois signatários e verificação pública (4 min)
 6. Logs com o auditor e isolamento com o outro cliente (2 min)
+7. (opcional, +3 min) Protocolo: registrar uma entrada no balcão, protocolar pelo portal do cidadão e verificar o comprovante pelo QR
 
 ## O que ainda não existe
-Upload de imagens e Word, scanner direto pela web (agente local), metadados por IA, portal do cliente, pacote de fechamento mensal, temporalidade e retenção, motor de anonimização.
+Upload de imagens e Word, scanner direto pela web (agente local), metadados por IA, portal do cliente para consulta de documentos publicados (o protocolo online já existe), pacote de fechamento mensal, temporalidade e retenção, motor de anonimização. No protocolo: busca por nome do interessado, anexar arquivos depois de registrado, WhatsApp ao cidadão e captcha.

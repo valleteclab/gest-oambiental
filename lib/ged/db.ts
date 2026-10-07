@@ -224,3 +224,29 @@ export async function comunicacoesPendentesEntreClientes(opc: { limite?: number;
 export async function organizacoesGedAtivas(): Promise<string[]> {
   return (await prisma.organizacao.findMany({ where: { modulos: { has: "GED" } }, select: { id: true } })).map((o) => o.id);
 }
+
+// ───────────── Consultas entre clientes do PROTOCOLO PÚBLICO (somente ids) ─────────────
+// O portal do cidadão (/protocolo/{slug}) e a verificação do comprovante (/verificar/protocolo/{codigo}) não têm sessão:
+// o endereço público é que identifica o cliente. Estas funções só devolvem ids; todo o restante passa por gedDb(organizacao_id).
+
+const RE_SLUG_PORTAL = /^[a-z0-9][a-z0-9-]{1,58}[a-z0-9]$/;
+
+/** Resolve o slug público do portal de protocolo em UMA organização com o módulo GED. Slug fora do formato → null sem consultar o banco. */
+export async function resolverSlugPortal(slug: string): Promise<{ organizacao_id: string } | null> {
+  if (typeof slug !== "string" || !RE_SLUG_PORTAL.test(slug)) return null;
+  const o = await prisma.organizacao.findFirst({ where: { slug_publico: slug, modulos: { has: "GED" } }, select: { id: true } });
+  return o ? { organizacao_id: o.id } : null;
+}
+
+/** O slug já pertence a outra organização? (validação ao configurar o portal) */
+export async function slugPortalEmUso(slug: string, exceto: string): Promise<boolean> {
+  const o = await prisma.organizacao.findFirst({ where: { slug_publico: slug, id: { not: exceto } }, select: { id: true } });
+  return !!o;
+}
+
+/** Resolve o código de verificação do comprovante (QR) em { protocolo_id, organizacao_id }. Formato XXXX-XXXX-XXXX. */
+export async function resolverCodigoVerificacaoProtocolo(codigo: string): Promise<{ protocolo_id: string; organizacao_id: string } | null> {
+  if (typeof codigo !== "string" || !/^[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}$/.test(codigo)) return null;
+  const p = await prisma.gedProtocolo.findUnique({ where: { codigo_verificacao: codigo }, select: { id: true, organizacao_id: true } });
+  return p ? { protocolo_id: p.id, organizacao_id: p.organizacao_id } : null;
+}

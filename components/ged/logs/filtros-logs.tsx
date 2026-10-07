@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ACOES_ACESSO, CANAIS_COM, STATUS_COM, paramsDosFiltros, type AbaLogs, type FiltrosLogs } from "@/lib/ged/logs/filtros";
 import { EVENTOS_CONFIGURAVEIS, ROTULO_EVENTO } from "@/lib/ged/notificar/regras";
+import { ROTULO_EVENTO_PROTOCOLO } from "@/lib/ged/protocolo/templates";
 
 const ROTULO_ABA: Record<AbaLogs, string> = { acessos: "Acessos", alteracoes: "Alterações", comunicacoes: "Comunicações" };
 const ROTULO_ACAO: Record<string, string> = { VISUALIZAR: "Visualizou", BAIXAR: "Baixou", BUSCAR: "Buscou", LISTAR: "Listou", NEGADO: "Acesso negado", LOGIN_GED: "Entrou no módulo" };
@@ -73,6 +74,7 @@ export function FiltrosLogs({ f, usuarios }: { f: FiltrosLogs; usuarios: { id: s
               <option value="">Todos</option>
               {EVENTOS_CONFIGURAVEIS.map((e) => <option key={e} value={e}>{ROTULO_EVENTO[e]}</option>)}
               <option value="CONFIRMACAO_WHATSAPP">{ROTULO_EVENTO.CONFIRMACAO_WHATSAPP}</option>
+              {Object.entries(ROTULO_EVENTO_PROTOCOLO).map(([e, r]) => <option key={e} value={e}>{r}</option>)}
             </select>
           </div>
         </>
