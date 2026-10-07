@@ -86,6 +86,31 @@ export async function listarArquivos(prefixo: string): Promise<string[]> {
   return nomes.filter((n) => n.isFile()).map((n) => `${prefixo.replace(/\/+$/, "")}/${n.name}`);
 }
 
+/** Todos os arquivos sob um prefixo, RECURSIVAMENTE, com tamanho em bytes (limpeza/auditoria de storage por cliente). */
+export async function listarArquivosRecursivo(prefixo: string): Promise<{ key: string; tamanho: number }[]> {
+  const base = prefixo.replace(/\/+$/, "");
+  const out: { key: string; tamanho: number }[] = [];
+  if (driver() === "s3") {
+    let token: string | undefined;
+    do {
+      const r = await cliente().send(new ListObjectsV2Command({ Bucket: bucket(), Prefix: `${base}/`, ContinuationToken: token }));
+      for (const o of r.Contents ?? []) if (o.Key) out.push({ key: o.Key, tamanho: o.Size ?? 0 });
+      token = r.IsTruncated ? r.NextContinuationToken : undefined;
+    } while (token);
+    return out;
+  }
+  const andar = async (rel: string) => {
+    const entradas = await readdir(caminhoSeguro(rel), { withFileTypes: true }).catch(() => []);
+    for (const e of entradas) {
+      const filho = `${rel}/${e.name}`;
+      if (e.isDirectory()) await andar(filho);
+      else if (e.isFile()) out.push({ key: filho, tamanho: (await stat(caminhoSeguro(filho))).size });
+    }
+  };
+  await andar(base);
+  return out;
+}
+
 /** Driver de storage em uso ("local" | "s3"). */
 export const driverStorage = () => driver();
 

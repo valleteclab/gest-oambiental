@@ -28,6 +28,7 @@
     "seed:demandas-demo": "tsx --conditions=react-server prisma/seed/demandas-demo.ts",
     "seed:certificado-demo": "tsx --conditions=react-server prisma/seed/certificado-demo.ts",
     "seed:cobranca-demo": "tsx --conditions=react-server prisma/seed/cobranca-demo.ts",
+    "ged:limpar": "tsx --conditions=react-server scripts/ged/limpar-organizacao.ts",
     "seed:ged-demo": "tsx --conditions=react-server prisma/seed/ged-demo.ts",
     "backup:restore-arquivos": "tsx scripts/backup/restaurar-arquivos.ts",
     "cobranca:sync": "tsx --conditions=react-server jobs/cobranca.ts",

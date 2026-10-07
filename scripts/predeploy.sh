@@ -13,6 +13,10 @@
 #                               Orvalho e Riachão das Neves – documentos saem assinados digitalmente (PAdES) com o selo
 #                               "certificado de teste"; idempotente; nunca usar em produção – docs/assinatura-digital.md)
 #   SEED_GED_DEMO=true       → npm run seed:ged-demo (Gestão de Documentos: 2 clientes fictícios, usuários, pastas e documentos de ensaio)
+#   GED_LIMPAR_ORG=<SIGLA>   → LIMPEZA do conteúdo do GED de UM cliente (docs/ged.md §15), depois dos seeds. Sem as duas variáveis
+#                               abaixo roda só o DRY-RUN (imprime no log as contagens por tabela e os arquivos do storage).
+#                               GED_LIMPAR_EXECUTAR=true + GED_LIMPAR_CONFIRMAR=<SIGLA> (igual à sigla) → APAGA de verdade.
+#                               REMOVA as 3 variáveis depois do deploy; com SEED_GED_DEMO=true o seed recria os exemplos no deploy seguinte.
 #   SEED_COBRANCA_DEMO=true  → npm run seed:cobranca-demo (cobrança de taxas SIMULADA – Pix/boleto fictícios e "Simular
 #                               pagamento" – e tabela de taxas fictícia em Riachão das Neves e Alto do Umbuzeiro; rodar
 #                               depois do seed:demo/onboarding; não toca os municípios dos E2E; docs/cobranca.md)
@@ -72,6 +76,17 @@ fi
 if sim "${SEED_GED_DEMO:-}"; then
   log "SEED_GED_DEMO=true – Gestão de Documentos: dois clientes FICTÍCIOS de demonstração (isolamento entre clientes)"
   npm run seed:ged-demo
+fi
+
+# ── Limpeza do conteúdo do GED de um cliente (docs/ged.md §15) – dry-run por padrão ──
+if [ -n "${GED_LIMPAR_ORG:-}" ]; then
+  if sim "${GED_LIMPAR_EXECUTAR:-}"; then
+    log "GED_LIMPAR_EXECUTAR=true – APAGANDO o conteúdo do GED de '$GED_LIMPAR_ORG' (confirmação: '${GED_LIMPAR_CONFIRMAR:-}')"
+    GED_LIMPAR_ORIGEM="predeploy" npm run ged:limpar -- "$GED_LIMPAR_ORG" --executar "--confirmar=${GED_LIMPAR_CONFIRMAR:-}"
+  else
+    log "GED_LIMPAR_ORG definido sem GED_LIMPAR_EXECUTAR=true – DRY-RUN da limpeza do GED de '$GED_LIMPAR_ORG' (nada é apagado)"
+    npm run ged:limpar -- "$GED_LIMPAR_ORG" || log "AVISO: o dry-run da limpeza falhou (veja acima); o deploy segue."
+  fi
 fi
 
 # ── Ambiente da PoC – CDS Piemonte do Paraguaçu (Pregão SRP 005/2026) – ver docs/poc-cds.md ──

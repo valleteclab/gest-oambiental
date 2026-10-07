@@ -70,6 +70,7 @@ Login: usuário só-GED entra sem escolher órgão e cai em `/ged`; usuário só
 | `JOBS_CRON_REPLICACAO`, `JOBS_CRON_RECONCILIACAO` | agendas da replicação de arquivos |
 | `BACKUP_S3_*`, `BACKUP_ARQUIVOS_DIR`, `BACKUP_ARQUIVOS_PREFIX`, `REPLICACAO_LOTE`, `REPLICACAO_TEMPO_MAX_MIN` | destino e dimensionamento da replicação (docs/backup.md §4) |
 | `SEED_GED_DEMO=true` | `scripts/predeploy.sh` roda `npm run seed:ged-demo` (Railway) |
+| `GED_LIMPAR_ORG`, `GED_LIMPAR_EXECUTAR`, `GED_LIMPAR_CONFIRMAR` | limpeza do conteúdo do GED de um cliente no pré-deploy (§15); sem `EXECUTAR` só dry-run |
 | `E2E_GED_IDS=1`, `E2E_GED_IDS_FILE` | o seed grava o mapa de IDs usado pelo E2E (`tests/e2e/.ged-ids.json`) |
 | `ONBOARD_SENHA` | senha fixa no onboarding (sem `--demo` mantém a troca obrigatória) |
 
@@ -154,7 +155,7 @@ Banco isolado para trabalho paralelo: `CREATE DATABASE licenciagov_ged_x` + `DAT
 2. Migração: trigger `ged_mesmo_tenant()` para cada FK para outra tabela do GED/usuário; trigger de imutabilidade se for trilha (`bloqueia_alteracao()`).
 3. Regra em `filtroTabela()` (`lib/export/exportar.ts`) e descrição em `DESCRICAO_TABELA`; coluna `tsv`/binária fora da exportação.
 4. Acesso **somente** via `ctx.db`/`gedDb()`; escrita com `auditarGed()` na mesma transação.
-5. `tests/unit/ged-schema.test.ts` falha se faltar `organizacao_id`, índice ou regra de exportação. Se a tabela tiver arquivo no storage, inclua a chave na replicação (`inventarioDesde`/`inventarioCompleto` em `lib/backup/arquivos.ts`) e na exportação de anexos.
+5. `tests/unit/ged-schema.test.ts` falha se faltar `organizacao_id`, índice ou regra de exportação. Inclua a tabela em `TABELAS_APAGADAS` ou `TABELAS_PRESERVADAS` de `scripts/ged/plano-limpeza.ts` (o teste `ged-limpeza` falha sem isso; a ordem precisa respeitar as FKs). Se a tabela tiver arquivo no storage, inclua a chave na replicação (`inventarioDesde`/`inventarioCompleto` em `lib/backup/arquivos.ts`) e na exportação de anexos.
 
 ## 10. Limites conhecidos (fase 1)
 
@@ -279,3 +280,27 @@ Desligado por padrão. O GED_ADMIN liga em **`/ged/admin/configuracoes` → "Pro
 **Anti-abuso** (`lib/ged/protocolo/limites.ts`, mesmo mecanismo do login): **honeypot** (`website`, fora da tela; preenchido = sucesso genérico sem criar nada), **limite de envios por IP** (8/hora; toda tentativa conta, inclusive a inválida) e **teto por portal** (300/hora), limite de **consultas** (falhas por IP e por protocolo-alvo → 429), limites de tamanho/quantidade de arquivos, apenas PDF (`validarUploadGed`, antivírus se configurado) e mensagens genéricas. Em memória por processo, como o login; atrás de proxy o IP vem de `X-Forwarded-For`.
 
 **Testes**: `tests/unit/ged-protocolo.test.ts` (numeração, máquina de situações, validação do formulário público e do registro, máscara de CPF/CNPJ, cifra, e-mail e comprovante em HTML, rate limit, permissões), `ged-schema` (4 modelos novos) e E2E `t23-ged-protocolo` + `t16` (protocolo de A inacessível a B).
+
+## 15. Operação: limpar o conteúdo do GED de um cliente
+
+Não há tela de exclusão em massa e as trilhas são imutáveis por trigger (`ged_tramite`, `ged_comentario`, versões seladas, assinantes decididos, protocolo e andamento). Para **zerar um ambiente de teste/demonstração** (ex.: "Câmara Municipal de Vale das Acácias (DEMO)", sigla `VAC`) existe a ferramenta `scripts/ged/limpar-organizacao.ts`:
+
+```bash
+npm run ged:limpar -- VAC                                  # DRY-RUN (padrão): só imprime contagens por tabela Ged* e nº/tamanho de arquivos em ged/{org}/
+npm run ged:limpar -- VAC --executar --confirmar=VAC       # apaga (a confirmação precisa ser a sigla exata da organização)
+```
+
+`<sigla|id>`: sigla (sem diferenciar maiúsculas) ou uuid; sigla que case com mais de uma organização, organização inexistente ou **sem o módulo `GED`** abortam sem alterar nada. Uma organização por execução.
+
+**Apaga** (só linhas com `organizacao_id` = a organização; filhos antes dos pais): importações e itens, protocolos (registro, andamento, anexos), comunicações, assinantes e solicitações de assinatura, detecções de dados pessoais, conteúdo de texto, versões, documentos, marcadores e vínculos, ACLs, trâmites, comentários, logs de acesso, **pastas** e contadores de numeração (`GedSequencia`: os próximos números voltam a 000001); e **todos os arquivos** do storage sob `ged/{organizacao_id}/` (inclusive resíduos de importação).
+**Preserva**: membros, setores e participantes, configuração (`GedConfig`, inclusive o portal de protocolo), tipos de documento, assuntos de protocolo, preferências de notificação, canais, certificado digital, usuários, o licenciamento, **o `log_auditoria`** (a limpeza grava `GED_LIMPEZA_ORGANIZACAO` com as contagens e `GED_LIMPEZA_ARQUIVOS`) e todos os outros clientes.
+
+**Como contorna as travas:** dentro de **uma** transação, `SET LOCAL session_replication_role = 'replica'` (local à transação; não persiste nem afeta outras conexões; exige superusuário ou, no PG ≥ 15, privilégio `SET` no parâmetro – o usuário `postgres` do Railway é superusuário). Em `replica` as FKs também não são checadas, por isso a ordem de dependência é fixa e testada contra o `schema.prisma`. Sem esse privilégio o script cai sozinho no método `triggers` (`ALTER TABLE … DISABLE TRIGGER` só dos triggers de DELETE das tabelas apagadas, na mesma transação – DDL transacional, mas com lock exclusivo nessas tabelas até o COMMIT; exige ser dono). Toda instrução leva `WHERE organizacao_id = $1` e passa por `validarSqlLimpeza` antes de executar; ao fim a transação confere que nada da organização sobrou (senão ROLLBACK). O banco é apagado primeiro e o storage depois: falha no meio deixa no máximo arquivos órfãos (rode de novo), nunca registros sem arquivo.
+
+**`--manter-demo` NÃO é suportado** (a flag é recusada com explicação): os documentos criados pelo seed não têm marca confiável – a numeração `{SIGLA}-DOC-ano-nnnnnn` é a mesma dos reais, o criador é um usuário comum e o seed os reconhece apenas pelo título dentro do cliente. Para voltar à massa de exemplo, limpe tudo e rode `npm run seed:ged-demo`.
+
+**Railway (sem acesso ao banco):** variáveis do **worker**, lidas por `scripts/predeploy.sh` (ver `deploy/railway.md` §3): `GED_LIMPAR_ORG=VAC` sozinha = dry-run nos logs; com `GED_LIMPAR_EXECUTAR=true` e `GED_LIMPAR_CONFIRMAR=VAC` apaga. **Remova as variáveis depois** (senão todo deploy limpa de novo).
+
+> **Aviso – `SEED_GED_DEMO`:** com `SEED_GED_DEMO=true` o pré-deploy roda `seed:ged-demo`, que **recria os documentos de exemplo** de VAC e AAC (idempotente por título). Depois de limpar, remova `SEED_GED_DEMO` do worker, senão o deploy seguinte repovoa o cliente. Na mesma execução a limpeza roda **depois** dos seeds.
+
+**Testes:** `tests/unit/ged-limpeza.test.ts` (puro: toda tabela `Ged*` do schema consta no plano, ordem filho→pai contra as FKs, preservadas sem FK para apagadas, todo SQL com filtro por organização, prefixo de storage, argumentos e confirmação) e, com banco/storage descartáveis, `tests/integration/ged-limpeza-db.ts` (seed VAC+AAC, limpa VAC pelos dois métodos, AAC idêntica em linhas e arquivos, VAC vazia salvo membros/setores/config/tipos, log preservado).
