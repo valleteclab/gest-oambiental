@@ -110,19 +110,35 @@ Senha de todos: `Demo@2026licencia` · e-mails `@gestaodocumentos.demo` · entra
 | | `auditor.vac@` | GED_AUDITOR | Controle Interno; lê `/ged/logs`; VER no sigiloso por ACL |
 | **AAC** – Autarquia de Águas do Cerrado (DEMO) | `admin.aac@`, `gestor.aac@`, `servidor.aac@` | ADMIN / GESTOR / USUARIO | documentos com os mesmos títulos de VAC (isolamento) |
 
-Dados criados (idempotente; reconhecidos pelo título dentro do cliente): ver o cabeçalho de `prisma/seed/ged-demo.ts` e o roteiro `docs/poc-ged.md`. Resumo VAC: Ofício 12/2026 (em trâmite), Contrato 001/2026 (aguardando assinaturas, comentários, ACL), Termo Aditivo 001/2026 (reservado para assinar ao vivo), Parecer 07/2026 (assinatura **recusada** com justificativa), Minuta de Ofício 15/2026 (rascunho do editor), Ofício recebido nº 0045 (PDF de imagem, `SEM_TEXTO`), Ata 018/2026 (dados pessoais + anonimização pendente), Processo Administrativo Disciplinar 003/2026 (SIGILOSO em `Pessoal`), Edital/Ata do Pregão 03/2026 (públicos), Empenho, Nota fiscal e Relatório; ACLs de pasta por setor e usuário; logs de acesso e de comunicação de exemplo. **Pendente (Parte 2):** documento assinado e selado com QR (depende do serviço de assinaturas).
+Dados criados (idempotente; reconhecidos pelo título dentro do cliente): ver o cabeçalho de `prisma/seed/ged-demo.ts` e o roteiro `docs/poc-ged.md`. Resumo VAC: Ofício 12/2026 (em trâmite), Contrato 001/2026 (aguardando assinaturas, comentários, ACL), Termo Aditivo 001/2026 (reservado para assinar ao vivo), Parecer 07/2026 (assinatura **recusada** com justificativa), Minuta de Ofício 15/2026 (rascunho do editor), Ofício recebido nº 0045 (PDF de imagem, `SEM_TEXTO`), Ata 018/2026 (dados pessoais + anonimização pendente), Processo Administrativo Disciplinar 003/2026 (SIGILOSO em `Pessoal`), Edital/Ata do Pregão 03/2026 (públicos), Empenho, Nota fiscal e Relatório; ACLs de pasta por setor e usuário; logs de acesso e de comunicação de exemplo. Também: **Termo de Cooperação 005/2026**, assinado (vereador → gestor) e **selado** pelo serviço real de assinaturas, com um certificado A1 de **TESTE** ("CERTIFICADO DE TESTE – SEM VALOR LEGAL", e-CNPJ, titular ORGAO) criado para VAC; o código verificador e os IDs vão para `tests/e2e/.ged-ids.json` com `E2E_GED_IDS=1`.
 
 ## 8. Como rodar os testes
 
 ```bash
 npm run typecheck && npm run lint
 npm test                                   # vitest (tests/unit): ged-*.test.ts, onboarding-ged.test.ts, backup-arquivos.test.ts
-# integração com banco (isolamento via gedDb): tests/integration/ged-isolamento-db.ts (ver o cabeçalho do arquivo)
-# E2E (Playwright) – dados: dois clientes fictícios
-E2E_GED_IDS=1 npm run seed:ged-demo        # grava tests/e2e/.ged-ids.json
-npx playwright test tests/e2e/t16-ged-isolamento.spec.ts --project=desktop-chromium
+# integração com banco (isolamento via gedDb): tests/integration/ged-isolamento-db.ts; assinaturas: tests/unit/ged-assinaturas.integracao.ts
+
+# E2E (Playwright) – o GED usa dois clientes fictícios (VAC e AAC) e roda no MESMO banco do licenciamento
+npx prisma migrate deploy && npm run seed:demo && npm run onboard -- riachao-das-neves --demo && npm run seed:riachao-demo
+E2E_GED_IDS=1 npm run seed:ged-demo        # precisa de CHROMIUM_PATH (PDFs e selo); grava tests/e2e/.ged-ids.json (não versionar)
+npm run test:e2e                           # suíte inteira (T1–T15 de licenciamento + T16–T20 do GED)
+npx playwright test tests/e2e/t1[6-9]* tests/e2e/t20* --project=desktop-chromium   # só o GED
 ```
-`t16` **não** está no seed padrão do CI (o orquestrador o liga depois). Banco isolado para trabalho paralelo: `CREATE DATABASE licenciagov_ged_x` + `DATABASE_URL=… npx prisma migrate deploy` (linhas imutáveis não podem ser apagadas).
+
+| Spec | O que cobre | Observações |
+|---|---|---|
+| `t16-ged-isolamento` | um cliente por ID direto no outro (páginas, arquivo, versão, comentários, trâmite, ACL, assinaturas, logs) = 404; listas/busca sem vazamento; login/redirecionos | somente leitura (um POST recusado); dois projetos |
+| `t17-ged-documentos` | upload, filtros (título, remetente, data, marcador, pasta), busca por conteúdo com trecho, marcadores (CRUD + aplicar), pastas (criar/subpasta/mover), ACL Ver/Editar/Assinar por usuário, sigiloso × administrador, "dados pessoais" rebaixa a sensibilidade | desktop; dados com sufixo único (re-executável) |
+| `t18-ged-editor-tramite` | editor (autosave → PDF), trâmite completo, linha do tempo imutável, comentários; triggers do banco recusam `UPDATE` | `t18c` usa `DATABASE_URL` (via `tests/e2e/t20-banco.ts`) |
+| `t19-ged-assinaturas` | solicitação sequencial com 2 signatários, ordem, comentário, senha errada, assinar, selo com código, recusa com justificativa, painel por status, PDF selado (PAdES, imagem do QR em cada página, folha de assinaturas), `/verificar/{codigo}` sem login, WebCrypto (íntegro / 1 byte alterado) e código inexistente | a parte "selado" usa o documento do seed |
+| `t20-ged-notificacoes-logs` | e-mail do trâmite (assunto, link, "Enviado em dd/mm/aaaa às HH:mm (horário de Brasília)", sem anexo), WhatsApp simulado com opt-in por código, `/ged/logs` (3 abas, filtros, CSV, 403 para Leitor/Usuário) | no E2E não há worker: `tests/e2e/t20-banco.ts` executa a mesma `processarComunicacao()` direto no banco (precisa de `DATABASE_URL` e `DATA_KEY` iguais aos do servidor; sem elas os testes de envio se pulam) |
+
+Dicas de robustez (helpers em `tests/e2e/ged-helpers.ts`): sem `networkidle`; `aguardarHidratacao()` espera o React hidratar (os `FormGed` só funcionam depois); `submeter()` repete o clique uma vez; formulários que **somem** depois de salvar (ciência, devolução, arquivamento, enviar para assinatura) são conferidos pelo resultado (linha do tempo, painel), não pela mensagem; `window.confirm` é aceito por `aceitarDialogos()`.
+
+**CI** (`.github/workflows/ci.yml`, job E2E): instala o Chromium do Playwright e define `CHROMIUM_PATH` **antes** dos seeds; instala `poppler-utils` (pdftotext, busca por conteúdo de upload); roda `seed:demo`, o onboarding/seed de Riachão e `E2E_GED_IDS=1 npm run seed:ged-demo`; só então faz o build e sobe o servidor. Sem `.ged-ids.json` os specs t16–t20 se pulam com a instrução no motivo. O seed do GED não altera os dados do licenciamento (organizações VAC/AAC são só-GED, sem municípios, e os usuários `@gestaodocumentos.demo` não têm papel de licenciamento).
+
+Banco isolado para trabalho paralelo: `CREATE DATABASE licenciagov_ged_x` + `DATABASE_URL=… npx prisma migrate deploy` (linhas imutáveis não podem ser apagadas).
 
 ## 9. Como adicionar uma tabela ao GED
 
