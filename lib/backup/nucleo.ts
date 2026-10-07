@@ -1,6 +1,25 @@
 // Funções puras do backup real (sem banco, sem I/O) – testadas em tests/unit/backup.test.ts.
 // Execução: lib/backup/executar.ts (worker `backup` / `restore-test` e botões em /admin/backup).
 
+/**
+ * Extensões do PostgreSQL de que o schema depende (busca do GED: unaccent + pg_trgm). O dump é feito com `--schema=public`,
+ * que NÃO leva `CREATE EXTENSION`: toda restauração (teste mensal ou recuperação real) precisa criá-las ANTES do pg_restore,
+ * senão a criação de ged_conteudo_texto (coluna gerada) e dos índices trigram falha. Mantenha em sincronia com as migrações.
+ */
+export const EXTENSOES_BANCO = ["unaccent", "pg_trgm"] as const;
+export const SQL_CRIAR_EXTENSOES = EXTENSOES_BANCO.map((e) => `CREATE EXTENSION IF NOT EXISTS ${e} WITH SCHEMA public;`).join(" ");
+
+/**
+ * Índice do dump (`pg_restore --list`) SEM a entrada do schema `public`: o banco de destino já tem o schema (com as extensões
+ * criadas por SQL_CRIAR_EXTENSOES) e `DROP SCHEMA public` (pg_restore --clean) falharia porque as extensões dependem dele.
+ */
+export function indiceSemSchemaPublic(listaDoDump: string): string {
+  return listaDoDump
+    .split("\n")
+    .filter((l) => !/^\d+;\s+\d+\s+\d+\s+SCHEMA\s+-\s+public(\s|$)/.test(l))
+    .join("\n");
+}
+
 /** Prefixo e extensão dos dumps: licenciagov-AAAAMMDDTHHMMSSZ.dump.enc (pg_dump -Fc cifrado com openssl AES-256-CBC/PBKDF2). */
 export const PREFIXO_ARQUIVO = "licenciagov-";
 export const EXTENSAO_ARQUIVO = ".dump.enc";

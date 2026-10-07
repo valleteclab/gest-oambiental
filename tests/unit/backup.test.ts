@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  EXTENSOES_BANCO,
+  SQL_CRIAR_EXTENSOES,
+  indiceSemSchemaPublic,
   compararContagens,
   dataDoNome,
   descreverDestino,
@@ -115,5 +118,29 @@ describe("URL para pg_dump", () => {
     const r = urlLibpq("postgresql://app:p%40ss@db.internal:5432/licenciagov?schema=public&sslmode=require&connection_limit=5");
     expect(r).toEqual({ url: "postgresql://app@db.internal:5432/licenciagov?sslmode=require", senha: "p@ss", banco: "licenciagov" });
     expect(urlLibpq("postgresql://app:x@h/prod", "licenciagov_restore_test").url).toBe("postgresql://app@h/licenciagov_restore_test");
+  });
+});
+
+describe("restauração: extensões e índice do dump", () => {
+  it("cria as extensões de que o schema depende, no schema public, antes do pg_restore", () => {
+    expect(EXTENSOES_BANCO).toEqual(["unaccent", "pg_trgm"]);
+    expect(SQL_CRIAR_EXTENSOES).toBe("CREATE EXTENSION IF NOT EXISTS unaccent WITH SCHEMA public; CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;");
+  });
+
+  it("remove só a entrada do schema public do índice (DROP SCHEMA public falharia por causa das extensões)", () => {
+    const lista = [
+      "; Archive created at 2026-10-07 01:00:00 UTC",
+      "6; 2615 2200 SCHEMA - public postgres",
+      "3652; 0 0 COMMENT - SCHEMA public postgres",
+      "234; 1259 16400 TABLE public ged_documento postgres",
+      "240; 1259 16410 TABLE public schema_public_nao_e_a_entrada postgres",
+    ].join("\n");
+    const r = indiceSemSchemaPublic(lista);
+    expect(r).not.toContain("SCHEMA - public postgres\n3652");
+    expect(r).not.toMatch(/^6; 2615 2200 SCHEMA - public/m);
+    expect(r).toContain("COMMENT - SCHEMA public"); // comentário do schema continua (aplica-se ao schema já existente)
+    expect(r).toContain("TABLE public ged_documento");
+    expect(r).toContain("TABLE public schema_public_nao_e_a_entrada");
+    expect(r).toContain("; Archive created");
   });
 });

@@ -13,7 +13,7 @@ Sob demanda: botão **"Executar teste de restauração agora"** em `/admin/backu
 3. Decifra (`openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000`) com `BACKUP_PASSPHRASE` – testa também a custódia da chave.
 4. Banco descartável: `BACKUP_RESTORE_DATABASE_URL` (schema `public` recriado) ou, por padrão, `CREATE DATABASE licenciagov_restore_test`
    no mesmo servidor (nunca o banco de produção – há trava).
-5. `pg_restore --no-owner --no-acl --exit-on-error --clean --if-exists` (qualquer erro = falha).
+5. Cria as extensões do PostgreSQL de que o schema depende (`unaccent`, `pg_trgm` – busca do GED) e só então roda `pg_restore --no-owner --no-acl --exit-on-error --use-list` (qualquer erro = falha), com o índice do dump **sem a entrada do schema `public`** e sem `--clean`. Motivo: o dump é feito com `--schema=public` e **não leva `CREATE EXTENSION`**; e `--clean` tentaria `DROP SCHEMA public`, que falha porque as extensões dependem dele.
 6. Verificações:
    - contagens de `organizacao, municipio, usuario, pessoa, empreendimento, processo, tramitacao, documento_oficial, anexo, log_auditoria, _prisma_migrations`
      restaurado × produção: tabelas mutáveis dentro da tolerância (`BACKUP_RESTORE_TOLERANCIA`, padrão 10 %, mín. 2 linhas);
@@ -65,7 +65,11 @@ pg_restore --list licenciagov.dump | head          # confere o conteúdo
 
 # 4) Banco novo (Postgres ≥ versão de origem) e restauração
 createdb -h <host> -U postgres licenciagov
-pg_restore -h <host> -U postgres -d licenciagov --no-owner --no-acl --exit-on-error --clean --if-exists licenciagov.dump
+# ANTES do pg_restore: as extensões que o schema usa (o dump com --schema=public não as inclui)
+psql -h <host> -U postgres -d licenciagov -c "CREATE EXTENSION IF NOT EXISTS unaccent WITH SCHEMA public; CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;"
+# Índice do dump sem a entrada do schema public (o banco novo já o tem; --clean tentaria DROP SCHEMA public e falharia)
+pg_restore --list licenciagov.dump | grep -v -E '^[0-9]+; [0-9]+ [0-9]+ SCHEMA - public( |$)' > restaurar.lst
+pg_restore -h <host> -U postgres -d licenciagov --no-owner --no-acl --exit-on-error --use-list restaurar.lst licenciagov.dump
 
 # 5) Conferências
 psql -h <host> -U postgres -d licenciagov -c "SELECT count(*) FROM processo" -c "SELECT count(*) FROM _prisma_migrations"

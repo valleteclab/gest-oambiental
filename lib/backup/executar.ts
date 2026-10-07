@@ -34,6 +34,8 @@ import {
   observacaoBackup,
   resumoComparacao,
   selecionarParaRemover,
+  SQL_CRIAR_EXTENSOES,
+  indiceSemSchemaPublic,
   sha256DaObservacao,
   urlLibpq,
   type ConfigBackup,
@@ -317,9 +319,16 @@ async function restoreSemTrava(op: Opcoes): Promise<ResultadoExecucao> {
       criado = true;
     }
 
-    // 4) pg_restore (erro em qualquer objeto = falha). O schema public já existe no banco novo:
-    //    --clean --if-exists recria o schema a partir do dump.
-    await exigir("pg_restore", ["--no-owner", "--no-acl", "--exit-on-error", "--clean", "--if-exists", `--dbname=${alvo.url}`, claro], { PGPASSWORD: alvo.senha });
+    // 3b) Extensões que o schema usa (o dump com --schema=public não as inclui – ver EXTENSOES_BANCO)
+    await exigir("psql", ["-v", "ON_ERROR_STOP=1", "-qc", SQL_CRIAR_EXTENSOES, `--dbname=${alvo.url}`], { PGPASSWORD: alvo.senha });
+
+    // 4) pg_restore (erro em qualquer objeto = falha). O banco de destino é novo e o schema public já existe (com as
+    //    extensões acima): restaura pelo índice do dump SEM a entrada do schema e sem --clean (que tentaria
+    //    `DROP SCHEMA public` e falharia pelas extensões que dependem dele).
+    const indice = indiceSemSchemaPublic((await exigir("pg_restore", ["--list", claro])).stdout);
+    const arquivoIndice = path.join(tmp, "restaurar.lst");
+    await writeFile(arquivoIndice, indice);
+    await exigir("pg_restore", ["--no-owner", "--no-acl", "--exit-on-error", "--use-list", arquivoIndice, `--dbname=${alvo.url}`, claro], { PGPASSWORD: alvo.senha });
     const duracaoRestore = (Date.now() - inicio) / 1000;
 
     // 5) Sanidade: contagens × produção, triggers de imutabilidade e UPDATE bloqueado
