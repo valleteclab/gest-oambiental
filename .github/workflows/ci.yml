@@ -105,6 +105,8 @@ jobs:
         run: |
           cp -r public .next/standalone/ 2>/dev/null || true
           cp -r .next/static .next/standalone/.next/
+          # O seed grava em ./storage (raiz); o servidor standalone lê de .next/standalone/storage.
+          mkdir -p storage && cp -r storage .next/standalone/
           # Chromium do Playwright também serve para os PDFs (puppeteer-core)
           export CHROMIUM_PATH="$(node -e "console.log(require('playwright-core').chromium.executablePath())")"
           echo "CHROMIUM_PATH=$CHROMIUM_PATH" >> "$GITHUB_ENV"
