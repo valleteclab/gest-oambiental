@@ -145,7 +145,7 @@ export function filtroTabela(modelo: string, e: EscopoExportacao): Record<string
     case "Anexo": return { OR: [proc, { fiscalizacao: mun }, { denuncia: mun }] };
     case "ReuniaoConselho": return { conselho: mun };
     case "EmailEnviado": return { para: { in: e.emails } };
-    case "LogAuditoria": return { usuario_id: { in: e.usuarios } };
+    case "LogAuditoria": return { OR: [{ usuario_id: { in: e.usuarios } }, { organizacao_id: e.organizacao.id }] };
     case "BackupRegistro": return {}; // registros de infraestrutura da plataforma (sem dados de negócio)
     // Agente de denúncias: canais (credenciais seguem CIFRADAS), conversas/mensagens e consumo de IA da organização.
     case "CanalAtendimento":
@@ -156,6 +156,29 @@ export function filtroTabela(modelo: string, e: EscopoExportacao): Record<string
     // Caixa bruta de webhooks: transitória (retenção CANAIS_RETENCAO_EVENTOS_DIAS), payloads de provedor com dados pessoais –
     // fora da exportação por organização (o conteúdo útil já está em mensagem_conversa).
     case "EventoWebhook": return { id: "00000000-0000-0000-0000-000000000000" };
+    // GED (docs/ged-design.md): toda tabela Ged* tem organizacao_id; só linhas da organização exportada.
+    case "GedConfig":
+    case "GedMembro":
+    case "GedSetor":
+    case "GedSetorMembro":
+    case "GedTipoDocumento":
+    case "GedPasta":
+    case "GedDocumento":
+    case "GedVersaoDocumento":
+    case "GedConteudoTexto":
+    case "GedDeteccaoDadoPessoal":
+    case "GedMarcador":
+    case "GedDocumentoMarcador":
+    case "GedAcl":
+    case "GedTramite":
+    case "GedSolicitacaoAssinatura":
+    case "GedAssinante":
+    case "GedComentario":
+    case "GedAcessoLog":
+    case "GedComunicacao":
+    case "GedPreferenciaNotificacao":
+    case "GedSequencia":
+      return { organizacao_id: e.organizacao.id };
     // Cobrança de taxas (chave da API Asaas e token do webhook NÃO são exportados – COLUNAS_EXCLUIDAS)
     case "ConfigCobranca":
     case "Cobranca":
@@ -227,6 +250,11 @@ async function exportarAnexos(dir: string, escopo: EscopoExportacao | null = nul
   for (let skip = 0; ; skip += LOTE) {
     const l = await prisma.documentoOficial.findMany({ where: escopo ? (filtroTabela("DocumentoOficial", escopo) as Prisma.DocumentoOficialWhereInput) : undefined, select: { storage_key: true }, orderBy: { id: "asc" }, skip, take: LOTE });
     l.forEach((x) => add(x.storage_key, "documento_oficial"));
+    if (l.length < LOTE) break;
+  }
+  for (let skip = 0; ; skip += LOTE) {
+    const l = await prisma.gedVersaoDocumento.findMany({ where: escopo ? (filtroTabela("GedVersaoDocumento", escopo) as Prisma.GedVersaoDocumentoWhereInput) : undefined, select: { storage_key: true }, orderBy: { id: "asc" }, skip, take: LOTE });
+    l.forEach((x) => add(x.storage_key, "ged_versao_documento"));
     if (l.length < LOTE) break;
   }
   (await prisma.reuniaoConselho.findMany({ select: { ata_pdf_key: true }, where: { ata_pdf_key: { not: null }, ...(escopo ? (filtroTabela("ReuniaoConselho", escopo) as Prisma.ReuniaoConselhoWhereInput) : {}) } })).forEach((x) => add(x.ata_pdf_key, "reuniao_conselho"));

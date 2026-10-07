@@ -12,6 +12,8 @@ const TIPO_MSG: Record<InboundEvent["kind"], string> = { text: "TEXTO", image: "
 
 /** Processa UMA mensagem normalizada (com lock por chat). */
 export async function processarInbound(canal: CanalRuntime, ev: InboundEvent): Promise<ResultadoProcessamento> {
+  // Canal usado só para ENVIAR notificações do GED (config.somente_envio="true"): respostas de usuários nunca entram no agente de denúncias.
+  if (canal.config?.somente_envio === "true") return "IGNORADA";
   if (ev.isGroup) return "IGNORADA";
   if (ev.fromMe && ev.sentByApi) return "IGNORADA"; // eco do que a própria API enviou
   return comLock(chaveLock(canal.id, ev.chatId), async () => {

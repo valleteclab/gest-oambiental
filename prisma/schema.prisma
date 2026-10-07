@@ -263,19 +263,42 @@ model Organizacao {
   updated_at DateTime @updatedAt
   created_by String?  @db.Uuid
 
-  municipios           Municipio[]
-  tipologias           Tipologia[]
-  tipos_ato            TipoAto[]
-  prazos_config        PrazoConfig[]
-  usuarios             Usuario[]
-  checklists           ChecklistModelo[]
-  modelos              ModeloDocumento[]
-  exportacoes          Exportacao[]
-  canais               CanalAtendimento[]
-  alertas_desmatamento AlertaDesmatamento[]
-  monitoramento_syncs  MonitoramentoSync[]
-  tabela_taxas         TabelaTaxa[]
-  certificados         CertificadoDigital[]
+  municipios               Municipio[]
+  tipologias               Tipologia[]
+  tipos_ato                TipoAto[]
+  prazos_config            PrazoConfig[]
+  usuarios                 Usuario[]
+  checklists               ChecklistModelo[]
+  modelos                  ModeloDocumento[]
+  exportacoes              Exportacao[]
+  canais                   CanalAtendimento[]
+  alertas_desmatamento     AlertaDesmatamento[]
+  monitoramento_syncs      MonitoramentoSync[]
+  tabela_taxas             TabelaTaxa[]
+  certificados             CertificadoDigital[]
+  // Módulos contratados pelo cliente (tenant). Padrão: só licenciamento (clientes existentes).
+  modulos                  ModuloPlataforma[]          @default([LICENCIAMENTO])
+  ged_config               GedConfig?
+  ged_membros              GedMembro[]
+  ged_setores              GedSetor[]
+  ged_setor_membros        GedSetorMembro[]
+  ged_tipos_documento      GedTipoDocumento[]
+  ged_pastas               GedPasta[]
+  ged_documentos           GedDocumento[]
+  ged_versoes              GedVersaoDocumento[]
+  ged_conteudos            GedConteudoTexto[]
+  ged_deteccoes            GedDeteccaoDadoPessoal[]
+  ged_marcadores           GedMarcador[]
+  ged_documento_marcadores GedDocumentoMarcador[]
+  ged_acls                 GedAcl[]
+  ged_tramites             GedTramite[]
+  ged_solicitacoes         GedSolicitacaoAssinatura[]
+  ged_assinantes           GedAssinante[]
+  ged_comentarios          GedComentario[]
+  ged_acessos              GedAcessoLog[]
+  ged_comunicacoes         GedComunicacao[]
+  ged_preferencias         GedPreferenciaNotificacao[]
+  ged_sequencias           GedSequencia[]
 
   @@map("organizacao")
 }
@@ -355,6 +378,8 @@ model Usuario {
   processos_tecnico Processo[]           @relation("processo_tecnico")
   processos_gestor  Processo[]           @relation("processo_gestor")
   certificados      CertificadoDigital[]
+  ged_membros       GedMembro[]
+  ged_setor_membros GedSetorMembro[]
 
   @@index([organizacao_id])
   @@map("usuario")
@@ -1005,21 +1030,24 @@ model EmailEnviado {
 }
 
 model LogAuditoria {
-  id          String   @id @default(uuid()) @db.Uuid
-  usuario_id  String?  @db.Uuid
-  acao        String
-  entidade    String
-  entidade_id String?
-  antes       Json?
-  depois      Json?
-  ip          String?
-  user_agent  String?
-  created_at  DateTime @default(now())
+  id             String   @id @default(uuid()) @db.Uuid
+  usuario_id     String?  @db.Uuid
+  acao           String
+  entidade       String
+  entidade_id    String?
+  antes          Json?
+  depois         Json?
+  ip             String?
+  user_agent     String?
+  // Cliente (tenant) do evento, quando conhecido (GED). Sem FK: o log sobrevive a qualquer alteração.
+  organizacao_id String?  @db.Uuid
+  created_at     DateTime @default(now())
 
   usuario Usuario? @relation(fields: [usuario_id], references: [id])
 
   @@index([entidade, entidade_id])
   @@index([created_at])
+  @@index([organizacao_id, created_at])
   @@map("log_auditoria")
 }
 
@@ -1387,4 +1415,572 @@ model CertificadoDigital {
 
   @@index([organizacao_id])
   @@map("certificado_digital")
+}
+
+// ───────────────────── Gestão de Documentos (GED) – docs/ged-design.md ─────────────────────
+
+enum ModuloPlataforma {
+  LICENCIAMENTO
+  GED
+}
+
+enum GedPapel {
+  GED_ADMIN
+  GED_GESTOR
+  GED_USUARIO
+  GED_LEITOR
+  GED_AUDITOR
+}
+
+enum GedStatusDocumento {
+  RASCUNHO
+  PUBLICADO
+  EM_ASSINATURA
+  ASSINADO
+  RECUSADO
+  ARQUIVADO
+}
+
+enum GedSensibilidade {
+  PUBLICO
+  RESTRITO
+  SIGILOSO
+}
+
+enum GedAnonimizacao {
+  NAO_NECESSARIA
+  PENDENTE
+  ANONIMIZADA
+}
+
+enum GedOrigemVersao {
+  UPLOAD
+  EDITOR
+  SCAN
+  OCR
+  ANONIMIZACAO
+  SELO
+}
+
+enum GedStatusTexto {
+  PENDENTE
+  EXTRAIDO
+  SEM_TEXTO
+  OCR_PENDENTE
+  ERRO
+}
+
+enum GedAcao {
+  VER
+  EDITAR
+  ASSINAR
+  TRAMITAR
+  ADMINISTRAR
+  ANONIMIZAR
+}
+
+enum GedPrincipalTipo {
+  USUARIO
+  SETOR
+}
+
+enum GedTipoTramite {
+  ENVIO
+  DESPACHO
+  CIENCIA
+  DEVOLUCAO
+  RECUSA
+  ARQUIVAMENTO
+}
+
+enum GedModoAssinatura {
+  SEQUENCIAL
+  PARALELO
+}
+
+enum GedStatusSolicitacao {
+  ABERTA
+  CONCLUIDA
+  RECUSADA
+  CANCELADA
+  EXPIRADA
+}
+
+enum GedStatusAssinante {
+  AGUARDANDO
+  PENDENTE
+  ASSINADO
+  RECUSADO
+  EXPIRADO
+}
+
+enum GedMetodoAssinatura {
+  ELETRONICA_AVANCADA
+  ICP_BRASIL_A1
+}
+
+enum GedCanalCom {
+  EMAIL
+  WHATSAPP
+}
+
+enum GedStatusCom {
+  PENDENTE
+  ENVIADA
+  SIMULADA
+  ERRO
+  IGNORADA
+}
+
+model GedConfig {
+  id                       String      @id @default(uuid()) @db.Uuid
+  organizacao_id           String      @db.Uuid
+  created_at               DateTime    @default(now())
+  updated_at               DateTime    @updatedAt
+  cota_bytes               BigInt?
+  ia_habilitada            Boolean     @default(false) // LGPD: IA opcional (fase 2)
+  canal_whatsapp_id        String?     @db.Uuid // CanalAtendimento (somente envio)
+  assinatura_prazo_dias    Int         @default(15)
+  lembrete_dias            Int[]       @default([3, 1, 0])
+  retencao_acesso_log_dias Int         @default(730)
+  organizacao              Organizacao @relation(fields: [organizacao_id], references: [id])
+
+  @@unique([organizacao_id])
+  @@map("ged_config")
+}
+
+model GedMembro {
+  id                String    @id @default(uuid()) @db.Uuid
+  organizacao_id    String    @db.Uuid
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+  usuario_id        String    @db.Uuid
+  papel             GedPapel
+  ativo             Boolean   @default(true)
+  telefone_cifrado  String? // lib/crypto cifrar; E.164
+  whatsapp_optin_em DateTime? // só após confirmação por código
+
+  usuario     Usuario     @relation(fields: [usuario_id], references: [id])
+  organizacao Organizacao @relation(fields: [organizacao_id], references: [id])
+
+  @@unique([organizacao_id, usuario_id])
+  @@map("ged_membro")
+}
+
+model GedSetor {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizacao_id String   @db.Uuid
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+  nome           String
+  sigla          String
+  ativo          Boolean  @default(true)
+
+  membros     GedSetorMembro[]
+  organizacao Organizacao      @relation(fields: [organizacao_id], references: [id])
+
+  @@unique([organizacao_id, sigla])
+  @@map("ged_setor")
+}
+
+model GedSetorMembro {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizacao_id String   @db.Uuid
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+  setor_id       String   @db.Uuid
+  usuario_id     String   @db.Uuid
+  chefe          Boolean  @default(false)
+
+  setor       GedSetor    @relation(fields: [setor_id], references: [id])
+  usuario     Usuario     @relation(fields: [usuario_id], references: [id])
+  organizacao Organizacao @relation(fields: [organizacao_id], references: [id])
+
+  @@unique([setor_id, usuario_id])
+  @@index([organizacao_id, usuario_id])
+  @@map("ged_setor_membro")
+}
+
+model GedTipoDocumento {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizacao_id String   @db.Uuid
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+  nome           String
+
+  documentos  GedDocumento[]
+  organizacao Organizacao    @relation(fields: [organizacao_id], references: [id])
+
+  @@unique([organizacao_id, nome])
+  @@map("ged_tipo_documento")
+}
+
+model GedPasta {
+  id                   String           @id @default(uuid()) @db.Uuid
+  organizacao_id       String           @db.Uuid
+  created_at           DateTime         @default(now())
+  updated_at           DateTime         @updatedAt
+  parent_id            String?          @db.Uuid
+  nome                 String
+  caminho_ids          String[]         @db.Uuid // ancestrais + a própria pasta (materializado)
+  caminho_heranca      String[]         @db.Uuid // da raiz de herança de ACL (herda_acl=false mais próximo) até a pasta
+  caminho_nome         String // "Controle interno/Relatórios"
+  herda_acl            Boolean          @default(true)
+  sensibilidade_padrao GedSensibilidade @default(RESTRITO)
+  excluido_em          DateTime?
+
+  parent      GedPasta?      @relation("GedPastaArvore", fields: [parent_id], references: [id])
+  filhas      GedPasta[]     @relation("GedPastaArvore")
+  documentos  GedDocumento[]
+  acls        GedAcl[]
+  organizacao Organizacao    @relation(fields: [organizacao_id], references: [id])
+
+  @@index([organizacao_id, parent_id])
+  @@map("ged_pasta")
+}
+
+model GedDocumento {
+  id                    String             @id @default(uuid()) @db.Uuid
+  organizacao_id        String             @db.Uuid
+  created_at            DateTime           @default(now())
+  updated_at            DateTime           @updatedAt
+  pasta_id              String?            @db.Uuid
+  numero                String // {SIGLA}-DOC-2026-000123 (GedSequencia)
+  titulo                String
+  tipo_id               String?            @db.Uuid
+  remetente             String? // origem/remetente
+  data_documento        DateTime?          @db.Date
+  status                GedStatusDocumento @default(RASCUNHO)
+  criado_por_id         String             @db.Uuid
+  versao_atual_id       String?            @db.Uuid // sem FK (evita ciclo); validado por trigger de tenant
+  setor_atual_id        String?            @db.Uuid // trâmite: localização atual (denormalizada)
+  responsavel_id        String?            @db.Uuid
+  acl_propria           Boolean            @default(false) // true = não herda a ACL da pasta
+  codigo_verificador    String?            @unique // gerarCodigoVerificador(); só após o selo
+  sha256_final          String?
+  // Sensibilidade / LGPD / anonimização (motor futuro; modelo pronto – ver docs/ged-design.md §7)
+  sensibilidade         GedSensibilidade   @default(RESTRITO)
+  contem_dados_pessoais Boolean            @default(false)
+  anonimizacao_status   GedAnonimizacao    @default(NAO_NECESSARIA)
+  anonimizado_por_id    String?            @db.Uuid
+  anonimizado_em        DateTime?
+  documento_original_id String?            @db.Uuid // derivado anonimizado → original
+  excluido_em           DateTime? // lixeira (fase 3)
+
+  pasta        GedPasta?                  @relation(fields: [pasta_id], references: [id])
+  tipo         GedTipoDocumento?          @relation(fields: [tipo_id], references: [id])
+  original     GedDocumento?              @relation("GedDocAnonimizado", fields: [documento_original_id], references: [id])
+  derivados    GedDocumento[]             @relation("GedDocAnonimizado")
+  versoes      GedVersaoDocumento[]
+  marcadores   GedDocumentoMarcador[]
+  acls         GedAcl[]
+  tramites     GedTramite[]
+  solicitacoes GedSolicitacaoAssinatura[]
+  comentarios  GedComentario[]
+  organizacao  Organizacao                @relation(fields: [organizacao_id], references: [id])
+
+  @@unique([organizacao_id, numero])
+  @@unique([organizacao_id, documento_original_id])
+  @@index([organizacao_id, pasta_id])
+  @@index([organizacao_id, status])
+  @@index([organizacao_id, data_documento])
+  @@index([organizacao_id, responsavel_id, status])
+  @@map("ged_documento")
+}
+
+model GedVersaoDocumento {
+  id             String          @id @default(uuid()) @db.Uuid
+  organizacao_id String          @db.Uuid
+  created_at     DateTime        @default(now())
+  updated_at     DateTime        @updatedAt
+  documento_id   String          @db.Uuid
+  n              Int
+  origem         GedOrigemVersao
+  derivada_de_id String?         @db.Uuid // OCR/ANONIMIZACAO/SELO apontam para a versão-base
+  storage_key    String
+  nome_arquivo   String
+  mime           String
+  tamanho        Int
+  sha256         String
+  paginas        Int?
+  conteudo_html  String? // só origem EDITOR (sanitizado)
+  texto_status   GedStatusTexto  @default(PENDENTE)
+  selada         Boolean         @default(false) // trigger: imutável quando true; DELETE bloqueado
+  criado_por_id  String          @db.Uuid
+
+  documento    GedDocumento               @relation(fields: [documento_id], references: [id])
+  conteudo     GedConteudoTexto?
+  deteccoes    GedDeteccaoDadoPessoal[]
+  solicitacoes GedSolicitacaoAssinatura[]
+  organizacao  Organizacao                @relation(fields: [organizacao_id], references: [id])
+
+  @@unique([documento_id, n])
+  @@index([organizacao_id, documento_id])
+  @@map("ged_versao_documento")
+}
+
+model GedConteudoTexto {
+  id             String                   @id @default(uuid()) @db.Uuid
+  organizacao_id String                   @db.Uuid
+  created_at     DateTime                 @default(now())
+  updated_at     DateTime                 @updatedAt
+  versao_id      String                   @unique @db.Uuid
+  documento_id   String                   @db.Uuid
+  texto          String
+  metodo         String // PDF_TEXTO | OCR | EDITOR
+  tsv            Unsupported("tsvector")? // GENERATED STORED (migração) + GIN
+
+  versao      GedVersaoDocumento @relation(fields: [versao_id], references: [id])
+  organizacao Organizacao        @relation(fields: [organizacao_id], references: [id])
+
+  @@index([organizacao_id, documento_id])
+  @@map("ged_conteudo_texto")
+}
+
+model GedDeteccaoDadoPessoal {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizacao_id String   @db.Uuid
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+  versao_id      String   @db.Uuid
+  tipo           String
+  pagina         Int?
+  ocorrencias    Int
+  status         String   @default("SUGERIDA") // NÃO guarda o dado detectado
+
+  versao      GedVersaoDocumento @relation(fields: [versao_id], references: [id])
+  organizacao Organizacao        @relation(fields: [organizacao_id], references: [id])
+
+  @@index([organizacao_id, versao_id])
+  @@map("ged_deteccao_dado_pessoal")
+}
+
+model GedMarcador {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizacao_id String   @db.Uuid
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+  nome           String
+  cor            String   @default("#0f766e")
+
+  documentos  GedDocumentoMarcador[]
+  organizacao Organizacao            @relation(fields: [organizacao_id], references: [id])
+
+  @@unique([organizacao_id, nome])
+  @@map("ged_marcador")
+}
+
+model GedDocumentoMarcador {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizacao_id String   @db.Uuid
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+  documento_id   String   @db.Uuid
+  marcador_id    String   @db.Uuid
+
+  documento   GedDocumento @relation(fields: [documento_id], references: [id])
+  marcador    GedMarcador  @relation(fields: [marcador_id], references: [id])
+  organizacao Organizacao  @relation(fields: [organizacao_id], references: [id])
+
+  @@unique([documento_id, marcador_id])
+  @@index([organizacao_id, marcador_id])
+  @@map("ged_documento_marcador")
+}
+
+model GedAcl {
+  id               String           @id @default(uuid()) @db.Uuid
+  organizacao_id   String           @db.Uuid
+  created_at       DateTime         @default(now())
+  updated_at       DateTime         @updatedAt
+  pasta_id         String?          @db.Uuid
+  documento_id     String?          @db.Uuid
+  principal_tipo   GedPrincipalTipo
+  usuario_id       String?          @db.Uuid
+  setor_id         String?          @db.Uuid
+  acoes            GedAcao[]
+  expira_em        DateTime?
+  concedido_por_id String           @db.Uuid
+
+  pasta       GedPasta?     @relation(fields: [pasta_id], references: [id])
+  documento   GedDocumento? @relation(fields: [documento_id], references: [id])
+  organizacao Organizacao   @relation(fields: [organizacao_id], references: [id])
+
+  @@index([organizacao_id, pasta_id])
+  @@index([organizacao_id, documento_id])
+  @@index([organizacao_id, usuario_id])
+  @@index([organizacao_id, setor_id])
+  @@map("ged_acl")
+}
+
+model GedTramite {
+  id              String         @id @default(uuid()) @db.Uuid
+  organizacao_id  String         @db.Uuid
+  created_at      DateTime       @default(now())
+  updated_at      DateTime       @updatedAt
+  documento_id    String         @db.Uuid
+  tipo            GedTipoTramite
+  de_usuario_id   String?        @db.Uuid
+  de_setor_id     String?        @db.Uuid
+  para_usuario_id String?        @db.Uuid
+  para_setor_id   String?        @db.Uuid
+  despacho        String?
+  prazo_em        DateTime?
+  referencia_id   String?        @db.Uuid // CIENCIA → trâmite de ENVIO que recebeu ciência
+
+  documento   GedDocumento @relation(fields: [documento_id], references: [id])
+  organizacao Organizacao  @relation(fields: [organizacao_id], references: [id])
+
+  @@index([organizacao_id, documento_id, created_at])
+  @@index([organizacao_id, para_usuario_id, created_at])
+  @@map("ged_tramite")
+}
+
+model GedSolicitacaoAssinatura {
+  id             String               @id @default(uuid()) @db.Uuid
+  organizacao_id String               @db.Uuid
+  created_at     DateTime             @default(now())
+  updated_at     DateTime             @updatedAt
+  documento_id   String               @db.Uuid
+  versao_id      String               @db.Uuid // versão exata a assinar
+  sha256_alvo    String // snapshot do hash a assinar
+  modo           GedModoAssinatura
+  status         GedStatusSolicitacao @default(ABERTA)
+  prazo_em       DateTime
+  mensagem       String?
+  criada_por_id  String               @db.Uuid
+  concluida_em   DateTime?
+  versao_selo_id String?              @db.Uuid
+
+  documento   GedDocumento       @relation(fields: [documento_id], references: [id])
+  versao      GedVersaoDocumento @relation(fields: [versao_id], references: [id])
+  assinantes  GedAssinante[]
+  organizacao Organizacao        @relation(fields: [organizacao_id], references: [id])
+
+  @@index([organizacao_id, status, prazo_em])
+  @@index([organizacao_id, documento_id])
+  @@map("ged_solicitacao_assinatura")
+}
+
+model GedAssinante {
+  id                   String               @id @default(uuid()) @db.Uuid
+  organizacao_id       String               @db.Uuid
+  created_at           DateTime             @default(now())
+  updated_at           DateTime             @updatedAt
+  solicitacao_id       String               @db.Uuid
+  usuario_id           String               @db.Uuid
+  ordem                Int
+  rotulo               String               @default("Assinar")
+  status               GedStatusAssinante   @default(PENDENTE)
+  visualizou_em        DateTime?
+  ultimo_lembrete_em   DateTime?
+  assinado_em          DateTime?
+  recusado_em          DateTime?
+  comentario           String?
+  justificativa_recusa String?
+  metodo               GedMetodoAssinatura?
+  reautenticacao       String? // SENHA | OTP_EMAIL | OTP_WHATSAPP
+  ip                   String?
+  user_agent           String?
+  hash_documento       String? // sha256 recalculado do arquivo no ato da assinatura
+  hash_cadeia          String? // sha256(hash_anterior|assinante|usuario|hash_doc|data|metodo)
+  otp_hash             String?
+  otp_expira_em        DateTime?
+  otp_tentativas       Int                  @default(0)
+
+  solicitacao GedSolicitacaoAssinatura @relation(fields: [solicitacao_id], references: [id])
+  organizacao Organizacao              @relation(fields: [organizacao_id], references: [id])
+
+  @@unique([solicitacao_id, usuario_id])
+  @@index([organizacao_id, usuario_id, status])
+  @@map("ged_assinante")
+}
+
+model GedComentario {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizacao_id String   @db.Uuid
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+  documento_id   String   @db.Uuid
+  versao_id      String?  @db.Uuid
+  solicitacao_id String?  @db.Uuid
+  autor_id       String   @db.Uuid
+  contexto       String // GERAL | ASSINATURA | RECUSA | TRAMITE
+  texto          String
+
+  documento   GedDocumento @relation(fields: [documento_id], references: [id])
+  organizacao Organizacao  @relation(fields: [organizacao_id], references: [id])
+
+  @@index([organizacao_id, documento_id, created_at])
+  @@map("ged_comentario")
+}
+
+model GedAcessoLog {
+  id             BigInt      @id @default(autoincrement())
+  organizacao_id String      @db.Uuid
+  created_at     DateTime    @default(now())
+  updated_at     DateTime    @updatedAt
+  usuario_id     String?     @db.Uuid
+  documento_id   String?     @db.Uuid
+  versao_id      String?     @db.Uuid
+  acao           String // VISUALIZAR BAIXAR BUSCAR LISTAR NEGADO LOGIN_GED
+  ip             String?
+  user_agent     String?
+  organizacao    Organizacao @relation(fields: [organizacao_id], references: [id])
+
+  @@index([organizacao_id, created_at])
+  @@index([organizacao_id, documento_id, created_at])
+  @@map("ged_acesso_log")
+}
+
+model GedComunicacao {
+  id                     String       @id @default(uuid()) @db.Uuid
+  organizacao_id         String       @db.Uuid
+  created_at             DateTime     @default(now())
+  updated_at             DateTime     @updatedAt
+  documento_id           String?      @db.Uuid
+  assinante_id           String?      @db.Uuid
+  usuario_id             String       @db.Uuid
+  evento                 String
+  canal                  GedCanalCom
+  destinatario_mascarado String
+  assunto                String?
+  status                 GedStatusCom @default(PENDENTE)
+  erro                   String?
+  provider_message_id    String?
+  email_enviado_id       String?      @db.Uuid // sem FK (EmailEnviado não tem organização)
+  enviado_em             DateTime? // data/hora real do envio
+  organizacao            Organizacao  @relation(fields: [organizacao_id], references: [id])
+
+  @@index([organizacao_id, created_at])
+  @@index([organizacao_id, documento_id])
+  @@map("ged_comunicacao")
+}
+
+model GedPreferenciaNotificacao {
+  id             String      @id @default(uuid()) @db.Uuid
+  organizacao_id String      @db.Uuid
+  created_at     DateTime    @default(now())
+  updated_at     DateTime    @updatedAt
+  usuario_id     String      @db.Uuid
+  evento         String
+  email          Boolean     @default(true)
+  whatsapp       Boolean     @default(false)
+  organizacao    Organizacao @relation(fields: [organizacao_id], references: [id])
+
+  @@unique([usuario_id, evento])
+  @@map("ged_preferencia_notificacao")
+}
+
+model GedSequencia {
+  id             String      @id @default(uuid()) @db.Uuid
+  organizacao_id String      @db.Uuid
+  created_at     DateTime    @default(now())
+  updated_at     DateTime    @updatedAt
+  tipo           String
+  ano            Int
+  ultimo         Int         @default(0)
+  organizacao    Organizacao @relation(fields: [organizacao_id], references: [id])
+
+  @@unique([organizacao_id, tipo, ano])
+  @@map("ged_sequencia")
 }

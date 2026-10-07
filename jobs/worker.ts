@@ -149,6 +149,12 @@ async function main() {
     });
   }
 
+  // ── GED – Gestão de Documentos (docs/ged-design.md): jobs em jobs/ged*.ts ──
+  if (process.env.GED_JOBS_DESATIVADO !== "true") {
+    const { registrarJobsGed } = await import("./ged");
+    await registrarJobsGed(boss, { tz, log });
+  }
+
   // Varredura: exportações PENDENTES (solicitadas pelo web) → fila `exportacao`
   const varrer = async () => {
     try {

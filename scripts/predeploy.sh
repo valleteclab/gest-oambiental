@@ -12,6 +12,7 @@
 #   SEED_CERTIFICADO_DEMO=true → npm run seed:certificado-demo (certificado A1 de TESTE, sem valor legal, para Lagoa do
 #                               Orvalho e Riachão das Neves – documentos saem assinados digitalmente (PAdES) com o selo
 #                               "certificado de teste"; idempotente; nunca usar em produção – docs/assinatura-digital.md)
+#   SEED_GED_DEMO=true       → npm run seed:ged-demo (Gestão de Documentos: 2 clientes fictícios, usuários, pastas e documentos de ensaio)
 #   SEED_COBRANCA_DEMO=true  → npm run seed:cobranca-demo (cobrança de taxas SIMULADA – Pix/boleto fictícios e "Simular
 #                               pagamento" – e tabela de taxas fictícia em Riachão das Neves e Alto do Umbuzeiro; rodar
 #                               depois do seed:demo/onboarding; não toca os municípios dos E2E; docs/cobranca.md)
@@ -66,6 +67,11 @@ fi
 if sim "${SEED_COBRANCA_DEMO:-}"; then
   log "SEED_COBRANCA_DEMO=true – cobrança de taxas SIMULADA + tabela de taxas fictícia (RDN e Alto do Umbuzeiro)"
   npm run seed:cobranca-demo
+fi
+
+if sim "${SEED_GED_DEMO:-}"; then
+  log "SEED_GED_DEMO=true – Gestão de Documentos: dois clientes FICTÍCIOS de demonstração (isolamento entre clientes)"
+  npm run seed:ged-demo
 fi
 
 # ── Ambiente da PoC – CDS Piemonte do Paraguaçu (Pregão SRP 005/2026) – ver docs/poc-cds.md ──

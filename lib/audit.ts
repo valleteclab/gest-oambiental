@@ -11,6 +11,8 @@ export type EntradaAuditoria = {
   depois?: unknown;
   ip?: string | null;
   user_agent?: string | null;
+  /** Cliente (tenant) do evento – obrigatório para eventos do GED (exportação e consulta por organização). */
+  organizacao_id?: string | null;
 };
 
 type Cliente = Prisma.TransactionClient | typeof prisma;
@@ -28,6 +30,7 @@ export async function registrarAuditoria(e: EntradaAuditoria, tx: Cliente = pris
       depois: json(e.depois),
       ip: e.ip ?? null,
       user_agent: e.user_agent ?? null,
+      organizacao_id: e.organizacao_id ?? null,
     },
   });
 }

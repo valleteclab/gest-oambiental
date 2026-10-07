@@ -6,6 +6,7 @@ export const COLUNAS_EXCLUIDAS: Record<string, string[]> = {
   Usuario: ["senha_hash"],
   ConfigCobranca: ["asaas_api_key_cifrada", "asaas_webhook_token"],
   CertificadoDigital: ["pfx_cifrado", "senha_cifrada"],
+  GedAssinante: ["otp_hash", "otp_expira_em", "otp_tentativas"], // segredo temporário de assinatura – nunca exportar
 };
 
 /** Colunas exportadas CIFRADAS (AES-256-GCM, formato v1:iv:tag:dados). Decifrar exige a DATA_KEY do órgão. */
@@ -16,6 +17,7 @@ export const COLUNAS_CIFRADAS: Record<string, string[]> = {
   CanalAtendimento: ["webhook_secret", "config (chave segredos)"],
   Conversa: ["destino_cifrado", "contato_cifrado"],
   CertificadoDigital: ["documento_titular"],
+  GedMembro: ["telefone_cifrado"],
 };
 
 export const DESCRICAO_TABELA: Record<string, string> = {
@@ -65,6 +67,27 @@ export const DESCRICAO_TABELA: Record<string, string> = {
   ConfigCobranca: "Configuração de cobrança de taxas do município (gateway Asaas, vencimento, bloqueio de etapa). Chave da API e token do webhook NÃO são exportados.",
   TabelaTaxa: "Tabela de taxas de licenciamento: tipo de ato × fase × porte × potencial poluidor → valor.",
   Cobranca: "Cobranças (DAM) de taxas por processo e fase: Pix/boleto via Asaas ou baixa manual, situação e pagamento.",
+  GedConfig: "GED – configuração do cliente (cota, canal de WhatsApp, prazos de assinatura, retenção de logs).",
+  GedMembro: "GED – membros do cliente e seu papel no módulo (administrador, gestor, usuário, leitor, auditor). Telefone cifrado.",
+  GedSetor: "GED – setores/grupos do cliente (usados em permissões e trâmite).",
+  GedSetorMembro: "GED – participação de usuários nos setores.",
+  GedTipoDocumento: "GED – tipos de documento cadastrados pelo cliente.",
+  GedPasta: "GED – árvore de pastas (caminho materializado, herança de permissões, sensibilidade padrão).",
+  GedDocumento: "GED – documentos: título, remetente, data, status, sensibilidade, dados pessoais e anonimização (original × versão anonimizada).",
+  GedVersaoDocumento: "GED – versões do arquivo/texto de cada documento (sha256, origem, selada). Arquivos em anexos/{storage_key}.",
+  GedConteudoTexto: "GED – texto extraído (ou por OCR) para busca; a coluna de índice de busca (tsv) não é exportada.",
+  GedDeteccaoDadoPessoal: "GED – detecções de dados pessoais sugeridas (tipo e quantidade; não guarda o dado detectado).",
+  GedMarcador: "GED – marcadores (tags) personalizáveis.",
+  GedDocumentoMarcador: "GED – vínculo documento × marcador.",
+  GedAcl: "GED – permissões por pasta ou documento (usuário ou setor × ações).",
+  GedTramite: "GED – histórico imutável de trâmite (envio, despacho, ciência, devolução, recusa).",
+  GedSolicitacaoAssinatura: "GED – solicitações de assinatura (versão alvo, hash, modo, prazo, status).",
+  GedAssinante: "GED – signatários e seus atos (assinou/recusou, data/hora, método, hashes e cadeia). Segredos de OTP não são exportados.",
+  GedComentario: "GED – comentários em documentos e assinaturas (imutáveis).",
+  GedAcessoLog: "GED – registro de acessos (visualizar, baixar, buscar, negado).",
+  GedComunicacao: "GED – comunicações enviadas (e-mail/WhatsApp): evento, destinatário mascarado, data/hora e situação.",
+  GedPreferenciaNotificacao: "GED – preferências de notificação por usuário e evento.",
+  GedSequencia: "GED – contador de numeração de documentos por cliente/tipo/ano.",
   CertificadoDigital: "Certificados digitais A1 (e-CNPJ do órgão / e-CPF do servidor) usados para assinar documentos: somente metadados; arquivo .pfx e senha NÃO são exportados.",
 };
 

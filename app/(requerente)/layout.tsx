@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { prisma } from "@/lib/db";
 import { exigirUsuario, getOrgaoAtivo } from "@/lib/auth";
 import { isInterno } from "@/lib/rbac";
 import { SinoAlertas } from "@/components/sino-alertas";
@@ -6,6 +8,8 @@ import { FaixaDemo, OrgaoAtivo } from "@/components/orgao";
 
 export default async function LayoutRequerente({ children }: { children: React.ReactNode }) {
   const usuario = await exigirUsuario();
+  // Usuário só do módulo GED (sem papel de licenciamento e sem cadastro de requerente) não pertence a este portal.
+  if (!isInterno(usuario) && !usuario.pessoa_id && (await prisma.gedMembro.count({ where: { usuario_id: usuario.id, ativo: true, organizacao: { modulos: { has: "GED" } } } })) > 0) redirect("/ged");
   const orgao = await getOrgaoAtivo();
   return (
     <div className="min-h-screen">

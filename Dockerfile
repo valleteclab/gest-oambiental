@@ -25,6 +25,7 @@ RUN apt-get update \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
       openssl tini tzdata \
+      poppler-utils \
       postgresql-client-${PG_CLIENT_VERSION} \
       chromium fonts-liberation fonts-dejavu-core fonts-noto-core fonts-noto-color-emoji \
  && apt-get purge -y --auto-remove curl \

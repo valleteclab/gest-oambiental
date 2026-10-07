@@ -7,7 +7,14 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@node-rs/argon2", "puppeteer-core", "exceljs", "pg-boss", "archiver", "nodemailer"],
   experimental: { serverActions: { bodySizeLimit: "30mb" }, authInterrupts: true },
   async headers() {
+    // GED (docs/ged-design.md §1.3): nada de documento do cliente em cache compartilhado ou indexado por buscadores.
+    const semCacheGed = [
+      { key: "Cache-Control", value: "private, no-store" },
+      { key: "X-Robots-Tag", value: "noindex, nofollow" },
+    ];
     return [
+      { source: "/ged/:path*", headers: semCacheGed },
+      { source: "/api/v1/ged/:path*", headers: semCacheGed },
       {
         source: "/:path*",
         headers: [
