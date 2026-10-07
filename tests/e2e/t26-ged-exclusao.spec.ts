@@ -53,13 +53,16 @@ async function buscaTitulos(request: APIRequestContext, email: string, q: string
 }
 /** Arquivos que o documento ainda tem no storage local (null = storage não acessível a este teste). */
 function arquivosNoStorage(docId: string): number | null {
-  const dir = process.env.STORAGE_LOCAL_DIR;
-  const base = dir ? path.resolve(dir, "ged", IDS!.A.organizacao_id) : null;
-  if (!base || !existsSync(base)) return null;
+  // O servidor pode rodar de outro diretório (standalone na CI: .next/standalone/storage); soma os candidatos.
+  const dir = process.env.STORAGE_LOCAL_DIR || "./storage";
+  const bases = [path.resolve(dir), path.resolve(".next/standalone", dir)].map((d) => path.join(d, "ged", IDS!.A.organizacao_id)).filter((b) => existsSync(b));
+  if (!bases.length) return null;
   let n = 0;
-  for (const ano of readdirSync(base).filter((x) => /^\d{4}$/.test(x))) {
-    const d = path.join(base, ano, docId);
-    if (existsSync(d)) n += readdirSync(d).length;
+  for (const base of bases) {
+    for (const ano of readdirSync(base).filter((x) => /^\d{4}$/.test(x))) {
+      const d = path.join(base, ano, docId);
+      if (existsSync(d)) n += readdirSync(d).length;
+    }
   }
   return n;
 }
